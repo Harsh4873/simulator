@@ -7,7 +7,7 @@ import { fitPlayers, hasFreeThrowAttempts, type InjuryInput, type RosterPlayer }
 import { parseSummary } from '../src/parse-summary.ts';
 import type { OutcomeRow, RateCard, SeasonType, ShootingCache, ShootingRow, Slate, SlateGame, TeamSide } from '../src/types.ts';
 
-const ROOT = dirname(fileURLToPath(new URL('..', import.meta.url)));
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SLATE_PATH = join(ROOT, 'public/data/slate.json');
 const RATE_CARD_PATH = join(ROOT, 'public/data/rate-card.json');
 const CACHE_PATH = join(ROOT, 'data/shooting-cache.json');
