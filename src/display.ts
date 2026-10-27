@@ -58,6 +58,11 @@ export function probabilityColorsOn(value: string | null): boolean {
   return value === 'on';
 }
 
+export function themeFromStorage(stored: string | null, prefersLight: boolean): 'light' | 'dark' {
+  if (stored === 'light' || stored === 'dark') return stored;
+  return prefersLight ? 'light' : 'dark';
+}
+
 function espnCdnUrl(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();

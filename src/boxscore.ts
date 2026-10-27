@@ -193,11 +193,22 @@ function scoreboard(game: SlateGame, score: Simulation): string {
     <div class="team-head home">${teamLogoMarkup(game.home)}<p class="abbr home">${escapeHtml(teamAbbr(game.home))}</p></div>
     <p class="club-name away">${escapeHtml(teamTitle(game.away))}</p>
     <p class="club-name home">${escapeHtml(teamTitle(game.home))}</p>
-    <p class="score away">${score.away.pts}</p>
-    <p class="score home">${score.home.pts}</p>
+    <p class="score away">${score.away.band.p50}</p>
+    <p class="score home">${score.home.band.p50}</p>
+    <p class="median-caption">Median of 10,000 games</p>
     <p class="win-pct win-away">${awayPct}%</p>
     <p class="tie-line">Tie ${tiePct}%</p>
     <p class="win-pct win-home">${homePct}%</p>
+    <p class="win-caption">Win rate in 10,000 games</p>
+  </div>`;
+}
+
+function oneDraw(score: Simulation): string {
+  return `<div class="draw-board">
+    <p class="sim-label">One simulated game</p>
+    <p class="draw-index">Random draw index ${score.index}</p>
+    <p class="draw-score away">${score.away.pts}</p>
+    <p class="draw-score home">${score.home.pts}</p>
     ${tailMarkup('away', score.away.pointsRead)}
     ${tailMarkup('home', score.home.pointsRead)}
   </div>`;
@@ -214,24 +225,23 @@ function boxTable(game: SlateGame, score: Simulation): string {
 
 export function renderBoxScore(game: SlateGame, rate: PanelRate | null, score: Simulation, now: Date): string {
   const eventId = textOf(rate?.event_id) || textOf(game.event_id);
-  const ot = score.overtime
-    ? '<span class="ot">OT</span><span class="ot-minutes">265 minutes</span>'
-    : '';
+  const minutes = score.overtime
+    ? '<span class="ot">OT</span><span class="ot-minutes">265 team-minutes · 5 × 53</span>'
+    : '<span class="ot-minutes">240 team-minutes · 5 × 48</span>';
   return `<div data-event="${escapeHtml(eventId)}">
       <button type="button" data-back>Back to slate</button>
-      <p class="sim-label">One simulated game</p>
-      <p class="draw-index">Random draw index ${score.index}</p>
       ${scoreboard(game, score)}
+      ${oneDraw(score)}
       <p class="status-row">
         <span class="tip">${escapeHtml(formatTip(game.start_time))}</span>
         <span class="status">${escapeHtml(statusLabel(game, now))}</span>
-        ${ot}
+        ${minutes}
       </p>
       <label class="color-choice"><input type="checkbox" data-probability-colors> Probability colors</label>
       ${boxTable(game, score)}
+      <p class="note">This box score is one of the 10,000 games. The median above is the middle of those games.</p>
+      <p class="note">The minutes column totals team-minutes: five players on the floor at once. Regulation is 240 (5 × 48). Overtime is 265 (5 × 53). It is not the length of the game.</p>
       <p class="legend">Brighter blue means that number is further from this player's middle in the 10,000 games. The percent is the share of those games at or below the number shown.</p>
-      <p class="note">10,000 simulated games. This box score is one of them, picked at random. It is not the median and not the most likely line.</p>
-      <p class="note">Minutes are a rotation draw, not a five-man lineup.</p>
     </div>`;
 }
 
@@ -319,11 +329,13 @@ function rateItem(label: string, value: string): string {
 }
 
 function samplingList(row: CardRow | null, score: Simulation, shock: number | undefined): string {
-  const budget = score.overtime ? 265 : 240;
+  const scaled = score.overtime
+    ? 'scaled to 265 team-minutes (5 × 53)'
+    : 'scaled to 240 team-minutes (5 × 48)';
   const minutes = readNumber(row, 'minutes_mean');
   const minutesLabel = minutes === undefined ? 'not in the data' : minutes.toFixed(1);
   const items = [
-    `<li>${escapeHtml(`Shrunk minutes rate: ${minutesLabel}. Active rates are scaled to ${budget} minutes, and this line is one share of that budget.`)}</li>`,
+    `<li>${escapeHtml(`Shrunk minutes rate: ${minutesLabel}. Active rates are ${scaled}, and this line is one share of that budget.`)}</li>`,
   ];
   for (const line of RATE_LINES) {
     const value = readNumber(row, line.key);
@@ -336,7 +348,7 @@ function samplingList(row: CardRow | null, score: Simulation, shock: number | un
   } else {
     items.push('<li>Team volume shock is not in the data.</li>');
   }
-  if (score.overtime) items.push('<li>Overtime. This draw used 265 minutes.</li>');
+  if (score.overtime) items.push('<li>This draw used 265 team-minutes (5 × 53).</li>');
   return `<ul class="rates">${items.join('')}</ul>`;
 }
 

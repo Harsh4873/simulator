@@ -1,6 +1,6 @@
 import './styles.css';
 import { renderBoxScore, renderPlayerPanel } from './boxscore.ts';
-import { nextPanelAthlete, probabilityColorsOn } from './display.ts';
+import { nextPanelAthlete, probabilityColorsOn, themeFromStorage } from './display.ts';
 import { fnv1a } from './rng.ts';
 import { renderSlate } from './slate.ts';
 import { ITERATIONS, simulate, type Simulation } from './simulate.ts';
@@ -8,6 +8,7 @@ import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
 
 const DATA_BASE = '/simulator/data/';
 const COLOR_KEY = 'simulator.probability-colors';
+const THEME_KEY = 'simulator.theme';
 
 const desk = document.querySelector<HTMLElement>('#desk');
 const slateRoot = document.querySelector<HTMLElement>('#slate');
@@ -201,4 +202,37 @@ async function load(): Promise<void> {
   }
 }
 
+function storedTheme(): string | null {
+  try {
+    return localStorage.getItem(THEME_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function applyTheme(theme: 'light' | 'dark'): void {
+  document.documentElement.dataset.theme = theme;
+  const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
+  if (!button) return;
+  const light = theme === 'light';
+  button.textContent = light ? 'Light' : 'Dark';
+  button.setAttribute('aria-pressed', light ? 'true' : 'false');
+}
+
+function bindTheme(): void {
+  const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
+  if (!button) return;
+  button.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // The header still follows the click when storage is blocked.
+    }
+    applyTheme(next);
+  });
+}
+
+applyTheme(themeFromStorage(storedTheme(), window.matchMedia('(prefers-color-scheme: light)').matches));
+bindTheme();
 void load();

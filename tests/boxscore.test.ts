@@ -218,15 +218,23 @@ function rowFor(html: string, athleteId: string): string {
   return html.slice(trStart, trEnd);
 }
 
-test('the scoreboard shows one random game, the win bar, and no points range', () => {
+test('the scoreboard headlines the median and keeps one random draw', () => {
   const model = score(false);
   const html = renderBoxScore(game, null, model, now);
   assert.match(html, /Away Name/);
   assert.match(html, /Home Name/);
-  assert.match(html, /<p class="score away">26<\/p>/);
-  assert.match(html, /<p class="score home">11<\/p>/);
+  assert.match(html, /<p class="score away">108<\/p>/);
+  assert.match(html, /<p class="score home">104<\/p>/);
+  assert.match(html, /Median of 10,000 games/);
+  assert.match(html, /Win rate in 10,000 games/);
+  assert.match(html, /<p class="draw-score away">26<\/p>/);
+  assert.match(html, /<p class="draw-score home">11<\/p>/);
   assert.match(html, /One simulated game/);
   assert.match(html, /Random draw index 0/);
+  const medianAt = html.indexOf('Median of 10,000 games');
+  const drawAt = html.indexOf('One simulated game');
+  const pctAt = html.indexOf('class="team-pct away');
+  assert.ok(medianAt >= 0 && drawAt > medianAt && pctAt > drawAt);
   assert.match(html, /Away wins 25\.0%\. Tie 0\.0%\. Home wins 75\.0%/);
   assert.match(html, /Tie 0\.0%/);
   assert.match(html, /flex-grow: 2500/);
@@ -257,13 +265,19 @@ test('the scoreboard shows one random game, the win bar, and no points range', (
   assert.equal(html.includes('undefined'), false);
   assert.equal(html.includes('<a '), false);
   assert.equal(html.includes('title='), false);
-  assert.match(html, /10,000 simulated games\. This box score is one of them, picked at random\. It is not the median and not the most likely line\./);
-  assert.match(html, /Minutes are a rotation draw, not a five-man lineup\./);
+  assert.match(html, /This box score is one of the 10,000 games\. The median above is the middle of those games\./);
+  assert.match(html, /The minutes column totals team-minutes: five players on the floor at once\. Regulation is 240 \(5 × 48\)\. Overtime is 265 \(5 × 53\)\. It is not the length of the game\./);
+  assert.match(html, /240 team-minutes · 5 × 48/);
+  assert.equal(html.includes('not a five-man lineup'), false);
+  assert.equal(html.includes('265 minutes'), false);
+  assert.equal(html.includes('265 team-minutes'), false);
+  const tableAt = html.indexOf('<table');
+  const noteAt = html.indexOf('The median above is the middle of those games.');
+  assert.ok(tableAt >= 0 && noteAt > tableAt);
   assert.match(html, /Brighter blue means that number is further from this player's middle in the 10,000 games\./);
   assert.match(html, /<span class="pct">/);
   assert.match(html, /data-bucket=/);
   const colorsAt = html.indexOf('Probability colors');
-  const tableAt = html.indexOf('<table');
   assert.ok(colorsAt >= 0 && tableAt >= 0 && colorsAt < tableAt);
   assert.match(html, /<input type="checkbox" data-probability-colors>/);
   assert.equal(/<input\b[^>]*\bchecked\b/.test(html), false);
@@ -280,18 +294,24 @@ test('an empty abbreviation falls back to the team name', () => {
   const html = renderBoxScore(blank, null, score(false), now);
   assert.match(html, /class="abbr away">Away Name</);
   assert.match(html, /class="abbr home">Home Name</);
-  assert.match(html, /class="score away">26</);
-  assert.match(html, /class="score home">11</);
+  assert.match(html, /class="score away">108</);
+  assert.match(html, /class="score home">104</);
+  assert.match(html, /class="draw-score away">26</);
+  assert.match(html, /class="draw-score home">11</);
   assert.equal(html.includes('undefined'), false);
 });
 
 test('OT is labeled only on an overtime draw', () => {
   const regulation = renderBoxScore(game, null, score(false), now);
   const overtime = renderBoxScore(game, null, score(true), now);
-  assert.equal(regulation.includes('OT'), false);
+  assert.equal(regulation.includes('>OT<'), false);
+  assert.match(regulation, /240 team-minutes · 5 × 48/);
   assert.match(overtime, />OT</);
-  assert.match(overtime, /265 minutes/);
+  assert.match(overtime, /265 team-minutes · 5 × 53/);
   assert.equal(regulation.includes('265 minutes'), false);
+  assert.equal(overtime.includes('265 minutes'), false);
+  assert.equal(regulation.includes('265 team-minutes'), false);
+  assert.equal(overtime.includes('240 team-minutes'), false);
 });
 
 test('the panel opens, swaps, and closes from the player button', () => {
@@ -348,8 +368,10 @@ test('thin sample follows the 2026 and 2027 counts', () => {
   assert.match(thin, /Shooting sample: 5 games\./);
   assert.match(thin, /No absence flag on the card\./);
   assert.match(thin, /Shrunk minutes rate: 32\.0\./);
-  assert.match(thin, /scaled to 240 minutes/);
+  assert.match(thin, /scaled to 240 team-minutes \(5 × 48\)/);
   assert.match(thin, /Team volume shock this draw: 1\.25\./);
+  assert.equal(thin.includes('265 minutes'), false);
+  assert.equal(thin.includes('265 team-minutes'), false);
   assert.equal(thin.includes('Overtime. This draw used 265 minutes.'), false);
   const eight = renderPlayerPanel(game, card, model, '9');
   assert.match(eight, /Prior season \(2026\): 0 games\. This season \(2027\): 8 games\./);
@@ -360,8 +382,10 @@ test('thin sample follows the 2026 and 2027 counts', () => {
   assert.match(out, /Out of the rotation \(out\)\./);
   assert.equal(out.includes('data-bucket'), false);
   const overtime = renderPlayerPanel(game, card, score(true), '1');
-  assert.match(overtime, /Overtime\. This draw used 265 minutes\./);
-  assert.match(overtime, /scaled to 265 minutes/);
+  assert.match(overtime, /This draw used 265 team-minutes \(5 × 53\)\./);
+  assert.match(overtime, /scaled to 265 team-minutes \(5 × 53\)/);
+  assert.equal(overtime.includes('265 minutes'), false);
+  assert.equal(overtime.includes('scaled to 240 team-minutes'), false);
 });
 
 test('missing optional fields do not throw', () => {

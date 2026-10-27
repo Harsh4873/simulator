@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   empiricalPercent,
@@ -7,6 +8,7 @@ import {
   probabilityColorsOn,
   shownPercent,
   teamLogoUrl,
+  themeFromStorage,
   typicalityBucket,
   winCounts,
 } from '../src/display.ts';
@@ -69,6 +71,21 @@ test('win counts sum to the draws', () => {
   assert.equal(many.tie, 1);
   assert.equal(many.home, 1);
   assert.equal(many.away, 9998);
+});
+
+test('theme follows an exact stored value, then the light preference', () => {
+  assert.equal(themeFromStorage(null, false), 'dark');
+  assert.equal(themeFromStorage(null, true), 'light');
+  assert.equal(themeFromStorage('light', false), 'light');
+  assert.equal(themeFromStorage('dark', true), 'dark');
+  assert.equal(themeFromStorage('system', false), 'dark');
+  assert.equal(themeFromStorage('system', true), 'light');
+  assert.equal(themeFromStorage('', true), 'light');
+  assert.equal(themeFromStorage('Light', false), 'dark');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.ok(html.includes('simulator.theme'));
+  assert.ok(html.includes('prefers-color-scheme'));
+  assert.ok(html.includes('data-theme-toggle'));
 });
 
 test('probability colors are off unless the stored value is on', () => {
