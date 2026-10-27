@@ -1,3 +1,4 @@
+import { shownPercent, typicalityBucket, winCounts, type TypicalityBucket, type WinCounts } from './display.ts';
 import type { RateGame, RatePlayer } from './types.ts';
 import { binomial, gamma, gammaMean1, iterationSeed, mulberry32, normal, poisson, type Rng } from './rng.ts';
 
@@ -45,16 +46,33 @@ export interface Draw {
   budget: number;
   away: DrawnPlayer[];
   home: DrawnPlayer[];
+  awayVolumeShock: number;
+  homeVolumeShock: number;
+}
+
+export interface MarginalRead {
+  percent: number;
+  constant: boolean;
+  bucket: TypicalityBucket;
 }
 
 export interface SimulatedPlayer extends DrawnPlayer {
   band: PointsBand;
+  reads: {
+    min: MarginalRead;
+    tpm: MarginalRead;
+    pts: MarginalRead;
+    reb: MarginalRead;
+    ast: MarginalRead;
+  };
 }
 
 export interface SimulatedTeam {
   team_id: string;
   pts: number;
   band: PointsBand;
+  volumeShock: number;
+  pointsRead: MarginalRead;
   players: SimulatedPlayer[];
 }
 
@@ -63,6 +81,7 @@ export interface Simulation {
   budget: number;
   index: number;
   combinedTotals: number[];
+  wins: WinCounts;
   away: SimulatedTeam;
   home: SimulatedTeam;
 }
@@ -94,6 +113,10 @@ export function closestIndex(combined: number[]): number {
     }
   }
   return best;
+}
+
+export function shownDrawIndex(baseSeed: number, iterations: number): number {
+  return iterationSeed(baseSeed >>> 0, iterations) % iterations;
 }
 
 export function largestRemainder(rows: { athlete_id: string; raw: number }[], budget: number): number[] {
@@ -141,13 +164,13 @@ function zeroLine(player: RatePlayer): DrawnPlayer {
   };
 }
 
-function drawTeam(players: RatePlayer[], budget: number, rng: Rng): DrawnPlayer[] {
+function drawTeam(players: RatePlayer[], budget: number, rng: Rng): { lines: DrawnPlayer[]; volumeShock: number } {
   const z = normal(rng);
   // Mean-1 lognormal shock shared by the team's volume rates.
   const shock = Math.exp(z - (TEAM_SHOCK_SIGMA ** 2) / 2);
   const active = players.filter((player) => player.minutes_weight !== 0).sort(byAthleteId);
   const inactive = players.filter((player) => player.minutes_weight === 0).sort(byAthleteId);
-  if (active.length === 0) return inactive.map(zeroLine);
+  if (active.length === 0) return { lines: inactive.map(zeroLine), volumeShock: shock };
 
   const meanSum = active.reduce((sum, player) => sum + Math.max(0, player.minutes_mean), 0);
   const scaled =
@@ -221,7 +244,7 @@ function drawTeam(players: RatePlayer[], budget: number, rng: Rng): DrawnPlayer[
     });
   }
   for (const player of inactive) lines.push(zeroLine(player));
-  return lines;
+  return { lines, volumeShock: shock };
 }
 
 function sumKey(players: DrawnPlayer[], key: (typeof COUNT_KEYS)[number]): number {
@@ -267,19 +290,23 @@ function validateDraw(draw: Draw): void {
 export function drawGame(game: RateGame, rng: Rng): Draw {
   const overtime = rng() < OT_PROBABILITY;
   const budget = overtime ? OT_MINUTES : REGULATION_MINUTES;
+  const awayDraw = drawTeam(
+    game.players.filter((player) => player.team_id === game.away_team_id),
+    budget,
+    rng,
+  );
+  const homeDraw = drawTeam(
+    game.players.filter((player) => player.team_id === game.home_team_id),
+    budget,
+    rng,
+  );
   const draw: Draw = {
     overtime,
     budget,
-    away: drawTeam(
-      game.players.filter((player) => player.team_id === game.away_team_id),
-      budget,
-      rng,
-    ),
-    home: drawTeam(
-      game.players.filter((player) => player.team_id === game.home_team_id),
-      budget,
-      rng,
-    ),
+    away: awayDraw.lines,
+    home: homeDraw.lines,
+    awayVolumeShock: awayDraw.volumeShock,
+    homeVolumeShock: homeDraw.volumeShock,
   };
   validateDraw(draw);
   return draw;
@@ -298,11 +325,69 @@ function teamPoints(players: DrawnPlayer[]): number {
   return players.reduce((sum, player) => sum + player.pts, 0);
 }
 
-function withBands(players: DrawnPlayer[], totals: Map<string, Float64Array>): SimulatedPlayer[] {
-  return players.map((player) => ({
-    ...player,
-    band: bandFrom(totals.get(player.athlete_id) ?? new Float64Array()),
-  }));
+interface ToneSeries {
+  min: Uint16Array;
+  tpm: Uint16Array;
+  pts: Uint16Array;
+  reb: Uint16Array;
+  ast: Uint16Array;
+}
+
+function blankSeries(iterations: number): ToneSeries {
+  return {
+    min: new Uint16Array(iterations),
+    tpm: new Uint16Array(iterations),
+    pts: new Uint16Array(iterations),
+    reb: new Uint16Array(iterations),
+    ast: new Uint16Array(iterations),
+  };
+}
+
+function marginalRead(values: ArrayLike<number>, shown: number): MarginalRead {
+  const sorted = Array.from(values, (value) => value).sort((a, b) => a - b);
+  const constant = sorted.length > 0 && sorted[0] === sorted[sorted.length - 1];
+  const percent = shownPercent(sorted, shown);
+  return { percent, constant, bucket: typicalityBucket(percent, constant) };
+}
+
+function readsFor(series: ToneSeries | undefined, line: DrawnPlayer): SimulatedPlayer['reads'] {
+  const empty = new Uint16Array();
+  return {
+    min: marginalRead(series?.min ?? empty, line.min),
+    tpm: marginalRead(series?.tpm ?? empty, line.tpm),
+    pts: marginalRead(series?.pts ?? empty, line.pts),
+    reb: marginalRead(series?.reb ?? empty, line.reb),
+    ast: marginalRead(series?.ast ?? empty, line.ast),
+  };
+}
+
+function withReads(players: DrawnPlayer[], series: Map<string, ToneSeries>): SimulatedPlayer[] {
+  return players.map((player) => {
+    const stats = series.get(player.athlete_id);
+    return {
+      ...player,
+      band: bandFrom(stats?.pts ?? new Uint16Array()),
+      reads: readsFor(stats, player),
+    };
+  });
+}
+
+function shownTeam(
+  teamId: string,
+  lines: DrawnPlayer[],
+  totals: Float64Array,
+  volumeShock: number,
+  series: Map<string, ToneSeries>,
+): SimulatedTeam {
+  const pts = teamPoints(lines);
+  return {
+    team_id: teamId,
+    pts,
+    band: bandFrom(totals),
+    volumeShock,
+    pointsRead: marginalRead(totals, pts),
+    players: withReads(lines, series),
+  };
 }
 
 export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIONS): Simulation {
@@ -310,8 +395,8 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
   const seed = baseSeed >>> 0;
   const awayTotals = new Float64Array(iterations);
   const homeTotals = new Float64Array(iterations);
-  const playerTotals = new Map<string, Float64Array>();
-  for (const player of game.players) playerTotals.set(player.athlete_id, new Float64Array(iterations));
+  const series = new Map<string, ToneSeries>();
+  for (const player of game.players) series.set(player.athlete_id, blankSeries(iterations));
   const combinedTotals = new Array<number>(iterations);
 
   for (let index = 0; index < iterations; index += 1) {
@@ -322,29 +407,25 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
     homeTotals[index] = homePts;
     combinedTotals[index] = awayPts + homePts;
     for (const line of [...draw.away, ...draw.home]) {
-      const bucket = playerTotals.get(line.athlete_id);
-      if (bucket) bucket[index] = line.pts;
+      const bucket = series.get(line.athlete_id);
+      if (!bucket) continue;
+      bucket.min[index] = line.min;
+      bucket.tpm[index] = line.tpm;
+      bucket.pts[index] = line.pts;
+      bucket.reb[index] = line.reb;
+      bucket.ast[index] = line.ast;
     }
   }
 
-  const index = closestIndex(combinedTotals);
+  const index = shownDrawIndex(seed, iterations);
   const chosen = drawGame(game, mulberry32(iterationSeed(seed, index)));
   return {
     overtime: chosen.overtime,
     budget: chosen.budget,
     index,
     combinedTotals,
-    away: {
-      team_id: game.away_team_id,
-      pts: teamPoints(chosen.away),
-      band: bandFrom(awayTotals),
-      players: withBands(chosen.away, playerTotals),
-    },
-    home: {
-      team_id: game.home_team_id,
-      pts: teamPoints(chosen.home),
-      band: bandFrom(homeTotals),
-      players: withBands(chosen.home, playerTotals),
-    },
+    wins: winCounts(awayTotals, homeTotals),
+    away: shownTeam(game.away_team_id, chosen.away, awayTotals, chosen.awayVolumeShock, series),
+    home: shownTeam(game.home_team_id, chosen.home, homeTotals, chosen.homeVolumeShock, series),
   };
 }

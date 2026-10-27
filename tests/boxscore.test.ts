@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { columnSums, renderBoxScore } from '../src/boxscore.ts';
-import type { Simulation, SimulatedPlayer } from '../src/simulate.ts';
-import type { SlateGame } from '../src/types.ts';
+import { columnSums, renderBoxScore, renderPlayerPanel } from '../src/boxscore.ts';
+import { nextPanelAthlete, typicalityBucket } from '../src/display.ts';
+import type { MarginalRead, Simulation, SimulatedPlayer } from '../src/simulate.ts';
+import type { RatePlayer, SlateGame } from '../src/types.ts';
 
 const game: SlateGame = {
   event_id: '1',
@@ -17,7 +19,18 @@ const game: SlateGame = {
   spread_caption: null,
 };
 
-function player(overrides: Partial<SimulatedPlayer>): SimulatedPlayer {
+const now = new Date('2026-10-28T12:00:00Z');
+
+function read(percent: number, constant = false): MarginalRead {
+  return { percent, constant, bucket: typicalityBucket(percent, constant) };
+}
+
+function reads(overrides: Partial<SimulatedPlayer['reads']> = {}): SimulatedPlayer['reads'] {
+  const base = read(71);
+  return { min: base, tpm: base, pts: base, reb: base, ast: base, ...overrides };
+}
+
+function player(overrides: Partial<SimulatedPlayer> = {}): SimulatedPlayer {
   return {
     athlete_id: '1',
     name: 'Regular Player',
@@ -38,14 +51,34 @@ function player(overrides: Partial<SimulatedPlayer>): SimulatedPlayer {
     reb: 5,
     ast: 4,
     band: { p10: 8, p50: 17, p90: 22 },
+    reads: reads(),
     ...overrides,
   };
 }
 
 function score(overtime: boolean): Simulation {
   const awayPlayers = [
-    player({ athlete_id: '2', name: 'Thin Player', thin_sample: true, games: 3, shooting_games: 1, min: 18, pts: 9, fgm: 3, fga: 8, tpm: 1, tpa: 3, ftm: 2, fta: 2 }),
-    player({ athlete_id: '1', name: 'Regular Player', min: 30 }),
+    player({
+      athlete_id: '2',
+      name: 'Thin Player',
+      thin_sample: true,
+      games: 3,
+      shooting_games: 1,
+      min: 18,
+      pts: 9,
+      fgm: 3,
+      fga: 8,
+      tpm: 1,
+      tpa: 3,
+      ftm: 2,
+      fta: 2,
+    }),
+    player({
+      athlete_id: '1',
+      name: 'Regular Player',
+      min: 30,
+      reads: reads({ min: read(100, true) }),
+    }),
     player({
       athlete_id: '3',
       name: 'Out Player',
@@ -65,7 +98,23 @@ function score(overtime: boolean): Simulation {
       shooting_games: 12,
     }),
   ];
-  const homePlayers = [player({ athlete_id: '9', name: 'Home Player', team_id: '2', min: 24, pts: 11, fgm: 4, fga: 9, tpm: 1, tpa: 2, ftm: 2, fta: 2, reb: 3, ast: 2 })];
+  const homePlayers = [
+    player({
+      athlete_id: '9',
+      name: 'Home Player',
+      team_id: '2',
+      min: 24,
+      pts: 11,
+      fgm: 4,
+      fga: 9,
+      tpm: 1,
+      tpa: 2,
+      ftm: 2,
+      fta: 2,
+      reb: 3,
+      ast: 2,
+    }),
+  ];
   const awayPts = awayPlayers.reduce((sum, item) => sum + item.pts, 0);
   const homePts = homePlayers.reduce((sum, item) => sum + item.pts, 0);
   return {
@@ -73,35 +122,267 @@ function score(overtime: boolean): Simulation {
     budget: overtime ? 265 : 240,
     index: 0,
     combinedTotals: [awayPts + homePts],
-    away: { team_id: '17', pts: awayPts, band: { p10: 90, p50: 108, p90: 124 }, players: awayPlayers },
-    home: { team_id: '2', pts: homePts, band: { p10: 88, p50: 104, p90: 120 }, players: homePlayers },
+    wins: { away: 2500, tie: 0, home: 7500 },
+    away: {
+      team_id: '17',
+      pts: awayPts,
+      band: { p10: 90, p50: 108, p90: 124 },
+      volumeShock: 1.25,
+      pointsRead: read(64),
+      players: awayPlayers,
+    },
+    home: {
+      team_id: '2',
+      pts: homePts,
+      band: { p10: 88, p50: 104, p90: 120 },
+      volumeShock: 0.5,
+      pointsRead: read(12),
+      players: homePlayers,
+    },
   };
 }
 
-test('the box score names the matchup, sums the footer, and labels thin rows', () => {
+function cardRow(overrides: Partial<RatePlayer> = {}): RatePlayer {
+  return {
+    athlete_id: '1',
+    name: 'Regular Player',
+    team_id: '17',
+    position: 'PG',
+    position_group: 'Guard',
+    injury_status: 'healthy',
+    minutes_weight: 1,
+    questionable_widen: false,
+    games_2026: 10,
+    games_2027: 10,
+    games: 20,
+    shooting_games: 20,
+    thin_sample: false,
+    minutes_mean: 32.04,
+    fga_per_min: 0.5,
+    fta_per_min: 0.14,
+    tpa_given_fga: 0.4,
+    fg2_pct: 0.48,
+    tp_pct: 0.37,
+    ft_pct: 0.84,
+    reb_per_min: 0.12,
+    ast_per_min: 0.22,
+    ...overrides,
+  };
+}
+
+function rates() {
+  return {
+    event_id: '1',
+    away_team_id: '17',
+    home_team_id: '2',
+    players: [
+      cardRow({
+        athlete_id: '1',
+        games_2026: 0,
+        games_2027: 7,
+        games: 7,
+        shooting_games: 5,
+      }),
+      cardRow({
+        athlete_id: '3',
+        name: 'Out Player',
+        minutes_weight: 0,
+        injury_status: 'out',
+        questionable_widen: false,
+        position: 'SF',
+        position_group: 'Forward',
+      }),
+      cardRow({
+        athlete_id: '9',
+        name: 'Home Player',
+        team_id: '2',
+        games_2026: 0,
+        games_2027: 8,
+        games: 8,
+        shooting_games: 8,
+        injury_status: 'questionable',
+        questionable_widen: true,
+        position: 'C',
+        position_group: 'Center',
+      }),
+    ],
+  };
+}
+
+function rowFor(html: string, athleteId: string): string {
+  const marker = `data-athlete="${athleteId}"`;
+  const start = html.indexOf(marker);
+  assert.ok(start >= 0);
+  const trStart = html.lastIndexOf('<tr', start);
+  const trEnd = html.indexOf('</tr>', start);
+  return html.slice(trStart, trEnd);
+}
+
+test('the scoreboard shows one random game, the win bar, and no points range', () => {
   const model = score(false);
-  const html = renderBoxScore(game, model, new Date('2026-10-28T12:00:00Z'));
-  assert.match(html, /Away Name @ Home Name/);
+  const html = renderBoxScore(game, null, model, now);
+  assert.match(html, /Away Name/);
+  assert.match(html, /Home Name/);
+  assert.match(html, /<p class="score away">26<\/p>/);
+  assert.match(html, /<p class="score home">11<\/p>/);
+  assert.match(html, /One simulated game/);
+  assert.match(html, /Random draw index 0/);
+  assert.match(html, /Away wins 25\.0%\. Tie 0\.0%\. Home wins 75\.0%/);
+  assert.match(html, /Tie 0\.0%/);
+  assert.match(html, /flex-grow: 2500/);
+  assert.match(html, /flex-grow: 0/);
+  assert.match(html, /flex-grow: 7500/);
+  assert.match(html, /class="team-pct away tone" data-bucket="1">64%</);
+  assert.match(html, /class="team-pct home tone" data-bucket="4">12%</);
   const away = html.split('data-footer="away"')[1]?.split('</tr>')[0] ?? '';
   const sums = columnSums(model.away.players);
   for (const key of ['min', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'reb', 'ast'] as const) {
     assert.match(away, new RegExp(`data-col="${key}">${sums[key]}<`));
   }
-  assert.match(away, new RegExp(`data-col="pts"><span class="pts">${sums.pts}</span>`));
-  assert.equal(html.match(/thin sample/g)?.length, 1);
-  assert.match(html, /thin sample · 3 games/);
-  assert.match(html, /shooting sample 1/);
-  assert.equal(html.includes('>OT<'), false);
-  assert.match(html, /10,000 simulated games\. This table is one of them\. The range under points is the 10th to 90th percentile\./);
+  assert.match(away, new RegExp(`data-col="pts" data-bucket="1"><span class="stat">${sums.pts}</span><span class="pct">64%</span>`));
+  const regular = rowFor(html, '1');
+  assert.match(regular, /data-col="min" data-bucket="0"><span class="stat">30<\/span><\/td>/);
+  assert.match(regular, /data-col="fga">12</);
+  assert.match(regular, /data-col="pts" data-bucket="2"><span class="stat">17<\/span><span class="pct">71%<\/span>/);
+  assert.match(regular, /<button type="button" class="player-btn" data-athlete="1">/);
+  const held = rowFor(html, '3');
+  assert.equal(held.includes('data-bucket'), false);
+  assert.match(held, />out</);
+  assert.equal(html.includes('10th'), false);
+  assert.equal(html.includes('90–'), false);
+  assert.equal(html.includes('p10'), false);
+  assert.equal(html.includes('p90'), false);
+  assert.equal(html.includes('class="band"'), false);
+  assert.equal(/data-col="(?:fgm|fga|tpa|ftm|fta)"[^>]*data-bucket/.test(regular), false);
+  assert.equal(html.includes('undefined'), false);
+  assert.equal(html.includes('<a '), false);
+  assert.equal(html.includes('title='), false);
+  assert.match(html, /10,000 simulated games\. This box score is one of them, picked at random\. It is not the median and not the most likely line\./);
   assert.match(html, /Minutes are a rotation draw, not a five-man lineup\./);
+  assert.match(html, /Brighter blue means that number is further from this player's middle in the 10,000 games\./);
+  assert.equal(html.includes('>OT<'), false);
+  assert.equal(html.includes('This line is one random draw'), false);
+});
+
+test('an empty abbreviation falls back to the team name', () => {
+  const blank: SlateGame = {
+    ...game,
+    away: { team_id: '17', name: 'Away Name', abbreviation: '' },
+    home: { team_id: '2', name: 'Home Name', abbreviation: '' },
+  };
+  const html = renderBoxScore(blank, null, score(false), now);
+  assert.match(html, /class="abbr away">Away Name</);
+  assert.match(html, /class="abbr home">Home Name</);
+  assert.match(html, /class="score away">26</);
+  assert.match(html, /class="score home">11</);
+  assert.equal(html.includes('undefined'), false);
 });
 
 test('OT is labeled only on an overtime draw', () => {
-  const now = new Date('2026-10-28T12:00:00Z');
-  const regulation = renderBoxScore(game, score(false), now);
-  const overtime = renderBoxScore(game, score(true), now);
+  const regulation = renderBoxScore(game, null, score(false), now);
+  const overtime = renderBoxScore(game, null, score(true), now);
   assert.equal(regulation.includes('OT'), false);
   assert.match(overtime, />OT</);
   assert.match(overtime, /265 minutes/);
   assert.equal(regulation.includes('265 minutes'), false);
+});
+
+test('the panel opens, swaps, and closes from the player button', () => {
+  const model = score(false);
+  const card = rates();
+  const page = renderBoxScore(game, card, model, now);
+  assert.match(page, /data-athlete="1"/);
+  assert.equal(page.includes('data-panel'), false);
+  const shell = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(shell, /data-region="games"/);
+  assert.match(shell, /data-region="stage"/);
+  assert.match(shell, /data-region="player"/);
+  assert.match(shell, /data-panel/);
+  assert.equal(nextPanelAthlete(null, '1'), '1');
+  const open = renderPlayerPanel(game, card, model, '1');
+  assert.match(open, /type="button" data-close/);
+  assert.match(open, /Regular Player/);
+  assert.match(open, /<span class="stat">17<\/span>/);
+  assert.match(open, /Away Name/);
+  assert.match(open, /PG/);
+  assert.match(open, /Guard/);
+  assert.match(open, /This line is one random draw from 10,000 simulated games\. It is not a prediction\./);
+  assert.equal(open.includes('<a '), false);
+  assert.equal(open.includes('title='), false);
+  const swapped = renderPlayerPanel(game, card, model, '9');
+  assert.match(swapped, /Home Player/);
+  assert.equal(swapped.includes('Regular Player'), false);
+  assert.equal(nextPanelAthlete('1', '9'), '9');
+  assert.equal(nextPanelAthlete('1', '1'), null);
+  assert.equal(nextPanelAthlete('1', null), null);
+});
+
+test('thin sample follows the 2026 and 2027 counts', () => {
+  const model = score(false);
+  const card = rates();
+  const thin = renderPlayerPanel(game, card, model, '1');
+  assert.match(thin, /Prior season \(2026\): 0 games\. This season \(2027\): 7 games\./);
+  assert.match(thin, /Thin sample: no games in 2026 and fewer than 8 in 2027\./);
+  assert.match(thin, /Shooting sample: 5 games\./);
+  assert.match(thin, /No absence flag on the card\./);
+  assert.match(thin, /Shrunk minutes rate: 32\.0\./);
+  assert.match(thin, /scaled to 240 minutes/);
+  assert.match(thin, /Team volume shock this draw: 1\.25\./);
+  assert.equal(thin.includes('Overtime. This draw used 265 minutes.'), false);
+  const eight = renderPlayerPanel(game, card, model, '9');
+  assert.match(eight, /Prior season \(2026\): 0 games\. This season \(2027\): 8 games\./);
+  assert.equal(eight.includes('Thin sample: no games in 2026 and fewer than 8 in 2027.'), false);
+  assert.match(eight, /Questionable\. Minutes stay centered on the shrunk rate, with a wider draw\./);
+  assert.equal(eight.includes('No absence flag on the card.'), false);
+  const out = renderPlayerPanel(game, card, model, '3');
+  assert.match(out, /Out of the rotation \(out\)\./);
+  assert.equal(out.includes('data-bucket'), false);
+  const overtime = renderPlayerPanel(game, card, score(true), '1');
+  assert.match(overtime, /Overtime\. This draw used 265 minutes\./);
+  assert.match(overtime, /scaled to 265 minutes/);
+});
+
+test('missing optional fields do not throw', () => {
+  const model = score(false);
+  model.away.volumeShock = Number.NaN;
+  const row: Partial<RatePlayer> = {
+    athlete_id: '1',
+    team_id: '17',
+    minutes_weight: 1,
+    questionable_widen: false,
+    games_2027: 3,
+    position: '',
+  };
+  const card = { event_id: '1', players: [row] };
+  let html = '';
+  assert.doesNotThrow(() => {
+    html = renderPlayerPanel(game, card, model, '1');
+  });
+  assert.match(html, /Regular Player/);
+  assert.match(html, /<span class="stat">17<\/span>/);
+  assert.match(html, /Injury status is not in the data\./);
+  assert.match(html, /Position is not in the data\./);
+  assert.match(html, /Shrunk minutes rate: not in the data\./);
+  assert.match(html, /Field-goal attempts per minute: not in the data/);
+  assert.match(html, /Team volume shock is not in the data\./);
+  assert.equal(html.includes('Thin sample:'), false);
+  assert.equal(html.includes('undefined'), false);
+  const missing = renderPlayerPanel(game, { players: [] }, model, '1');
+  assert.match(missing, /This player is not on the rate card\./);
+  assert.match(missing, /Regular Player/);
+});
+
+test('the layout colors stay on the blue scale', () => {
+  const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
+  for (const hex of ['#1e3344', '#1a4d68', '#1a6a8c', '#2f8eb0', '#5eabc4', '#a9d4e4', '#e7f5fb', '#4da6ff', '#5a7085', '#00e5a0']) {
+    assert.ok(css.includes(hex), hex);
+  }
+  assert.match(css, /90rem/);
+  assert.match(css, /4\.5rem/);
+  assert.match(css, /22rem/);
+  assert.match(css, /grid-template-columns:\s*minmax\(0, 1fr\) 22rem/);
+  assert.match(css, /max-width:\s*800px/);
+  assert.match(css, /150ms/);
+  assert.match(css, /prefers-reduced-motion:\s*reduce/);
+  assert.equal(css.includes('880px'), false);
 });

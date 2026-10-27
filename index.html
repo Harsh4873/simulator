@@ -19,10 +19,22 @@
         <p class="mark">Simulator</p>
         <p class="sub">NBA games today, Chicago time</p>
       </header>
-      <main id="slate">
-        <p class="state">Loading slate…</p>
+      <main class="desk" id="desk" data-board data-mode="loading">
+        <section class="frame" data-region="games" aria-labelledby="games-label">
+          <p class="frame-label" id="games-label">Games</p>
+          <div id="slate">
+            <p class="state">Loading slate…</p>
+          </div>
+        </section>
+        <section class="frame" data-region="stage" aria-labelledby="stage-label" hidden>
+          <p class="frame-label" id="stage-label">Box score</p>
+          <div id="boxscore"></div>
+        </section>
+        <aside class="frame panel" data-region="player" data-panel aria-labelledby="player-label" hidden>
+          <p class="frame-label" id="player-label">Player</p>
+          <div data-panel-body></div>
+        </aside>
       </main>
-      <section id="boxscore" hidden></section>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

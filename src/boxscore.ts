@@ -1,7 +1,7 @@
 import { formatTip } from './date.ts';
 import { escapeHtml, statusLabel } from './slate.ts';
-import type { SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
-import type { ColumnKey, SlateGame } from './types.ts';
+import type { MarginalRead, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
+import type { ColumnKey, RatePlayer, SlateGame, TeamSide } from './types.ts';
 
 const COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'min', label: 'MIN' },
@@ -16,7 +16,27 @@ const COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'ast', label: 'AST' },
 ];
 
+const TONE_KEYS = new Set<ColumnKey>(['min', 'tpm', 'pts', 'reb', 'ast']);
+
 type Counting = Pick<SimulatedPlayer, ColumnKey>;
+
+type CardRow = Partial<RatePlayer>;
+
+export interface PanelRate {
+  event_id?: string;
+  players: readonly CardRow[];
+}
+
+const RATE_LINES: { key: keyof RatePlayer; label: string }[] = [
+  { key: 'fga_per_min', label: 'Field-goal attempts per minute' },
+  { key: 'fta_per_min', label: 'Free-throw attempts per minute' },
+  { key: 'tpa_given_fga', label: 'Three-point attempt share of field-goal attempts' },
+  { key: 'fg2_pct', label: 'Two-point make rate' },
+  { key: 'tp_pct', label: 'Three-point make rate' },
+  { key: 'ft_pct', label: 'Free-throw make rate' },
+  { key: 'reb_per_min', label: 'Rebounds per minute' },
+  { key: 'ast_per_min', label: 'Assists per minute' },
+];
 
 export function columnSums(players: Counting[]): Record<ColumnKey, number> {
   const sums: Record<ColumnKey, number> = {
@@ -53,32 +73,83 @@ function displayPlayers(players: SimulatedPlayer[]): SimulatedPlayer[] {
   return [...active, ...inactive];
 }
 
-function sampleText(player: SimulatedPlayer): string {
-  const games = player.thin_sample ? `thin sample · ${player.games} games` : `${player.games} games`;
-  if (player.shooting_games !== player.games) return `${games} · shooting sample ${player.shooting_games}`;
-  return games;
+function textOf(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
-function pointsCell(points: number, band: string): string {
-  return `<td data-col="pts"><span class="pts">${points}</span><span class="band">${band}</span></td>`;
+function teamAbbr(side: TeamSide): string {
+  const abbr = textOf(side.abbreviation);
+  if (abbr) return abbr;
+  return textOf(side.name);
+}
+
+function teamTitle(side: TeamSide): string {
+  const name = textOf(side.name);
+  if (name) return name;
+  return textOf(side.abbreviation);
+}
+
+function teamName(game: SlateGame, teamId: string): string | null {
+  if (game.away?.team_id === teamId) {
+    const name = teamTitle(game.away);
+    return name || null;
+  }
+  if (game.home?.team_id === teamId) {
+    const name = teamTitle(game.home);
+    return name || null;
+  }
+  return null;
+}
+
+function countPercent(count: number, total: number): string {
+  if (!(total > 0)) return '0.0';
+  return ((count / total) * 100).toFixed(1);
+}
+
+function heldLabel(player: Pick<SimulatedPlayer, 'minutes_weight' | 'injury_status'>): string | null {
+  if (player.minutes_weight !== 0) return null;
+  const status = textOf(player.injury_status);
+  return status || 'not in the data';
+}
+
+function toneCell(key: ColumnKey, value: number, read: MarginalRead | undefined, held: string | null): string {
+  if (!TONE_KEYS.has(key)) return `<td data-col="${key}">${value}</td>`;
+  if (held !== null) {
+    return `<td data-col="${key}"><span class="stat">${value}</span><span class="pct">${escapeHtml(held)}</span></td>`;
+  }
+  if (!read || read.constant) {
+    const bucket = read?.constant ? ' data-bucket="0"' : '';
+    return `<td data-col="${key}"${bucket}><span class="stat">${value}</span></td>`;
+  }
+  return `<td data-col="${key}" data-bucket="${read.bucket}"><span class="stat">${value}</span><span class="pct">${read.percent}%</span></td>`;
+}
+
+function toneSpan(value: number, read: MarginalRead | undefined, held: string | null): string {
+  if (held !== null) {
+    return `<span class="tone"><span class="stat">${value}</span><span class="pct">${escapeHtml(held)}</span></span>`;
+  }
+  if (!read || read.constant) {
+    const bucket = read?.constant ? ' data-bucket="0"' : '';
+    return `<span class="tone"${bucket}><span class="stat">${value}</span></span>`;
+  }
+  return `<span class="tone" data-bucket="${read.bucket}"><span class="stat">${value}</span><span class="pct">${read.percent}%</span></span>`;
+}
+
+function readOf(player: SimulatedPlayer, key: 'min' | 'tpm' | 'pts' | 'reb' | 'ast'): MarginalRead | undefined {
+  return player.reads?.[key];
 }
 
 function playerRow(player: SimulatedPlayer): string {
+  const held = heldLabel(player);
   const cells = COLUMNS.map((column) => {
-    if (column.key === 'pts') {
-      const band =
-        player.minutes_weight === 0
-          ? escapeHtml(player.injury_status)
-          : `${player.band.p10}–${player.band.p90}`;
-      return pointsCell(player.pts, band);
+    if (column.key === 'min' || column.key === 'tpm' || column.key === 'pts' || column.key === 'reb' || column.key === 'ast') {
+      return toneCell(column.key, player[column.key], readOf(player, column.key), held);
     }
     return `<td data-col="${column.key}">${player[column.key]}</td>`;
   }).join('');
+  const id = escapeHtml(player.athlete_id);
   return `<tr>
-    <th scope="row">
-      <span class="player-name">${escapeHtml(player.name)}</span>
-      <span class="sample">${escapeHtml(sampleText(player))}</span>
-    </th>
+    <th scope="row"><button type="button" class="player-btn" data-athlete="${id}">${escapeHtml(player.name)}</button></th>
     ${cells}
   </tr>`;
 }
@@ -86,40 +157,235 @@ function playerRow(player: SimulatedPlayer): string {
 function footerRow(side: string, team: SimulatedTeam): string {
   const sums = columnSums(team.players);
   const cells = COLUMNS.map((column) => {
-    if (column.key === 'pts') return pointsCell(sums.pts, `${team.band.p10}–${team.band.p90}`);
+    if (column.key === 'pts') return toneCell('pts', sums.pts, team.pointsRead, null);
     return `<td data-col="${column.key}">${sums[column.key]}</td>`;
   }).join('');
   return `<tr data-footer="${side}"><th scope="row">Total</th>${cells}</tr>`;
 }
 
-function teamBlock(side: string, name: string, team: SimulatedTeam): string {
-  const head = COLUMNS.map((column) => `<th>${column.label}</th>`).join('');
+function teamSection(side: string, slateSide: TeamSide, team: SimulatedTeam): string {
   const rows = displayPlayers(team.players).map(playerRow).join('');
-  return `<section class="team-block">
-    <h3>${escapeHtml(name)}</h3>
-    <div class="table-scroll">
-      <table>
-        <thead><tr><th>Player</th>${head}</tr></thead>
-        <tbody>${rows}</tbody>
-        <tfoot>${footerRow(side, team)}</tfoot>
-      </table>
-    </div>
-  </section>`;
+  return `<tr class="section"><th colspan="11" scope="colgroup">${escapeHtml(teamTitle(slateSide))}</th></tr>${rows}${footerRow(side, team)}`;
 }
 
-export function renderBoxScore(game: SlateGame, score: Simulation, now: Date): string {
-  const ot = score.overtime ? '<p class="ot-line"><span class="ot">OT</span> <span>265 minutes</span></p>' : '';
-  return `<article class="score-card">
-    <button type="button" data-back>Back to slate</button>
-    <header class="score-head">
-      <h2>${escapeHtml(game.away.name)} @ ${escapeHtml(game.home.name)}</h2>
-      <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
-      <p class="status">${escapeHtml(statusLabel(game, now))}</p>
-      ${ot}
-    </header>
-    ${teamBlock('away', game.away.name, score.away)}
-    ${teamBlock('home', game.home.name, score.home)}
-    <p class="note">10,000 simulated games. This table is one of them. The range under points is the 10th to 90th percentile.</p>
-    <p class="note">Minutes are a rotation draw, not a five-man lineup.</p>
-  </article>`;
+function tailMarkup(side: string, read: MarginalRead | undefined): string {
+  if (!read || read.constant) return '';
+  return `<p class="team-pct ${side} tone" data-bucket="${read.bucket}">${read.percent}%</p>`;
+}
+
+function scoreboard(game: SlateGame, score: Simulation): string {
+  const wins = score.wins ?? { away: 0, tie: 0, home: 0 };
+  const total = wins.away + wins.tie + wins.home;
+  const awayPct = countPercent(wins.away, total);
+  const tiePct = countPercent(wins.tie, total);
+  const homePct = countPercent(wins.home, total);
+  const label = `Away wins ${awayPct}%. Tie ${tiePct}%. Home wins ${homePct}%.`;
+  return `<div class="scoreboard">
+    <p class="abbr away">${escapeHtml(teamAbbr(game.away))}</p>
+    <div class="bar-slot">
+      <div class="winbar" role="img" aria-label="${label}">
+        <span class="seg seg-away" style="flex-grow: ${wins.away}"></span>
+        <span class="seg seg-tie" style="flex-grow: ${wins.tie}"></span>
+        <span class="seg seg-home" style="flex-grow: ${wins.home}"></span>
+      </div>
+    </div>
+    <p class="abbr home">${escapeHtml(teamAbbr(game.home))}</p>
+    <p class="club-name away">${escapeHtml(teamTitle(game.away))}</p>
+    <p class="club-name home">${escapeHtml(teamTitle(game.home))}</p>
+    <p class="score away">${score.away.pts}</p>
+    <p class="score home">${score.home.pts}</p>
+    <p class="win-pct win-away">${awayPct}%</p>
+    <p class="tie-line">Tie ${tiePct}%</p>
+    <p class="win-pct win-home">${homePct}%</p>
+    ${tailMarkup('away', score.away.pointsRead)}
+    ${tailMarkup('home', score.home.pointsRead)}
+  </div>`;
+}
+
+function boxTable(game: SlateGame, score: Simulation): string {
+  const head = COLUMNS.map((column) => `<th>${column.label}</th>`).join('');
+  const body = `${teamSection('away', game.away, score.away)}${teamSection('home', game.home, score.home)}`;
+  return `<div class="table-scroll"><table>
+    <thead><tr><th>Player</th>${head}</tr></thead>
+    <tbody>${body}</tbody>
+  </table></div>`;
+}
+
+export function renderBoxScore(game: SlateGame, rate: PanelRate | null, score: Simulation, now: Date): string {
+  const eventId = textOf(rate?.event_id) || textOf(game.event_id);
+  const ot = score.overtime
+    ? '<span class="ot">OT</span><span class="ot-minutes">265 minutes</span>'
+    : '';
+  return `<div data-event="${escapeHtml(eventId)}">
+      <button type="button" data-back>Back to slate</button>
+      <p class="sim-label">One simulated game</p>
+      <p class="draw-index">Random draw index ${score.index}</p>
+      ${scoreboard(game, score)}
+      <p class="status-row">
+        <span class="tip">${escapeHtml(formatTip(game.start_time))}</span>
+        <span class="status">${escapeHtml(statusLabel(game, now))}</span>
+        ${ot}
+      </p>
+      ${boxTable(game, score)}
+      <p class="legend">Brighter blue means that number is further from this player's middle in the 10,000 games. The percent is the share of those games at or below the number shown.</p>
+      <p class="note">10,000 simulated games. This box score is one of them, picked at random. It is not the median and not the most likely line.</p>
+      <p class="note">Minutes are a rotation draw, not a five-man lineup.</p>
+    </div>`;
+}
+
+function field(row: CardRow | null, key: keyof RatePlayer): unknown {
+  if (!row || !Object.prototype.hasOwnProperty.call(row, key)) return undefined;
+  const value = row[key];
+  if (value === undefined || value === null) return undefined;
+  return value;
+}
+
+function readNumber(row: CardRow | null, key: keyof RatePlayer): number | undefined {
+  const value = field(row, key);
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return value;
+}
+
+function readBoolean(row: CardRow | null, key: keyof RatePlayer): boolean | undefined {
+  const value = field(row, key);
+  if (typeof value !== 'boolean') return undefined;
+  return value;
+}
+
+function readString(row: CardRow | null, key: keyof RatePlayer): string | undefined {
+  const value = field(row, key);
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function readWeight(row: CardRow | null): 0 | 1 | undefined {
+  const value = field(row, 'minutes_weight');
+  if (value === 0 || value === 1) return value;
+  return undefined;
+}
+
+function findLine(score: Simulation, athleteId: string): SimulatedPlayer | null {
+  return (
+    score.away.players.find((player) => player.athlete_id === athleteId) ??
+    score.home.players.find((player) => player.athlete_id === athleteId) ??
+    null
+  );
+}
+
+function shockFor(score: Simulation, teamId: string): number | undefined {
+  if (teamId === score.away.team_id) return score.away.volumeShock;
+  if (teamId === score.home.team_id) return score.home.volumeShock;
+  return undefined;
+}
+
+function whySentences(row: CardRow | null): string[] {
+  const sentences: string[] = [];
+  if (!row) sentences.push('This player is not on the rate card.');
+  const games2026 = readNumber(row, 'games_2026');
+  const games2027 = readNumber(row, 'games_2027');
+  if (games2026 !== undefined && games2027 !== undefined) {
+    sentences.push(`Prior season (2026): ${games2026} games. This season (2027): ${games2027} games.`);
+  }
+  const games = readNumber(row, 'games');
+  const shooting = readNumber(row, 'shooting_games');
+  if (games !== undefined && shooting !== undefined && shooting !== games) {
+    sentences.push(`Shooting sample: ${shooting} games.`);
+  }
+  if (games2026 === 0 && games2027 !== undefined && games2027 < 8) {
+    sentences.push('Thin sample: no games in 2026 and fewer than 8 in 2027.');
+  }
+  const weight = readWeight(row);
+  const status = readString(row, 'injury_status');
+  const questionable = readBoolean(row, 'questionable_widen');
+  if (weight === 0 && status !== undefined) {
+    sentences.push(
+      `Out of the rotation (${status}). This player's line is fixed at zero because the card gives them no minutes.`,
+    );
+  }
+  if (questionable === true) {
+    sentences.push('Questionable. Minutes stay centered on the shrunk rate, with a wider draw.');
+  }
+  if (weight === 1 && questionable === false) sentences.push('No absence flag on the card.');
+  if (status === undefined) sentences.push('Injury status is not in the data.');
+  sentences.push('This line is one random draw from 10,000 simulated games. It is not a prediction.');
+  return sentences;
+}
+
+function rateItem(label: string, value: string): string {
+  return `<li>${escapeHtml(`${label}: ${value}`)}</li>`;
+}
+
+function samplingList(row: CardRow | null, score: Simulation, shock: number | undefined): string {
+  const budget = score.overtime ? 265 : 240;
+  const minutes = readNumber(row, 'minutes_mean');
+  const minutesLabel = minutes === undefined ? 'not in the data' : minutes.toFixed(1);
+  const items = [
+    `<li>${escapeHtml(`Shrunk minutes rate: ${minutesLabel}. Active rates are scaled to ${budget} minutes, and this line is one share of that budget.`)}</li>`,
+  ];
+  for (const line of RATE_LINES) {
+    const value = readNumber(row, line.key);
+    items.push(rateItem(line.label, value === undefined ? 'not in the data' : value.toFixed(3)));
+  }
+  if (typeof shock === 'number' && Number.isFinite(shock)) {
+    items.push(
+      `<li>${escapeHtml(`Team volume shock this draw: ${shock.toFixed(2)}. It scales attempts, rebounds, and assists. It does not change make rates.`)}</li>`,
+    );
+  } else {
+    items.push('<li>Team volume shock is not in the data.</li>');
+  }
+  if (score.overtime) items.push('<li>Overtime. This draw used 265 minutes.</li>');
+  return `<ul class="rates">${items.join('')}</ul>`;
+}
+
+function drawnLine(line: SimulatedPlayer): string {
+  const held = heldLabel(line);
+  const fg = `${line.fgm}–${line.fga}`;
+  const threes = `${toneSpan(line.tpm, readOf(line, 'tpm'), held)}–${line.tpa}`;
+  const ft = `${line.ftm}–${line.fta}`;
+  return `<dl class="line">
+    <dt>MIN</dt><dd>${toneSpan(line.min, readOf(line, 'min'), held)}</dd>
+    <dt>FG</dt><dd>${fg}</dd>
+    <dt>3P</dt><dd>${threes}</dd>
+    <dt>FT</dt><dd>${ft}</dd>
+    <dt>PTS</dt><dd>${toneSpan(line.pts, readOf(line, 'pts'), held)}</dd>
+    <dt>REB</dt><dd>${toneSpan(line.reb, readOf(line, 'reb'), held)}</dd>
+    <dt>AST</dt><dd>${toneSpan(line.ast, readOf(line, 'ast'), held)}</dd>
+  </dl>`;
+}
+
+function whoBlock(game: SlateGame, line: SimulatedPlayer, row: CardRow | null): string {
+  const team = teamName(game, line.team_id);
+  const position = readString(row, 'position');
+  const group = readString(row, 'position_group');
+  const positionHtml = position
+    ? `${escapeHtml(position)}${group ? ` <span class="pos-group">${escapeHtml(group)}</span>` : ''}`
+    : 'Position is not in the data.';
+  return `<div class="who">
+    <h2 class="who-name">${escapeHtml(line.name)}</h2>
+    <p class="who-team">${escapeHtml(team ?? 'not in the data')}</p>
+    <p class="who-pos">${positionHtml}</p>
+  </div>`;
+}
+
+export function renderPlayerPanel(
+  game: SlateGame,
+  rate: PanelRate | null,
+  score: Simulation,
+  athleteId: string,
+): string {
+  const line = findLine(score, athleteId);
+  if (!line) {
+    return `<button type="button" data-close>Close</button><p>This player is not in the data.</p>`;
+  }
+  const row = rate?.players.find((player) => player.athlete_id === athleteId) ?? null;
+  const sentences = whySentences(row).map((sentence) => `<p>${escapeHtml(sentence)}</p>`).join('');
+  return `<button type="button" data-close>Close</button>
+    ${whoBlock(game, line, row)}
+    <h3>This simulated game</h3>
+    ${drawnLine(line)}
+    <h3>Why</h3>
+    <div class="why">${sentences}</div>
+    <h3>Shrunk rates on the card</h3>
+    ${samplingList(row, score, shockFor(score, line.team_id))}`;
 }

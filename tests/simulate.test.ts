@@ -4,11 +4,12 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { iterationSeed, mulberry32 } from '../src/rng.ts';
+import { typicalityBucket } from '../src/display.ts';
 import {
   ITERATIONS,
-  closestIndex,
   drawGame,
   largestRemainder,
+  shownDrawIndex,
   simulate,
   type DrawnPlayer,
   type Simulation,
@@ -51,24 +52,33 @@ function assertPlayer(player: DrawnPlayer): void {
   }
 }
 
-function assertScore(result: Simulation): void {
+function assertScore(result: Simulation, seed: number, iterations: number): void {
   for (const side of [result.away, result.home]) {
     let activeMinutes = 0;
     const sums = { min: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pts: 0, reb: 0, ast: 0 };
     for (const player of side.players) {
       assertPlayer(player);
       assert.ok(player.band.p10 <= player.band.p50 && player.band.p50 <= player.band.p90);
+      for (const key of ['min', 'tpm', 'pts', 'reb', 'ast'] as const) {
+        const read = player.reads[key];
+        assert.equal(read.bucket, typicalityBucket(read.percent, read.constant));
+        assert.equal(Number.isInteger(read.percent), true);
+        assert.ok(read.percent >= 0 && read.percent <= 100);
+      }
       if (player.minutes_weight !== 0) activeMinutes += player.min;
       for (const key of KEYS) sums[key] += player[key];
     }
     assert.equal(activeMinutes, result.budget);
     assert.equal(side.pts, sums.pts);
+    assert.ok(Number.isFinite(side.volumeShock) && side.volumeShock > 0);
+    assert.equal(side.pointsRead.bucket, typicalityBucket(side.pointsRead.percent, side.pointsRead.constant));
     for (const key of KEYS) assert.equal(sums[key], side.players.reduce((sum, player) => sum + player[key], 0));
     assert.ok(side.band.p10 <= side.band.p50 && side.band.p50 <= side.band.p90);
   }
   assert.equal(result.budget, result.overtime ? 265 : 240);
-  assert.equal(result.index, closestIndex(result.combinedTotals));
+  assert.equal(result.index, shownDrawIndex(seed, iterations));
   assert.equal(result.combinedTotals[result.index], result.away.pts + result.home.pts);
+  assert.equal(result.wins.away + result.wins.tie + result.wins.home, iterations);
 }
 
 test('largest remainder gives the extra minute to the largest fraction', () => {
@@ -99,7 +109,9 @@ test('the same seed replays the displayed box score', () => {
   const first = simulate(game, 42, 300);
   const second = simulate(game, 42, 300);
   assert.deepEqual(first, second);
-  assertScore(first);
+  assert.equal(first.index, shownDrawIndex(42, 300));
+  assert.equal(shownDrawIndex(42, 10000), iterationSeed(42, 10000) % 10000);
+  assertScore(first, 42, 300);
   const redraw = drawGame(game, mulberry32(iterationSeed(42, first.index)));
   assert.equal(redraw.overtime, first.overtime);
   assert.equal(redraw.budget, first.budget);
@@ -108,6 +120,10 @@ test('the same seed replays the displayed box score', () => {
   const out = first.away.players.find((player) => player.athlete_id === '1001');
   assert.ok(out);
   assertPlayer(out);
+  assert.equal(out.reads.min.constant, true);
+  assert.equal(out.reads.pts.bucket, 0);
+  assert.equal(redraw.awayVolumeShock, first.away.volumeShock);
+  assert.equal(redraw.homeVolumeShock, first.home.volumeShock);
 });
 
 test('10,000 draws stay legal and finish within 15 seconds', { timeout: 20_000 }, () => {
@@ -116,7 +132,8 @@ test('10,000 draws stay legal and finish within 15 seconds', { timeout: 20_000 }
   const elapsed = Date.now() - started;
   assert.ok(elapsed < 15_000, `took ${elapsed}ms`);
   assert.equal(result.combinedTotals.length, ITERATIONS);
-  assertScore(result);
+  assert.equal(result.wins.away + result.wins.tie + result.wins.home, 10000);
+  assertScore(result, 1, ITERATIONS);
   const redraw = drawGame(game, mulberry32(iterationSeed(1, result.index)));
   assert.deepEqual(redraw.away.map(core), result.away.players.map(core));
   assert.deepEqual(redraw.home.map(core), result.home.players.map(core));
