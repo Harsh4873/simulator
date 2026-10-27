@@ -17,6 +17,26 @@ const COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'ast', label: 'AST' },
 ];
 
+const COLUMN_KEYS = new Set<string>(COLUMNS.map((column) => column.key));
+
+export type SortDirection = 'asc' | 'desc';
+
+export interface BoxSort {
+  key: ColumnKey;
+  direction: SortDirection;
+}
+
+export const DEFAULT_BOX_SORT: BoxSort = { key: 'min', direction: 'desc' };
+
+export function isColumnKey(value: string): value is ColumnKey {
+  return COLUMN_KEYS.has(value);
+}
+
+export function nextBoxSort(current: BoxSort, key: ColumnKey): BoxSort {
+  if (current.key !== key) return { key, direction: 'desc' };
+  return { key, direction: current.direction === 'desc' ? 'asc' : 'desc' };
+}
+
 const TONE_KEYS = new Set<ColumnKey>(['min', 'tpm', 'pts', 'reb', 'ast']);
 
 type Counting = Pick<SimulatedPlayer, ColumnKey>;
@@ -66,10 +86,15 @@ function byName(a: SimulatedPlayer, b: SimulatedPlayer): number {
   return 0;
 }
 
-function displayPlayers(players: SimulatedPlayer[]): SimulatedPlayer[] {
+export function orderPlayers(players: SimulatedPlayer[], sort: BoxSort = DEFAULT_BOX_SORT): SimulatedPlayer[] {
   const active = players.filter((player) => player.minutes_weight !== 0);
   const inactive = players.filter((player) => player.minutes_weight === 0);
-  active.sort((a, b) => b.min - a.min || byName(a, b));
+  const direction = sort.direction === 'asc' ? 1 : -1;
+  active.sort((a, b) => {
+    const delta = a[sort.key] - b[sort.key];
+    if (delta !== 0) return delta * direction;
+    return byName(a, b);
+  });
   inactive.sort(byName);
   return [...active, ...inactive];
 }
@@ -164,9 +189,26 @@ function footerRow(side: string, team: SimulatedTeam): string {
   return `<tr data-footer="${side}"><th scope="row">Total</th>${cells}</tr>`;
 }
 
-function teamSection(side: string, slateSide: TeamSide, team: SimulatedTeam): string {
-  const rows = displayPlayers(team.players).map(playerRow).join('');
+function teamSection(side: string, slateSide: TeamSide, team: SimulatedTeam, sort: BoxSort): string {
+  const rows = orderPlayers(team.players, sort).map(playerRow).join('');
   return `<tr class="section"><th colspan="11" scope="colgroup">${escapeHtml(teamTitle(slateSide))}</th></tr>${rows}${footerRow(side, team)}`;
+}
+
+function sortMark(sort: BoxSort, key: ColumnKey): string {
+  if (sort.key !== key) return '';
+  return sort.direction === 'desc' ? ' ↓' : ' ↑';
+}
+
+function sortPressed(sort: BoxSort, key: ColumnKey): string {
+  return sort.key === key ? 'true' : 'false';
+}
+
+function sortBar(sort: BoxSort): string {
+  const buttons = COLUMNS.map((column) => {
+    const pressed = sortPressed(sort, column.key);
+    return `<button type="button" class="sort-toggle" data-sort="${column.key}" aria-pressed="${pressed}">${column.label}${sortMark(sort, column.key)}</button>`;
+  }).join('');
+  return `<div class="sort-bar" role="group" aria-label="Sort the box score">${buttons}</div>`;
 }
 
 function tailMarkup(side: string, read: MarginalRead | undefined): string {
@@ -214,16 +256,25 @@ function oneDraw(score: Simulation): string {
   </div>`;
 }
 
-function boxTable(game: SlateGame, score: Simulation): string {
-  const head = COLUMNS.map((column) => `<th>${column.label}</th>`).join('');
-  const body = `${teamSection('away', game.away, score.away)}${teamSection('home', game.home, score.home)}`;
+function boxTable(game: SlateGame, score: Simulation, sort: BoxSort): string {
+  const head = COLUMNS.map((column) => {
+    const aria = sort.key === column.key ? (sort.direction === 'desc' ? 'descending' : 'ascending') : 'none';
+    return `<th aria-sort="${aria}"><button type="button" class="sort-toggle" data-sort="${column.key}" aria-pressed="${sortPressed(sort, column.key)}">${column.label}${sortMark(sort, column.key)}</button></th>`;
+  }).join('');
+  const body = `${teamSection('away', game.away, score.away, sort)}${teamSection('home', game.home, score.home, sort)}`;
   return `<div class="table-scroll"><table>
     <thead><tr><th>Player</th>${head}</tr></thead>
     <tbody>${body}</tbody>
   </table></div>`;
 }
 
-export function renderBoxScore(game: SlateGame, rate: PanelRate | null, score: Simulation, now: Date): string {
+export function renderBoxScore(
+  game: SlateGame,
+  rate: PanelRate | null,
+  score: Simulation,
+  now: Date,
+  sort: BoxSort = DEFAULT_BOX_SORT,
+): string {
   const eventId = textOf(rate?.event_id) || textOf(game.event_id);
   const minutes = score.overtime
     ? '<span class="ot">OT</span><span class="ot-minutes">265 team-minutes · 5 × 53</span>'
@@ -238,7 +289,8 @@ export function renderBoxScore(game: SlateGame, rate: PanelRate | null, score: S
         ${minutes}
       </p>
       <label class="color-choice"><input type="checkbox" data-probability-colors> Probability colors</label>
-      ${boxTable(game, score)}
+      ${sortBar(sort)}
+      ${boxTable(game, score, sort)}
       <p class="note">This box score is one of the 10,000 games. The median above is the middle of those games.</p>
       <p class="note">The minutes column totals team-minutes: five players on the floor at once. Regulation is 240 (5 × 48). Overtime is 265 (5 × 53). It is not the length of the game.</p>
       <p class="legend">Brighter blue means that number is further from this player's middle in the 10,000 games. The percent is the share of those games at or below the number shown.</p>

@@ -464,6 +464,42 @@ tr[data-footer] td { font-weight: 600; }
 
 .player-btn:hover { text-decoration: underline; }
 
+.sort-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.sort-toggle {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+thead .sort-toggle {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  letter-spacing: 0.08em;
+}
+
+.sort-toggle[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+thead .sort-toggle[aria-pressed="true"] { border: 0; color: var(--accent); }
+
 td .stat,
 td .pct { display: block; }
 

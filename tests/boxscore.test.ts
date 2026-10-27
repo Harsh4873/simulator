@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { columnSums, renderBoxScore, renderPlayerPanel } from '../src/boxscore.ts';
+import { columnSums, nextBoxSort, orderPlayers, renderBoxScore, renderPlayerPanel } from '../src/boxscore.ts';
 import { nextPanelAthlete, typicalityBucket } from '../src/display.ts';
 import type { MarginalRead, Simulation, SimulatedPlayer } from '../src/simulate.ts';
 import type { RatePlayer, SlateGame } from '../src/types.ts';
@@ -217,6 +217,25 @@ function rowFor(html: string, athleteId: string): string {
   const trEnd = html.indexOf('</tr>', start);
   return html.slice(trStart, trEnd);
 }
+
+test('stat toggles reorder each team and leave players who did not play at the bottom', () => {
+  const model = score(false);
+  const minutes = orderPlayers(model.away.players);
+  assert.deepEqual(minutes.map((item) => item.athlete_id), ['1', '2', '3']);
+  const points = orderPlayers(model.away.players, nextBoxSort({ key: 'min', direction: 'desc' }, 'pts'));
+  assert.deepEqual(points.map((item) => item.athlete_id), ['1', '2', '3']);
+  const fewestPoints = orderPlayers(model.away.players, { key: 'pts', direction: 'asc' });
+  assert.deepEqual(fewestPoints.map((item) => item.athlete_id), ['2', '1', '3']);
+  assert.deepEqual(nextBoxSort({ key: 'reb', direction: 'desc' }, 'reb'), { key: 'reb', direction: 'asc' });
+  const html = renderBoxScore(game, null, model, now, { key: 'reb', direction: 'desc' });
+  assert.match(html, /aria-label="Sort the box score"/);
+  assert.match(html, /data-sort="reb" aria-pressed="true"/);
+  assert.match(html, /aria-sort="descending"/);
+  assert.match(html, /data-sort="pts" aria-pressed="false"/);
+  const away = html.split('class="section"')[1] ?? '';
+  assert.ok(away.indexOf('data-athlete="1"') < away.indexOf('data-athlete="2"'));
+  assert.ok(away.indexOf('data-athlete="2"') < away.indexOf('data-athlete="3"'));
+});
 
 test('the scoreboard headlines the median and keeps one random draw', () => {
   const model = score(false);
