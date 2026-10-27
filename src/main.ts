@@ -1,12 +1,13 @@
 import './styles.css';
 import { renderBoxScore, renderPlayerPanel } from './boxscore.ts';
-import { nextPanelAthlete } from './display.ts';
+import { nextPanelAthlete, probabilityColorsOn } from './display.ts';
 import { fnv1a } from './rng.ts';
 import { renderSlate } from './slate.ts';
 import { ITERATIONS, simulate, type Simulation } from './simulate.ts';
 import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
 
 const DATA_BASE = '/simulator/data/';
+const COLOR_KEY = 'simulator.probability-colors';
 
 const desk = document.querySelector<HTMLElement>('#desk');
 const slateRoot = document.querySelector<HTMLElement>('#slate');
@@ -28,6 +29,21 @@ function rateGame(eventId: string): RateGame | null {
 
 function gamesFrame(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[data-region="games"]');
+}
+
+function storedColorsOn(): boolean {
+  try {
+    return probabilityColorsOn(localStorage.getItem(COLOR_KEY));
+  } catch {
+    return false;
+  }
+}
+
+function applyProbabilityColors(): void {
+  const on = storedColorsOn();
+  if (desk) desk.dataset.colors = on ? 'on' : 'off';
+  const box = document.querySelector<HTMLInputElement>('input[data-probability-colors]');
+  if (box) box.checked = on;
 }
 
 function showSlate(): void {
@@ -88,6 +104,7 @@ async function onSimulate(button: HTMLButtonElement): Promise<void> {
     panelAthlete = null;
     panelBody?.replaceChildren();
     boxRoot.innerHTML = renderBoxScore(game, rates, result, new Date());
+    applyProbabilityColors();
     showScore();
   } catch {
     button.disabled = false;
@@ -125,6 +142,31 @@ function onDeskClick(event: Event): void {
   syncPanel();
 }
 
+function onProbabilityColors(event: Event): void {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement) || !target.matches('[data-probability-colors]')) return;
+  const on = target.checked;
+  try {
+    localStorage.setItem(COLOR_KEY, on ? 'on' : 'off');
+  } catch {
+    // The desk still follows the checkbox when storage is blocked.
+  }
+  if (desk) desk.dataset.colors = on ? 'on' : 'off';
+}
+
+function onImageError(event: Event): void {
+  const target = event.target;
+  if (!(target instanceof HTMLImageElement)) return;
+  const frame = target.closest('.logo, .photo');
+  if (!(frame instanceof HTMLElement)) return;
+  target.hidden = true;
+  const mono = frame.querySelector('.mono');
+  if (mono instanceof HTMLElement) mono.hidden = false;
+  if (!frame.classList.contains('photo')) return;
+  const note = frame.parentElement?.querySelector('.photo-note');
+  if (note instanceof HTMLElement) note.hidden = false;
+}
+
 function onKey(event: KeyboardEvent): void {
   if (event.key !== 'Escape' || panelAthlete === null) return;
   panelAthlete = nextPanelAthlete(panelAthlete, null);
@@ -135,7 +177,10 @@ function bind(): void {
   if (bound || !desk) return;
   bound = true;
   desk.addEventListener('click', onDeskClick);
+  desk.addEventListener('change', onProbabilityColors);
+  desk.addEventListener('error', onImageError, true);
   document.addEventListener('keydown', onKey);
+  applyProbabilityColors();
 }
 
 async function load(): Promise<void> {

@@ -51,3 +51,31 @@ export function nextPanelAthlete(current: string | null, clicked: string | null)
   if (current === clicked) return null;
   return clicked;
 }
+
+const ESPN_CDN = 'https://a.espncdn.com/';
+
+export function probabilityColorsOn(value: string | null): boolean {
+  return value === 'on';
+}
+
+function espnCdnUrl(value: string | null | undefined): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.startsWith(ESPN_CDN) ? trimmed : null;
+}
+
+export function teamLogoUrl(side: { abbreviation?: string | null; logo_url?: string | null }): string | null {
+  const stored = espnCdnUrl(side.logo_url);
+  if (stored) return stored;
+  const abbreviation = (side.abbreviation ?? '').trim();
+  if (!/^[A-Za-z]{2,3}$/.test(abbreviation)) return null;
+  return `${ESPN_CDN}i/teamlogos/nba/500/scoreboard/${abbreviation.toLowerCase()}.png`;
+}
+
+export function playerHeadshotUrl(player: { athlete_id?: string | null; headshot_url?: string | null }): string | null {
+  const stored = espnCdnUrl(player.headshot_url);
+  if (stored) return stored;
+  const athleteId = (player.athlete_id ?? '').trim();
+  if (!/^\d+$/.test(athleteId)) return null;
+  return `${ESPN_CDN}i/headshots/nba/players/full/${athleteId}.png`;
+}

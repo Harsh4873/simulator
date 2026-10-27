@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { empiricalPercent, nextPanelAthlete, shownPercent, typicalityBucket, winCounts } from '../src/display.ts';
+import {
+  empiricalPercent,
+  nextPanelAthlete,
+  playerHeadshotUrl,
+  probabilityColorsOn,
+  shownPercent,
+  teamLogoUrl,
+  typicalityBucket,
+  winCounts,
+} from '../src/display.ts';
 
 test('empirical percent is the share at or below the shown integer', () => {
   assert.equal(empiricalPercent([], 4), 50);
@@ -60,6 +69,37 @@ test('win counts sum to the draws', () => {
   assert.equal(many.tie, 1);
   assert.equal(many.home, 1);
   assert.equal(many.away, 9998);
+});
+
+test('probability colors are off unless the stored value is on', () => {
+  assert.equal(probabilityColorsOn(null), false);
+  assert.equal(probabilityColorsOn('off'), false);
+  assert.equal(probabilityColorsOn('on'), true);
+  assert.equal(probabilityColorsOn('yes'), false);
+});
+
+test('team logos prefer an ESPN url and otherwise derive a two- or three-letter mark', () => {
+  const stored = 'https://a.espncdn.com/i/teamlogos/nba/500/bkn.png';
+  assert.equal(teamLogoUrl({ abbreviation: 'BOS', logo_url: stored }), stored);
+  assert.equal(
+    teamLogoUrl({ abbreviation: 'BKN', logo_url: 'https://example.test/bkn.png' }),
+    'https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bkn.png',
+  );
+  assert.equal(teamLogoUrl({ abbreviation: 'NY' }), 'https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/ny.png');
+  assert.equal(teamLogoUrl({ abbreviation: 'SA' }), 'https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/sa.png');
+  assert.equal(teamLogoUrl({ abbreviation: '' }), null);
+  assert.equal(teamLogoUrl({ abbreviation: '', logo_url: 'https://example.test/x.png' }), null);
+});
+
+test('headshots prefer an ESPN url and otherwise derive a numeric id', () => {
+  assert.equal(
+    playerHeadshotUrl({ athlete_id: '3064514' }),
+    'https://a.espncdn.com/i/headshots/nba/players/full/3064514.png',
+  );
+  const stored = 'https://a.espncdn.com/i/headshots/nba/players/full/99.png';
+  assert.equal(playerHeadshotUrl({ athlete_id: '1', headshot_url: stored }), stored);
+  assert.equal(playerHeadshotUrl({ athlete_id: 'abc' }), null);
+  assert.equal(playerHeadshotUrl({ athlete_id: 'abc', headshot_url: 'https://example.test/a.png' }), null);
 });
 
 test('the panel toggles, swaps, and closes', () => {

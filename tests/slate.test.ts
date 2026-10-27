@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { gamesFromScoreboard, parseOutcomeLines, spreadCaption } from '../scripts/build-rate-card.ts';
+import { gamesFromScoreboard, parseOutcomeLines, parseRoster, spreadCaption } from '../scripts/build-rate-card.ts';
 import { renderSlate, statusLabel } from '../src/slate.ts';
 import type { RateCard, Slate, SlateGame } from '../src/types.ts';
 
@@ -96,6 +96,87 @@ test('a missing ESPN state stays unknown instead of guessing from the tip', () =
   assert.equal(games[0].start_time, '2026-10-27T23:30:00Z');
   assert.equal(games[0].spread_caption, 'Celtics -19.9 (Nets @ Celtics)');
   assert.equal(games[0].away.abbreviation, 'BKN');
+  assert.equal(Object.hasOwn(games[0].away, 'logo_url'), false);
+});
+
+test('gamesFromScoreboard copies an ESPN logo and ignores other hosts and logoDark', () => {
+  const games = gamesFromScoreboard(
+    {
+      events: [
+        {
+          id: '401909877',
+          date: '2026-10-27T23:30Z',
+          competitions: [
+            {
+              competitors: [
+                {
+                  homeAway: 'away',
+                  team: {
+                    id: '17',
+                    displayName: 'Brooklyn Nets',
+                    abbreviation: 'BKN',
+                    logo: 'https://a.espncdn.com/i/teamlogos/nba/500/bkn.png',
+                    logoDark: 'https://a.espncdn.com/i/teamlogos/nba/500-dark/bkn.png',
+                  },
+                },
+                {
+                  homeAway: 'home',
+                  team: {
+                    id: '2',
+                    displayName: 'Boston Celtics',
+                    abbreviation: 'BOS',
+                    logo: 'https://example.test/bos.png',
+                    logoDark: 'https://a.espncdn.com/i/teamlogos/nba/500-dark/bos.png',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    '2026-10-27',
+    [],
+  );
+  assert.equal(games.length, 1);
+  assert.equal(games[0].away.logo_url, 'https://a.espncdn.com/i/teamlogos/nba/500/bkn.png');
+  assert.equal(Object.hasOwn(games[0].home, 'logo_url'), false);
+  assert.equal(JSON.stringify(games[0]).includes('logoDark'), false);
+  assert.equal(JSON.stringify(games[0]).includes('example.test'), false);
+  assert.equal(JSON.stringify(games[0]).includes('500-dark'), false);
+});
+
+test('parseRoster copies an ESPN headshot and omits a missing one', () => {
+  const players = parseRoster('17', {
+    athletes: [
+      {
+        position: 'Forward',
+        items: [
+          {
+            id: '3064514',
+            displayName: 'Julius Randle',
+            position: { abbreviation: 'F' },
+            headshot: { href: 'https://a.espncdn.com/i/headshots/nba/players/full/3064514.png' },
+          },
+          {
+            id: '9',
+            displayName: 'No Photo',
+            position: { abbreviation: 'C' },
+          },
+          {
+            id: '8',
+            displayName: 'Other Host',
+            position: { abbreviation: 'G' },
+            headshot: { href: 'https://example.test/p.png' },
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(players.length, 3);
+  assert.equal(players[0].headshot_url, 'https://a.espncdn.com/i/headshots/nba/players/full/3064514.png');
+  assert.equal(Object.hasOwn(players[1], 'headshot_url'), false);
+  assert.equal(Object.hasOwn(players[2], 'headshot_url'), false);
 });
 
 test('outcome lines keep the NBA counting stats from 2026 and 2027', () => {
@@ -136,7 +217,15 @@ test('slate copy covers the placeholder, an off day, and a card without rates', 
   assert.match(renderSlate(offDay, card, new Date('2026-10-27T18:00:00Z')), /No NBA games on 2026-10-27\./);
   const ready: Slate = { ...offDay, games: [game()] };
   const html = renderSlate(ready, card, new Date('2026-10-27T18:00:00Z'));
-  assert.match(html, /Brooklyn Nets @ Boston Celtics/);
+  assert.match(html, /alt="Brooklyn Nets"/);
+  assert.match(html, /alt="Boston Celtics"/);
+  assert.match(html, /https:\/\/a\.espncdn\.com\/i\/teamlogos\/nba\/500\/scoreboard\/bkn\.png/);
+  assert.match(html, /https:\/\/a\.espncdn\.com\/i\/teamlogos\/nba\/500\/scoreboard\/bos\.png/);
+  assert.match(html, /Brooklyn Nets/);
+  assert.match(html, /Boston Celtics/);
+  assert.match(html, /class="at">@</);
+  assert.match(html, />BKN</);
+  assert.match(html, />BOS</);
   assert.match(html, /Shooting rates are not ready/);
   assert.match(html, /disabled/);
   const withRates: RateCard = {

@@ -172,15 +172,24 @@ function eventStatus(event: Record<string, unknown>): { status_state: string; co
   };
 }
 
+function espnCdnUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.startsWith('https://a.espncdn.com/') ? trimmed : null;
+}
+
 function teamSide(competitor: Record<string, unknown>): TeamSide | null {
   const team = isRecord(competitor.team) ? competitor.team : {};
   const teamId = String(team.id ?? competitor.id ?? '').trim();
   if (!teamId) return null;
-  return {
+  const side: TeamSide = {
     team_id: teamId,
     name: String(team.displayName || team.name || team.shortDisplayName || teamId),
     abbreviation: String(team.abbreviation || ''),
   };
+  const logo = espnCdnUrl(team.logo);
+  if (logo) side.logo_url = logo;
+  return side;
 }
 
 export function gamesFromScoreboard(payload: unknown, date: string, picks: unknown[]): SlateGame[] {
@@ -226,12 +235,15 @@ function pushRosterPlayer(out: RosterPlayer[], teamId: string, item: unknown): v
   const athleteId = String(item.id ?? '').trim();
   if (!athleteId) return;
   const position = isRecord(item.position) ? String(item.position.abbreviation ?? '').trim() : '';
-  out.push({
+  const player: RosterPlayer = {
     athlete_id: athleteId,
     name: String(item.displayName || item.fullName || athleteId).trim(),
     team_id: teamId,
     position,
-  });
+  };
+  const headshot = isRecord(item.headshot) ? espnCdnUrl(item.headshot.href) : null;
+  if (headshot) player.headshot_url = headshot;
+  out.push(player);
 }
 
 export function parseRoster(teamId: string, payload: unknown): RosterPlayer[] {

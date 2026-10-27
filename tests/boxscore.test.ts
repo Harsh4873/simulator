@@ -260,6 +260,13 @@ test('the scoreboard shows one random game, the win bar, and no points range', (
   assert.match(html, /10,000 simulated games\. This box score is one of them, picked at random\. It is not the median and not the most likely line\./);
   assert.match(html, /Minutes are a rotation draw, not a five-man lineup\./);
   assert.match(html, /Brighter blue means that number is further from this player's middle in the 10,000 games\./);
+  assert.match(html, /<span class="pct">/);
+  assert.match(html, /data-bucket=/);
+  const colorsAt = html.indexOf('Probability colors');
+  const tableAt = html.indexOf('<table');
+  assert.ok(colorsAt >= 0 && tableAt >= 0 && colorsAt < tableAt);
+  assert.match(html, /<input type="checkbox" data-probability-colors>/);
+  assert.equal(/<input\b[^>]*\bchecked\b/.test(html), false);
   assert.equal(html.includes('>OT<'), false);
   assert.equal(html.includes('This line is one random draw'), false);
 });
@@ -315,6 +322,21 @@ test('the panel opens, swaps, and closes from the player button', () => {
   assert.equal(nextPanelAthlete('1', '9'), '9');
   assert.equal(nextPanelAthlete('1', '1'), null);
   assert.equal(nextPanelAthlete('1', null), null);
+  const imgAt = open.indexOf('<img');
+  const nameAt = open.indexOf('who-name');
+  assert.ok(imgAt >= 0 && nameAt >= 0 && imgAt < nameAt);
+  assert.match(open, /<img class="headshot" alt="Regular Player" src="https:\/\/a\.espncdn\.com\/i\/headshots\/nba\/players\/full\/1\.png"/);
+});
+
+test('a missing photo shows a monogram and says the photo is not in the data', () => {
+  const model = score(false);
+  model.away.players[1] = player({ athlete_id: 'player-x', name: 'Ghost Player' });
+  const bare = renderPlayerPanel(game, { event_id: '1', players: [] }, model, 'player-x');
+  assert.equal(bare.includes('<img'), false);
+  assert.match(bare, /class="mono">G</);
+  assert.match(bare, /Photo is not in the data\./);
+  assert.equal(bare.includes('<a '), false);
+  assert.equal(bare.includes('title='), false);
 });
 
 test('thin sample follows the 2026 and 2027 counts', () => {
@@ -377,6 +399,12 @@ test('the layout colors stay on the blue scale', () => {
   for (const hex of ['#1e3344', '#1a4d68', '#1a6a8c', '#2f8eb0', '#5eabc4', '#a9d4e4', '#e7f5fb', '#4da6ff', '#5a7085', '#00e5a0']) {
     assert.ok(css.includes(hex), hex);
   }
+  for (const hex of ['#1e3344', '#1a4d68', '#1a6a8c', '#2f8eb0', '#5eabc4', '#a9d4e4', '#e7f5fb']) {
+    const at = css.indexOf(hex);
+    assert.match(css.slice(Math.max(0, at - 240), at), /\[data-colors="on"\]/);
+  }
+  assert.match(css, /\.seg-away \{ background: #4da6ff; \}/);
+  assert.equal(css.includes('.desk[data-colors="on"] .seg-away'), false);
   assert.match(css, /90rem/);
   assert.match(css, /4\.5rem/);
   assert.match(css, /22rem/);

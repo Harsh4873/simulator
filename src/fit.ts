@@ -21,6 +21,7 @@ export interface RosterPlayer {
   name: string;
   team_id: string;
   position: string;
+  headshot_url?: string;
 }
 
 export interface InjuryInput {
@@ -237,7 +238,7 @@ export function fitPlayers(input: FitInput): FitResult {
     const priorGames2026 = games2026.get(player.athlete_id) ?? 0;
     const priorGames2027 = games2027.get(player.athlete_id) ?? 0;
     const injury = assignInjury(resolveInjury(player, input.injuries));
-    players.push({
+    const ratePlayer: RatePlayer = {
       athlete_id: player.athlete_id,
       name: player.name,
       team_id: player.team_id,
@@ -260,7 +261,11 @@ export function fitPlayers(input: FitInput): FitResult {
       ft_pct: clampProbability(rate(ft, K_FT, player.athlete_id, player.team_id, group)),
       reb_per_min: clampPerMinute(rate(reb, K_MINUTES, player.athlete_id, player.team_id, group)),
       ast_per_min: clampPerMinute(rate(ast, K_MINUTES, player.athlete_id, player.team_id, group)),
-    });
+    };
+    if (typeof player.headshot_url === 'string' && player.headshot_url.trim()) {
+      ratePlayer.headshot_url = player.headshot_url;
+    }
+    players.push(ratePlayer);
   }
 
   return { players, publish };

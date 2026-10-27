@@ -1,5 +1,6 @@
 import { formatTip } from './date.ts';
-import { escapeHtml, statusLabel } from './slate.ts';
+import { playerHeadshotUrl } from './display.ts';
+import { escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
 import type { MarginalRead, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
 import type { ColumnKey, RatePlayer, SlateGame, TeamSide } from './types.ts';
 
@@ -181,7 +182,7 @@ function scoreboard(game: SlateGame, score: Simulation): string {
   const homePct = countPercent(wins.home, total);
   const label = `Away wins ${awayPct}%. Tie ${tiePct}%. Home wins ${homePct}%.`;
   return `<div class="scoreboard">
-    <p class="abbr away">${escapeHtml(teamAbbr(game.away))}</p>
+    <div class="team-head away">${teamLogoMarkup(game.away)}<p class="abbr away">${escapeHtml(teamAbbr(game.away))}</p></div>
     <div class="bar-slot">
       <div class="winbar" role="img" aria-label="${label}">
         <span class="seg seg-away" style="flex-grow: ${wins.away}"></span>
@@ -189,7 +190,7 @@ function scoreboard(game: SlateGame, score: Simulation): string {
         <span class="seg seg-home" style="flex-grow: ${wins.home}"></span>
       </div>
     </div>
-    <p class="abbr home">${escapeHtml(teamAbbr(game.home))}</p>
+    <div class="team-head home">${teamLogoMarkup(game.home)}<p class="abbr home">${escapeHtml(teamAbbr(game.home))}</p></div>
     <p class="club-name away">${escapeHtml(teamTitle(game.away))}</p>
     <p class="club-name home">${escapeHtml(teamTitle(game.home))}</p>
     <p class="score away">${score.away.pts}</p>
@@ -226,6 +227,7 @@ export function renderBoxScore(game: SlateGame, rate: PanelRate | null, score: S
         <span class="status">${escapeHtml(statusLabel(game, now))}</span>
         ${ot}
       </p>
+      <label class="color-choice"><input type="checkbox" data-probability-colors> Probability colors</label>
       ${boxTable(game, score)}
       <p class="legend">Brighter blue means that number is further from this player's middle in the 10,000 games. The percent is the share of those games at or below the number shown.</p>
       <p class="note">10,000 simulated games. This box score is one of them, picked at random. It is not the median and not the most likely line.</p>
@@ -354,6 +356,20 @@ function drawnLine(line: SimulatedPlayer): string {
   </dl>`;
 }
 
+function monogramLetter(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return '?';
+  return Array.from(trimmed)[0]?.toUpperCase() ?? '?';
+}
+
+function photoMarkup(name: string, url: string | null): string {
+  const letter = escapeHtml(monogramLetter(name));
+  if (!url) {
+    return `<div class="photo"><span class="mono">${letter}</span></div><p class="photo-note">Photo is not in the data.</p>`;
+  }
+  return `<div class="photo"><img class="headshot" alt="${escapeHtml(name)}" src="${escapeHtml(url)}" width="56" height="56"><span class="mono" hidden>${letter}</span></div><p class="photo-note" hidden>Photo is not in the data.</p>`;
+}
+
 function whoBlock(game: SlateGame, line: SimulatedPlayer, row: CardRow | null): string {
   const team = teamName(game, line.team_id);
   const position = readString(row, 'position');
@@ -361,7 +377,12 @@ function whoBlock(game: SlateGame, line: SimulatedPlayer, row: CardRow | null): 
   const positionHtml = position
     ? `${escapeHtml(position)}${group ? ` <span class="pos-group">${escapeHtml(group)}</span>` : ''}`
     : 'Position is not in the data.';
+  const url = playerHeadshotUrl({
+    athlete_id: line.athlete_id,
+    headshot_url: readString(row, 'headshot_url'),
+  });
   return `<div class="who">
+    ${photoMarkup(line.name, url)}
     <h2 class="who-name">${escapeHtml(line.name)}</h2>
     <p class="who-team">${escapeHtml(team ?? 'not in the data')}</p>
     <p class="who-pos">${positionHtml}</p>

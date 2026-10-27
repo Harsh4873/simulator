@@ -102,7 +102,13 @@ test('thin sample is only a player with no 2026 games and fewer than 8 in 2027',
 test('rates use shooting attempts and gzip rebounds, and an id injury wins', () => {
   const fitted = fitPlayers({
     roster: [
-      { athlete_id: '1', name: 'Alpha Player', team_id: '2', position: 'SF' },
+      {
+        athlete_id: '1',
+        name: 'Alpha Player',
+        team_id: '2',
+        position: 'SF',
+        headshot_url: 'https://a.espncdn.com/i/headshots/nba/players/full/1.png',
+      },
       { athlete_id: '2', name: 'Beta Player', team_id: '2', position: '' },
     ],
     injuries: [
@@ -170,6 +176,8 @@ test('rates use shooting attempts and gzip rebounds, and an id injury wins', () 
   assert.equal(alpha.shooting_games, 2);
   assert.equal(alpha.thin_sample, false);
   assert.equal(alpha.position_group, 'Forward');
+  assert.equal(alpha.headshot_url, 'https://a.espncdn.com/i/headshots/nba/players/full/1.png');
+  assert.equal(Object.hasOwn(beta, 'headshot_url'), false);
   assert.ok(Math.abs(alpha.fga_per_min - 0.5) < 1e-9);
   assert.ok(Math.abs(alpha.ft_pct - 0.8) < 1e-9);
   assert.ok(Math.abs(alpha.reb_per_min - 1 / 3) < 1e-9);

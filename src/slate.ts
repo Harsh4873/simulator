@@ -1,5 +1,6 @@
 import { formatTip } from './date.ts';
-import type { RateCard, Slate, SlateGame } from './types.ts';
+import { teamLogoUrl } from './display.ts';
+import type { RateCard, Slate, SlateGame, TeamSide } from './types.ts';
 
 export function escapeHtml(value: string): string {
   return value
@@ -18,13 +19,38 @@ export function statusLabel(game: Pick<SlateGame, 'completed' | 'status_state' |
   return 'unknown';
 }
 
+function sideLabel(side: TeamSide): string {
+  const name = side.name.trim();
+  if (name) return name;
+  return side.abbreviation.trim();
+}
+
+function sideAbbr(side: TeamSide): string {
+  const abbreviation = side.abbreviation.trim();
+  if (abbreviation) return abbreviation;
+  return side.name.trim();
+}
+
+export function teamLogoMarkup(side: TeamSide): string {
+  const url = teamLogoUrl(side);
+  const mono = `<span class="mono"${url ? ' hidden' : ''}>${escapeHtml(sideAbbr(side))}</span>`;
+  const image = url
+    ? `<img alt="${escapeHtml(sideLabel(side))}" src="${escapeHtml(url)}" width="56" height="56">`
+    : '';
+  return `<span class="logo">${image}${mono}</span>`;
+}
+
+function matchupSide(side: TeamSide): string {
+  return `<span class="side">${teamLogoMarkup(side)}<span class="side-copy"><span class="abbr">${escapeHtml(sideAbbr(side))}</span><span class="name">${escapeHtml(sideLabel(side))}</span></span></span>`;
+}
+
 function renderCard(game: SlateGame, card: RateCard, now: Date): string {
   const ready = card.games.some((item) => item.event_id === game.event_id);
   const season = game.season_type ? `<p class="tag">${escapeHtml(game.season_type)}</p>` : '';
   const spread = game.spread_caption ? `<p class="spread">${escapeHtml(game.spread_caption)}</p>` : '';
   const label = ready ? 'Simulate' : 'Shooting rates are not ready';
   return `<article class="game-card">
-    <h2>${escapeHtml(game.away.name)} @ ${escapeHtml(game.home.name)}</h2>
+    <h2 class="matchup">${matchupSide(game.away)}<span class="at">@</span>${matchupSide(game.home)}</h2>
     <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
     <p class="status">${escapeHtml(statusLabel(game, now))}</p>
     ${season}

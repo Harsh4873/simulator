@@ -18,6 +18,7 @@ export interface TeamSide {
   team_id: string;
   name: string;
   abbreviation: string;
+  logo_url?: string;
 }
 
 export interface SlateGame {
@@ -64,6 +65,7 @@ export interface RatePlayer {
   ft_pct: number;
   reb_per_min: number;
   ast_per_min: number;
+  headshot_url?: string;
 }
 
 export interface RateGame {
