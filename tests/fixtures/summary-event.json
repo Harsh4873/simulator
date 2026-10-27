@@ -1,0 +1,44 @@
+{
+  "boxscore": {
+    "players": [
+      {
+        "team": { "id": "29", "displayName": "Memphis Grizzlies" },
+        "statistics": [
+          {
+            "keys": [
+              "minutes",
+              "points",
+              "fieldGoalsMade-fieldGoalsAttempted",
+              "threePointFieldGoalsMade-threePointFieldGoalsAttempted",
+              "freeThrowsMade-freeThrowsAttempted",
+              "rebounds",
+              "assists",
+              "turnovers",
+              "steals",
+              "blocks",
+              "offensiveRebounds",
+              "defensiveRebounds",
+              "fouls",
+              "plusMinus"
+            ],
+            "athletes": [
+              {
+                "athlete": { "id": "999", "displayName": "Cameron Boozer" },
+                "stats": ["37", "25", "6-13", "4-7", "9-9", "13", "6", "6", "2", "0", "2", "11", "1", "+12"]
+              },
+              {
+                "athlete": { "id": "100", "displayName": "Did Not Play" },
+                "didNotPlay": true,
+                "stats": ["37", "25", "6-13", "4-7", "9-9", "13", "6", "6", "2", "0", "2", "11", "1", "+12"]
+              },
+              {
+                "athlete": { "id": "101", "displayName": "Bad Points" },
+                "stats": ["37", "10", "6-13", "4-7", "9-9", "13", "6", "6", "2", "0", "2", "11", "1", "+12"]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "k": 30,
+  "league": { "s": 800, "e": 1000 },
+  "team": { "s": 50, "e": 100 },
+  "position": { "s": 300, "e": 400 },
+  "player": { "s": 8, "e": 10 },
+  "position_group": "Forward",
+  "expected": 0.66147137746
+}
