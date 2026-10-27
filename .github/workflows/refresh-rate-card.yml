@@ -10,6 +10,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: write
+  actions: write
 concurrency:
   group: simulator-rate-card
   cancel-in-progress: false
@@ -34,6 +35,7 @@ jobs:
         run: npm run rate-card
 
       - name: Commit rate card if changed
+        id: commit-rate-card
         shell: bash
         run: |
           set -euo pipefail
@@ -43,6 +45,7 @@ jobs:
           BRANCH="main"
           if [ -z "$(git status --porcelain -- public/data/slate.json public/data/rate-card.json data/shooting-cache.json)" ]; then
             echo "No rate-card change — skipping commit."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           mkdir -p "$RUNNER_TEMP/simulator-data"
@@ -59,10 +62,12 @@ jobs:
             git add -- public/data/slate.json public/data/rate-card.json data/shooting-cache.json
             if git diff --cached --quiet; then
               echo "No staged change after rebase — skipping commit."
+              echo "changed=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             git commit -m "chore(data): refresh simulator rate card for ${DATE}"
             if git push origin "HEAD:${BRANCH}"; then
+              echo "changed=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
             echo "Push failed on attempt ${attempt}; retrying."
@@ -72,3 +77,11 @@ jobs:
           done
           echo "Unable to publish the rate card after retrying."
           exit 1
+
+      - name: Deploy updated slate
+        # A push made with GITHUB_TOKEN does not emit a push event, so
+        # deploy-pages.yml would not start. workflow_dispatch is allowed.
+        if: steps.commit-rate-card.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy-pages.yml --ref main

@@ -9,6 +9,7 @@ The page lists today's NBA games in America/Chicago. Simulate draws 10,000 indep
 - `public/data/slate.json` and `public/data/rate-card.json` are what the browser reads.
 - `data/shooting-cache.json` stays off the site. It is not under `public/` and is not copied into `dist/`.
 - `.github/workflows/refresh-rate-card.yml` rebuilds those files. Its concurrency group is `simulator-rate-card`. Do not join `pick-cache-writer`.
+- After a data push, that job dispatches `deploy-pages.yml`. A token push does not emit `push`, so the site would otherwise keep the previous artifact.
 - The job may call the ESPN scoreboard, team index, roster, injuries, and box-score summary endpoints, and it may read PickLedger's public outcome gzip. It does not call `stats.nba.com`. It does not scrape CBS or Rotowire. It does not call the player gamelog URL. Summary requests are limited to event ids already in the 2026 and 2027 outcome rows, at most 400 new events a run.
 - The rate card is not published until the shooting cache contains some free-throw attempts.
 - Scheduled data commits may use `github-actions[bot]`. Human and agent commits use `Harsh4873` only.
