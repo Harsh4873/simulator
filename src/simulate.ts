@@ -167,7 +167,7 @@ function zeroLine(player: RatePlayer): DrawnPlayer {
 function drawTeam(players: RatePlayer[], budget: number, rng: Rng): { lines: DrawnPlayer[]; volumeShock: number } {
   const z = normal(rng);
   // Mean-1 lognormal shock shared by the team's volume rates.
-  const shock = Math.exp(z - (TEAM_SHOCK_SIGMA ** 2) / 2);
+  const shock = Math.exp(TEAM_SHOCK_SIGMA * z - (TEAM_SHOCK_SIGMA ** 2) / 2);
   const active = players.filter((player) => player.minutes_weight !== 0).sort(byAthleteId);
   const inactive = players.filter((player) => player.minutes_weight === 0).sort(byAthleteId);
   if (active.length === 0) return { lines: inactive.map(zeroLine), volumeShock: shock };

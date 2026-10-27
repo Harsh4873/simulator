@@ -9,6 +9,7 @@ import {
   ITERATIONS,
   drawGame,
   largestRemainder,
+  quantile,
   shownDrawIndex,
   simulate,
   type DrawnPlayer,
@@ -16,9 +17,11 @@ import {
 } from '../src/simulate.ts';
 import type { RateCard } from '../src/types.ts';
 
-const card = JSON.parse(
-  readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures/tiny-rate-card.json'), 'utf8'),
-) as RateCard;
+const fixtureDir = dirname(fileURLToPath(import.meta.url));
+const card = JSON.parse(readFileSync(join(fixtureDir, 'fixtures/tiny-rate-card.json'), 'utf8')) as RateCard;
+const bknBos = (
+  JSON.parse(readFileSync(join(fixtureDir, 'fixtures/bkn-bos-rate-card.json'), 'utf8')) as RateCard
+).games[0];
 const game = card.games[0];
 const KEYS = ['min', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'pts', 'reb', 'ast'] as const;
 
@@ -137,4 +140,45 @@ test('10,000 draws stay legal and finish within 15 seconds', { timeout: 20_000 }
   const redraw = drawGame(game, mulberry32(iterationSeed(1, result.index)));
   assert.deepEqual(redraw.away.map(core), result.away.players.map(core));
   assert.deepEqual(redraw.home.map(core), result.home.players.map(core));
+});
+
+function teamTotal(players: DrawnPlayer[]): number {
+  return players.reduce((sum, player) => sum + player.pts, 0);
+}
+
+function drawTotals(rateGame: RateCard['games'][number], firstSeed: number, lastSeed: number) {
+  const away: number[] = [];
+  const home: number[] = [];
+  for (let seed = firstSeed; seed <= lastSeed; seed += 1) {
+    const draw = drawGame(rateGame, mulberry32(seed));
+    away.push(teamTotal(draw.away));
+    home.push(teamTotal(draw.home));
+  }
+  const awaySorted = away.slice().sort((a, b) => a - b);
+  const homeSorted = home.slice().sort((a, b) => a - b);
+  const meanOf = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
+  return {
+    awayMean: meanOf(away),
+    homeMean: meanOf(home),
+    awayP90: quantile(awaySorted, 0.9),
+    homeP90: quantile(homeSorted, 0.9),
+    awayMax: awaySorted[awaySorted.length - 1],
+    homeMax: homeSorted[homeSorted.length - 1],
+  };
+}
+
+test('bkn-bos away and home means stay between 80 and 150 and no team total exceeds 220', () => {
+  const stats = drawTotals(bknBos, 1, 200);
+  assert.ok(stats.awayMean >= 80 && stats.awayMean <= 150, `bkn-bos away mean ${stats.awayMean}`);
+  assert.ok(stats.homeMean >= 80 && stats.homeMean <= 150, `bkn-bos home mean ${stats.homeMean}`);
+  assert.ok(Math.max(stats.awayMax, stats.homeMax) <= 220, `bkn-bos max ${stats.awayMax} ${stats.homeMax}`);
+});
+
+test('tiny means stay between 80 and 150, 90th percentiles are at most 200, and no team total exceeds 260', () => {
+  const stats = drawTotals(game, 1000, 1199);
+  assert.ok(stats.awayMean >= 80 && stats.awayMean <= 150, `tiny away mean ${stats.awayMean}`);
+  assert.ok(stats.homeMean >= 80 && stats.homeMean <= 150, `tiny home mean ${stats.homeMean}`);
+  assert.ok(stats.awayP90 <= 200, `tiny away 90th percentile ${stats.awayP90}`);
+  assert.ok(stats.homeP90 <= 200, `tiny home 90th percentile ${stats.homeP90}`);
+  assert.ok(Math.max(stats.awayMax, stats.homeMax) <= 260, `tiny max ${stats.awayMax} ${stats.homeMax}`);
 });
