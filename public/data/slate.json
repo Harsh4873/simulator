@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-27T16:36:07Z",
+  "generated_at": "2026-10-27T21:31:55Z",
   "date": "2026-10-27",
   "timezone": "America/Chicago",
   "games": [
@@ -15,12 +15,14 @@
       "away": {
         "team_id": "17",
         "name": "Brooklyn Nets",
-        "abbreviation": "BKN"
+        "abbreviation": "BKN",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bkn.png"
       },
       "home": {
         "team_id": "2",
         "name": "Boston Celtics",
-        "abbreviation": "BOS"
+        "abbreviation": "BOS",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bos.png"
       },
       "spread_caption": null
     },
@@ -35,12 +37,14 @@
       "away": {
         "team_id": "8",
         "name": "Detroit Pistons",
-        "abbreviation": "DET"
+        "abbreviation": "DET",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/det.png"
       },
       "home": {
         "team_id": "18",
         "name": "New York Knicks",
-        "abbreviation": "NY"
+        "abbreviation": "NY",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/ny.png"
       },
       "spread_caption": null
     },
@@ -55,12 +59,14 @@
       "away": {
         "team_id": "23",
         "name": "Sacramento Kings",
-        "abbreviation": "SAC"
+        "abbreviation": "SAC",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/sac.png"
       },
       "home": {
         "team_id": "24",
         "name": "San Antonio Spurs",
-        "abbreviation": "SA"
+        "abbreviation": "SA",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/sa.png"
       },
       "spread_caption": null
     },
@@ -75,12 +81,14 @@
       "away": {
         "team_id": "22",
         "name": "Portland Trail Blazers",
-        "abbreviation": "POR"
+        "abbreviation": "POR",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/por.png"
       },
       "home": {
         "team_id": "13",
         "name": "Los Angeles Lakers",
-        "abbreviation": "LAL"
+        "abbreviation": "LAL",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/lal.png"
       },
       "spread_caption": null
     }
