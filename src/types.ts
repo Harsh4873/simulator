@@ -55,6 +55,7 @@ export interface RatePlayer {
   games_2027: number;
   games: number;
   shooting_games: number;
+  missing_shooting?: boolean;
   thin_sample: boolean;
   minutes_mean: number;
   fga_per_min: number;

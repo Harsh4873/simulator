@@ -3,10 +3,13 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { winCounts } from '../src/display.ts';
 import { fnv1a, iterationSeed, mulberry32 } from '../src/rng.ts';
-import { drawGame, quantile } from '../src/simulate.ts';
+import { legacyDrawGame as drawGame } from '../src/legacy.ts';
+import { quantile } from '../src/simulate.ts';
 import type { RateCard, RateGame } from '../src/types.ts';
 
-const card = JSON.parse(readFileSync(new URL('../public/data/rate-card.json', import.meta.url), 'utf8')) as RateCard;
+const card = JSON.parse(
+  readFileSync(new URL('./fixtures/rate-card-2026-10-27.json', import.meta.url), 'utf8'),
+) as RateCard;
 
 const CASES = [
   {

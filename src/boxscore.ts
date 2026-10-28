@@ -4,6 +4,10 @@ import { escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
 import type { MarginalRead, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
 import type { ColumnKey, RatePlayer, SlateGame, TeamSide } from './types.ts';
 
+export type BoxScenario = 'median' | 'upside';
+
+const UPSIDE_LABEL = 'Upside scenario: the 95th percentile of the combined score. Not the forecast.';
+
 const COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'min', label: 'MIN' },
   { key: 'fgm', label: 'FGM' },
@@ -226,7 +230,34 @@ function tailMarkup(side: string, read: MarginalRead | undefined): string {
   return `<p class="team-pct ${side} tone" data-bucket="${read.bucket}">${read.percent}%</p>`;
 }
 
-function scoreboard(game: SlateGame, score: Simulation): string {
+function presented(score: Simulation, scenario: BoxScenario): Simulation {
+  if (scenario !== 'upside') return score;
+  return {
+    ...score,
+    overtime: score.upside.overtime,
+    budget: score.upside.budget,
+    overtimePeriods: score.upside.overtimePeriods,
+    regulationAwayPts: score.upside.regulationAwayPts,
+    regulationHomePts: score.upside.regulationHomePts,
+    away: score.upside.away,
+    home: score.upside.home,
+  };
+}
+
+function periodCount(score: Pick<Simulation, 'overtime' | 'budget'>): number {
+  if (!score.overtime) return 0;
+  return Math.max(1, Math.round((score.budget - 240) / 25));
+}
+
+function minutesMarkup(score: Pick<Simulation, 'overtime' | 'budget'>): string {
+  if (!score.overtime) return '<span class="ot-minutes">240 team-minutes · 5 × 48</span>';
+  const periods = periodCount(score);
+  const teamMinutes = 240 + 25 * periods;
+  const playerMinutes = 48 + 5 * periods;
+  return `<span class="ot">OT</span><span class="ot-minutes">${teamMinutes} team-minutes · 5 × ${playerMinutes}</span>`;
+}
+
+function scoreboard(game: SlateGame, score: Simulation, scenario: BoxScenario): string {
   const wins = score.wins ?? { away: 0, tie: 0, home: 0 };
   const total = wins.away + wins.tie + wins.home;
   const awayPct = countPercent(wins.away, total);
@@ -250,7 +281,7 @@ function scoreboard(game: SlateGame, score: Simulation): string {
     <p class="interval away">${score.away.band.p05}–${score.away.band.p95}</p>
     <p class="interval home">${score.home.band.p05}–${score.home.band.p95}</p>
     <p class="interval-caption">5th to 95th percentile</p>
-    <p class="percentile-caption">95th percentile of 10,000 games</p>
+    <p class="percentile-caption">${scenario === 'upside' ? UPSIDE_LABEL : 'Nearest the median combined score'}</p>
     ${tailMarkup('away', score.away.pointsRead)}
     ${tailMarkup('home', score.home.pointsRead)}
     <p class="win-pct win-away">${awayPct}%</p>
@@ -282,23 +313,28 @@ export function renderBoxScore(
   score: Simulation,
   now: Date,
   sort: SideSorts = DEFAULT_SIDE_SORTS,
+  scenario: BoxScenario = 'median',
 ): string {
+  const shown = presented(score, scenario);
   const eventId = textOf(rate?.event_id) || textOf(game.event_id);
-  const minutes = score.overtime
-    ? '<span class="ot">OT</span><span class="ot-minutes">265 team-minutes · 5 × 53</span>'
-    : '<span class="ot-minutes">240 team-minutes · 5 × 48</span>';
+  const note =
+    scenario === 'upside'
+      ? UPSIDE_LABEL
+      : 'This box score is the simulated game nearest the median combined score. The range under each score is the 5th to 95th percentile.';
+  const upsideChecked = scenario === 'upside' ? ' checked' : '';
   return `<div data-event="${escapeHtml(eventId)}">
       <button type="button" data-back>Back to slate</button>
-      ${scoreboard(game, score)}
+      ${scoreboard(game, shown, scenario)}
       <p class="status-row">
         <span class="tip">${escapeHtml(formatTip(game.start_time))}</span>
         <span class="status">${escapeHtml(statusLabel(game, now))}</span>
-        ${minutes}
+        ${minutesMarkup(shown)}
       </p>
       <label class="color-choice"><input type="checkbox" data-probability-colors> Probability colors</label>
-      ${boxTable('away', game.away, score.away, sort.away)}
-      ${boxTable('home', game.home, score.home, sort.home)}
-      <p class="note">This box score is the simulated game at the 95th percentile of the combined score. Games below that percentile are left out, and the closest game at or above it is shown. The range under each score is the 5th to 95th percentile.</p>
+      <label class="scenario-choice"><input type="checkbox" data-upside-scenario${upsideChecked}> ${UPSIDE_LABEL}</label>
+      ${boxTable('away', game.away, shown.away, sort.away)}
+      ${boxTable('home', game.home, shown.home, sort.home)}
+      <p class="note">${note}</p>
       <p class="note">The minutes column totals team-minutes: five players on the floor at once. Regulation is 240 (5 × 48). Overtime is 265 (5 × 53). It is not the length of the game.</p>
       <p class="legend">Brighter blue means that number is further from this player's middle in the 10,000 games. The percent is the share of those games at or below the number shown.</p>
     </div>`;
@@ -350,7 +386,7 @@ function shockFor(score: Simulation, teamId: string): number | undefined {
   return undefined;
 }
 
-function whySentences(row: CardRow | null): string[] {
+function whySentences(row: CardRow | null, scenario: BoxScenario): string[] {
   const sentences: string[] = [];
   if (!row) sentences.push('This player is not on the rate card.');
   const games2026 = readNumber(row, 'games_2026');
@@ -360,8 +396,12 @@ function whySentences(row: CardRow | null): string[] {
   }
   const games = readNumber(row, 'games');
   const shooting = readNumber(row, 'shooting_games');
+  const missing = readBoolean(row, 'missing_shooting');
   if (games !== undefined && shooting !== undefined && shooting !== games) {
     sentences.push(`Shooting sample: ${shooting} games.`);
+  }
+  if (shooting === 0 || missing === true) {
+    sentences.push('Shot rates are the team and position prior.');
   }
   if (games2026 === 0 && games2027 !== undefined && games2027 < 8) {
     sentences.push('Thin sample: no games in 2026 and fewer than 8 in 2027.');
@@ -379,7 +419,13 @@ function whySentences(row: CardRow | null): string[] {
   }
   if (weight === 1 && questionable === false) sentences.push('No absence flag on the card.');
   if (status === undefined) sentences.push('Injury status is not in the data.');
-  sentences.push('This line is from the simulated game at the 95th percentile of the combined score. It is not a random draw and it is not a prediction.');
+  if (scenario === 'upside') {
+    sentences.push('This line is from the upside scenario: the 95th percentile of the combined score. Not the forecast.');
+  } else {
+    sentences.push(
+      'This line is from the simulated game nearest the median combined score. It is not a random draw and it is not a prediction.',
+    );
+  }
   return sentences;
 }
 
@@ -388,9 +434,10 @@ function rateItem(label: string, value: string): string {
 }
 
 function samplingList(row: CardRow | null, score: Simulation, shock: number | undefined): string {
-  const scaled = score.overtime
-    ? 'scaled to 265 team-minutes (5 × 53)'
-    : 'scaled to 240 team-minutes (5 × 48)';
+  const periods = periodCount(score);
+  const teamMinutes = score.overtime ? 240 + 25 * periods : 240;
+  const playerMinutes = score.overtime ? 48 + 5 * periods : 48;
+  const scaled = `scaled to ${teamMinutes} team-minutes (5 × ${playerMinutes})`;
   const minutes = readNumber(row, 'minutes_mean');
   const minutesLabel = minutes === undefined ? 'not in the data' : minutes.toFixed(1);
   const items = [
@@ -407,7 +454,9 @@ function samplingList(row: CardRow | null, score: Simulation, shock: number | un
   } else {
     items.push('<li>Team volume shock is not in the data.</li>');
   }
-  if (score.overtime) items.push('<li>This draw used 265 team-minutes (5 × 53).</li>');
+  if (score.overtime) {
+    items.push(`<li>${escapeHtml(`This draw used ${teamMinutes} team-minutes (5 × ${playerMinutes}).`)}</li>`);
+  }
   return `<ul class="rates">${items.join('')}</ul>`;
 }
 
@@ -465,13 +514,15 @@ export function renderPlayerPanel(
   rate: PanelRate | null,
   score: Simulation,
   athleteId: string,
+  scenario: BoxScenario = 'median',
 ): string {
-  const line = findLine(score, athleteId);
+  const shown = presented(score, scenario);
+  const line = findLine(shown, athleteId);
   if (!line) {
     return `<button type="button" data-close>Close</button><p>This player is not in the data.</p>`;
   }
   const row = rate?.players.find((player) => player.athlete_id === athleteId) ?? null;
-  const sentences = whySentences(row).map((sentence) => `<p>${escapeHtml(sentence)}</p>`).join('');
+  const sentences = whySentences(row, scenario).map((sentence) => `<p>${escapeHtml(sentence)}</p>`).join('');
   return `<button type="button" data-close>Close</button>
     ${whoBlock(game, line, row)}
     <h3>This simulated game</h3>
@@ -479,5 +530,5 @@ export function renderPlayerPanel(
     <h3>Why</h3>
     <div class="why">${sentences}</div>
     <h3>Shrunk rates on the card</h3>
-    ${samplingList(row, score, shockFor(score, line.team_id))}`;
+    ${samplingList(row, shown, shockFor(shown, line.team_id))}`;
 }

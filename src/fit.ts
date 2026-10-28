@@ -165,6 +165,33 @@ function minutesMean(value: number | null): number {
   return Math.max(0, value);
 }
 
+export function pointsLogPerMinute(outcomes: readonly OutcomeRow[], athleteId: string): number | null {
+  let weightedPoints = 0;
+  let weightedMinutes = 0;
+  for (const row of outcomes) {
+    if (row.athlete_id !== athleteId || row.stat_key !== 'points' || !(row.minutes > 0)) continue;
+    const weight = seasonWeight(row.season);
+    if (weight === 0) continue;
+    weightedPoints += weight * row.actual;
+    weightedMinutes += weight * row.minutes;
+  }
+  if (!(weightedMinutes > 0)) return null;
+  return weightedPoints / weightedMinutes;
+}
+
+export function priorPointsPerMinute(rates: {
+  fga_per_min: number;
+  fta_per_min: number;
+  tpa_given_fga: number;
+  fg2_pct: number;
+  tp_pct: number;
+  ft_pct: number;
+}): number {
+  const pointsPerFga =
+    rates.tpa_given_fga * rates.tp_pct * 3 + (1 - rates.tpa_given_fga) * rates.fg2_pct * 2;
+  return rates.fga_per_min * pointsPerFga + rates.fta_per_min * rates.ft_pct;
+}
+
 export function fitPlayers(input: FitInput): FitResult {
   const rosterById = new Map<string, RosterPlayer>();
   for (const player of input.roster) {
@@ -238,6 +265,30 @@ export function fitPlayers(input: FitInput): FitResult {
     const priorGames2026 = games2026.get(player.athlete_id) ?? 0;
     const priorGames2027 = games2027.get(player.athlete_id) ?? 0;
     const injury = assignInjury(resolveInjury(player, input.injuries));
+    const shootingCount = shootingGames.get(player.athlete_id) ?? 0;
+    const gameCount = priorGames2026 + priorGames2027;
+    let fgaPerMin = clampPerMinute(rate(fga, K_MINUTES, player.athlete_id, player.team_id, group));
+    let ftaPerMin = clampPerMinute(rate(fta, K_MINUTES, player.athlete_id, player.team_id, group));
+    const tpaGivenFga = clampProbability(rate(tpaShare, K_FGA_SHARE, player.athlete_id, player.team_id, group));
+    const fg2Pct = clampProbability(rate(fg2, K_FG2, player.athlete_id, player.team_id, group));
+    const tpPct = clampProbability(rate(tp, K_TP, player.athlete_id, player.team_id, group));
+    const ftPct = clampProbability(rate(ft, K_FT, player.athlete_id, player.team_id, group));
+    if (shootingCount === 0 && gameCount >= 3) {
+      const observed = pointsLogPerMinute(input.outcomes, player.athlete_id);
+      const prior = priorPointsPerMinute({
+        fga_per_min: fgaPerMin,
+        fta_per_min: ftaPerMin,
+        tpa_given_fga: tpaGivenFga,
+        fg2_pct: fg2Pct,
+        tp_pct: tpPct,
+        ft_pct: ftPct,
+      });
+      if (observed !== null && observed > 0 && prior > 0) {
+        const scale = observed / prior;
+        fgaPerMin = clampPerMinute(fgaPerMin * scale);
+        ftaPerMin = clampPerMinute(ftaPerMin * scale);
+      }
+    }
     const ratePlayer: RatePlayer = {
       athlete_id: player.athlete_id,
       name: player.name,
@@ -249,16 +300,17 @@ export function fitPlayers(input: FitInput): FitResult {
       questionable_widen: injury.questionable_widen,
       games_2026: priorGames2026,
       games_2027: priorGames2027,
-      games: priorGames2026 + priorGames2027,
-      shooting_games: shootingGames.get(player.athlete_id) ?? 0,
+      games: gameCount,
+      shooting_games: shootingCount,
+      missing_shooting: shootingCount === 0,
       thin_sample: isThinSample(priorGames2026, priorGames2027),
       minutes_mean: minutesMean(rate(minutes, K_GAMES, player.athlete_id, player.team_id, group)),
-      fga_per_min: clampPerMinute(rate(fga, K_MINUTES, player.athlete_id, player.team_id, group)),
-      fta_per_min: clampPerMinute(rate(fta, K_MINUTES, player.athlete_id, player.team_id, group)),
-      tpa_given_fga: clampProbability(rate(tpaShare, K_FGA_SHARE, player.athlete_id, player.team_id, group)),
-      fg2_pct: clampProbability(rate(fg2, K_FG2, player.athlete_id, player.team_id, group)),
-      tp_pct: clampProbability(rate(tp, K_TP, player.athlete_id, player.team_id, group)),
-      ft_pct: clampProbability(rate(ft, K_FT, player.athlete_id, player.team_id, group)),
+      fga_per_min: fgaPerMin,
+      fta_per_min: ftaPerMin,
+      tpa_given_fga: tpaGivenFga,
+      fg2_pct: fg2Pct,
+      tp_pct: tpPct,
+      ft_pct: ftPct,
       reb_per_min: clampPerMinute(rate(reb, K_MINUTES, player.athlete_id, player.team_id, group)),
       ast_per_min: clampPerMinute(rate(ast, K_MINUTES, player.athlete_id, player.team_id, group)),
     };

@@ -59,6 +59,35 @@ function compareText(a: string, b: string): number {
   return 0;
 }
 
+function numericDescending(a: string, b: string): number {
+  const an = Number(a);
+  const bn = Number(b);
+  if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return bn - an;
+  return compareText(b, a);
+}
+
+export function orderPendingEventIds(
+  eventIds: readonly string[],
+  input: {
+    slateTeamIds: readonly string[];
+    eventTeamIds: ReadonlyMap<string, readonly string[]>;
+  },
+): string[] {
+  const slateTeams = new Set(input.slateTeamIds);
+  const groupOf = (eventId: string): number => {
+    const teams = input.eventTeamIds.get(eventId) ?? [];
+    for (const teamId of teams) {
+      if (slateTeams.has(teamId)) return 0;
+    }
+    return 1;
+  };
+  return [...eventIds].sort((a, b) => {
+    const group = groupOf(a) - groupOf(b);
+    if (group !== 0) return group;
+    return numericDescending(a, b);
+  });
+}
+
 function stamp(now: Date): string {
   return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
@@ -331,6 +360,22 @@ export function parseOutcomeLines(text: string): OutcomeRow[] {
   return rows;
 }
 
+function teamsByEvent(rows: OutcomeRow[]): Map<string, string[]> {
+  const grouped = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (!row.event_id || !row.team_id) continue;
+    let set = grouped.get(row.event_id);
+    if (!set) {
+      set = new Set();
+      grouped.set(row.event_id, set);
+    }
+    set.add(row.team_id);
+  }
+  const map = new Map<string, string[]>();
+  for (const [eventId, teams] of grouped) map.set(eventId, [...teams]);
+  return map;
+}
+
 function eventSeasons(rows: OutcomeRow[]): Map<string, number> {
   const votes = new Map<string, Map<number, number>>();
   for (const row of rows) {
@@ -508,7 +553,10 @@ async function buildRateCard(): Promise<void> {
   if (outcomes) {
     const fetched = new Set(cache.fetched_event_ids);
     const seasons = eventSeasons(outcomes);
-    const pending = [...seasons.keys()].filter((eventId) => !fetched.has(eventId)).sort(compareText).slice(0, SUMMARY_CAP);
+    const pending = orderPendingEventIds(
+      [...seasons.keys()].filter((eventId) => !fetched.has(eventId)),
+      { slateTeamIds, eventTeamIds: teamsByEvent(outcomes) },
+    ).slice(0, SUMMARY_CAP);
     await mapLimit(pending, SUMMARY_CONCURRENCY, async (eventId) => {
       try {
         const rows = parseSummary(await fetchJson(summaryUrl(eventId), SUMMARY_TIMEOUT_MS));

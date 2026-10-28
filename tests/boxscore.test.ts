@@ -117,28 +117,39 @@ function score(overtime: boolean): Simulation {
   ];
   const awayPts = awayPlayers.reduce((sum, item) => sum + item.pts, 0);
   const homePts = homePlayers.reduce((sum, item) => sum + item.pts, 0);
-  return {
+  const away = {
+    team_id: '17',
+    pts: awayPts,
+    band: { p05: 80, p10: 90, p50: 108, p90: 124, p95: 140 },
+    volumeShock: 1.25,
+    pointsRead: read(64),
+    players: awayPlayers,
+  };
+  const home = {
+    team_id: '2',
+    pts: homePts,
+    band: { p05: 70, p10: 88, p50: 104, p90: 120, p95: 130 },
+    volumeShock: 0.5,
+    pointsRead: read(12),
+    players: homePlayers,
+  };
+  const view = {
     overtime,
     budget: overtime ? 265 : 240,
+    overtimePeriods: overtime ? 1 : 0,
+    regulationAwayPts: awayPts,
+    regulationHomePts: homePts,
+    away,
+    home,
+  };
+  return {
+    ...view,
     index: 0,
+    upsideIndex: 0,
+    missingShootingAthleteIds: [],
     combinedTotals: [awayPts + homePts],
     wins: { away: 2500, tie: 0, home: 7500 },
-    away: {
-      team_id: '17',
-      pts: awayPts,
-      band: { p05: 80, p10: 90, p50: 108, p90: 124, p95: 140 },
-      volumeShock: 1.25,
-      pointsRead: read(64),
-      players: awayPlayers,
-    },
-    home: {
-      team_id: '2',
-      pts: homePts,
-      band: { p05: 70, p10: 88, p50: 104, p90: 120, p95: 130 },
-      volumeShock: 0.5,
-      pointsRead: read(12),
-      players: homePlayers,
-    },
+    upside: view,
   };
 }
 
@@ -252,14 +263,16 @@ test('stat toggles reorder each team and leave players who did not play at the b
   assert.ok(home.indexOf('data-athlete="8"') < home.indexOf('data-athlete="9"'));
 });
 
-test('the scoreboard shows the 95th percentile game and its interval', () => {
+test('the scoreboard shows the median-nearest game and its interval', () => {
   const model = score(false);
   const html = renderBoxScore(game, null, model, now);
   assert.match(html, /Away Name/);
   assert.match(html, /Home Name/);
   assert.match(html, /<p class="score away">26<\/p>/);
   assert.match(html, /<p class="score home">11<\/p>/);
-  assert.match(html, /95th percentile of 10,000 games/);
+  assert.match(html, /Nearest the median combined score/);
+  assert.match(html, /Upside scenario: the 95th percentile of the combined score\. Not the forecast\./);
+  assert.equal(html.includes('95th percentile of 10,000 games'), false);
   assert.match(html, /5th to 95th percentile/);
   assert.match(html, /<p class="interval away">80–140<\/p>/);
   assert.match(html, /<p class="interval home">70–130<\/p>/);
@@ -296,14 +309,15 @@ test('the scoreboard shows the 95th percentile game and its interval', () => {
   assert.equal(html.includes('undefined'), false);
   assert.equal(html.includes('<a '), false);
   assert.equal(html.includes('title='), false);
-  assert.match(html, /This box score is the simulated game at the 95th percentile of the combined score\./);
+  assert.match(html, /This box score is the simulated game nearest the median combined score\./);
+  assert.equal(html.includes('This box score is the simulated game at the 95th percentile of the combined score.'), false);
   assert.match(html, /The minutes column totals team-minutes: five players on the floor at once\. Regulation is 240 \(5 × 48\)\. Overtime is 265 \(5 × 53\)\. It is not the length of the game\./);
   assert.match(html, /240 team-minutes · 5 × 48/);
   assert.equal(html.includes('not a five-man lineup'), false);
   assert.equal(html.includes('265 minutes'), false);
   assert.equal(html.includes('265 team-minutes'), false);
   const tableAt = html.indexOf('<table');
-  const noteAt = html.indexOf('This box score is the simulated game at the 95th percentile');
+  const noteAt = html.indexOf('This box score is the simulated game nearest the median combined score');
   assert.ok(tableAt >= 0 && noteAt > tableAt);
   assert.match(html, /Brighter blue means that number is further from this player's middle in the 10,000 games\./);
   assert.match(html, /<span class="pct">/);
@@ -314,6 +328,21 @@ test('the scoreboard shows the 95th percentile game and its interval', () => {
   assert.equal(/<input\b[^>]*\bchecked\b/.test(html), false);
   assert.equal(html.includes('>OT<'), false);
   assert.equal(html.includes('This line is one random draw'), false);
+});
+
+test('the upside control labels the 95th percentile scenario', () => {
+  const model = score(false);
+  const html = renderBoxScore(game, null, model, now, undefined, 'upside');
+  assert.match(html, /Upside scenario: the 95th percentile of the combined score\. Not the forecast\./);
+  assert.match(html, /<input type="checkbox" data-upside-scenario checked>/);
+  assert.equal(html.includes('Nearest the median combined score'), false);
+  assert.equal(html.includes('This box score is the simulated game nearest the median combined score.'), false);
+  assert.match(html, /<p class="score away">26<\/p>/);
+  assert.match(html, /<p class="score home">11<\/p>/);
+  assert.match(html, /Win rate in 10,000 games/);
+  const panel = renderPlayerPanel(game, rates(), model, '1', 'upside');
+  assert.match(panel, /This line is from the upside scenario: the 95th percentile of the combined score\. Not the forecast\./);
+  assert.equal(panel.includes('nearest the median combined score'), false);
 });
 
 test('an empty abbreviation falls back to the team name', () => {
@@ -362,7 +391,7 @@ test('the panel opens, swaps, and closes from the player button', () => {
   assert.match(open, /Away Name/);
   assert.match(open, /PG/);
   assert.match(open, /Guard/);
-  assert.match(open, /This line is from the simulated game at the 95th percentile of the combined score\./);
+  assert.match(open, /This line is from the simulated game nearest the median combined score\./);
   assert.equal(open.includes('<a '), false);
   assert.equal(open.includes('title='), false);
   const swapped = renderPlayerPanel(game, card, model, '9');
@@ -396,6 +425,7 @@ test('thin sample follows the 2026 and 2027 counts', () => {
   assert.match(thin, /Thin sample: no games in 2026 and fewer than 8 in 2027\./);
   assert.match(thin, /Shooting sample: 5 games\./);
   assert.match(thin, /No absence flag on the card\./);
+  assert.equal(thin.includes('Shot rates are the team and position prior.'), false);
   assert.match(thin, /Shrunk minutes rate: 32\.0\./);
   assert.match(thin, /scaled to 240 team-minutes \(5 × 48\)/);
   assert.match(thin, /Team volume shock this draw: 1\.25\./);
@@ -415,6 +445,30 @@ test('thin sample follows the 2026 and 2027 counts', () => {
   assert.match(overtime, /scaled to 265 team-minutes \(5 × 53\)/);
   assert.equal(overtime.includes('265 minutes'), false);
   assert.equal(overtime.includes('scaled to 240 team-minutes'), false);
+});
+
+test('a player with no shooting sample is told the shot rates are the prior', () => {
+  const model = score(false);
+  const flagged = renderPlayerPanel(
+    game,
+    {
+      event_id: '1',
+      players: [cardRow({ athlete_id: '2', name: 'Thin Player', shooting_games: 0, games: 1, missing_shooting: true })],
+    },
+    model,
+    '2',
+  );
+  assert.match(flagged, /Shot rates are the team and position prior\./);
+  const unlabeled = renderPlayerPanel(
+    game,
+    {
+      event_id: '1',
+      players: [cardRow({ athlete_id: '2', name: 'Thin Player', shooting_games: 0, games: 1 })],
+    },
+    model,
+    '2',
+  );
+  assert.match(unlabeled, /Shot rates are the team and position prior\./);
 });
 
 test('missing optional fields do not throw', () => {

@@ -1,5 +1,13 @@
 import './styles.css';
-import { DEFAULT_SIDE_SORTS, isColumnKey, nextBoxSort, renderBoxScore, renderPlayerPanel, type SideSorts } from './boxscore.ts';
+import {
+  DEFAULT_SIDE_SORTS,
+  isColumnKey,
+  nextBoxSort,
+  renderBoxScore,
+  renderPlayerPanel,
+  type BoxScenario,
+  type SideSorts,
+} from './boxscore.ts';
 import { nextPanelAthlete, probabilityColorsOn, themeFromStorage } from './display.ts';
 import { fnv1a } from './rng.ts';
 import { renderSlate } from './slate.ts';
@@ -24,6 +32,11 @@ let running = false;
 let panelAthlete: string | null = null;
 let view: { game: SlateGame; rates: RateGame; result: Simulation } | null = null;
 let sideSorts: SideSorts = DEFAULT_SIDE_SORTS;
+let upsideOn = false;
+
+function scenario(): BoxScenario {
+  return upsideOn ? 'upside' : 'median';
+}
 
 function rateGame(eventId: string): RateGame | null {
   return card?.games.find((game) => game.event_id === eventId) ?? null;
@@ -69,7 +82,7 @@ function showSlate(): void {
 function paintScore(): void {
   if (!boxRoot || !view) return;
   const scrollY = window.scrollY;
-  boxRoot.innerHTML = renderBoxScore(view.game, view.rates, view.result, new Date(), sideSorts);
+  boxRoot.innerHTML = renderBoxScore(view.game, view.rates, view.result, new Date(), sideSorts, scenario());
   applyProbabilityColors();
   window.scrollTo(0, scrollY);
 }
@@ -93,7 +106,7 @@ function syncPanel(): void {
   }
   if (playerFrame) playerFrame.hidden = false;
   desk.classList.add('panel-open');
-  panelBody.innerHTML = renderPlayerPanel(view.game, view.rates, view.result, panelAthlete);
+  panelBody.innerHTML = renderPlayerPanel(view.game, view.rates, view.result, panelAthlete, scenario());
 }
 
 async function onSimulate(button: HTMLButtonElement): Promise<void> {
@@ -110,6 +123,7 @@ async function onSimulate(button: HTMLButtonElement): Promise<void> {
   });
   try {
     const result = simulate(rates, fnv1a(`${eventId}:${card.generated_at ?? ''}`), ITERATIONS);
+    upsideOn = false;
     view = { game, rates, result };
     panelAthlete = null;
     panelBody?.replaceChildren();
@@ -163,7 +177,14 @@ function onDeskClick(event: Event): void {
 
 function onProbabilityColors(event: Event): void {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement) || !target.matches('[data-probability-colors]')) return;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (target.matches('[data-upside-scenario]')) {
+    upsideOn = target.checked;
+    paintScore();
+    syncPanel();
+    return;
+  }
+  if (!target.matches('[data-probability-colors]')) return;
   const on = target.checked;
   try {
     localStorage.setItem(COLOR_KEY, on ? 'on' : 'off');

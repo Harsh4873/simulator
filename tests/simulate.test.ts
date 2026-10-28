@@ -5,16 +5,14 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { iterationSeed, mulberry32 } from '../src/rng.ts';
 import { typicalityBucket } from '../src/display.ts';
+import { legacyDrawGame, legacySimulate, type LegacySimulation } from '../src/legacy.ts';
 import {
   ITERATIONS,
-  drawGame,
   largestRemainder,
   percentileDrawIndex,
   quantile,
   shownDrawIndex,
-  simulate,
   type DrawnPlayer,
-  type Simulation,
 } from '../src/simulate.ts';
 import type { RateCard } from '../src/types.ts';
 
@@ -56,7 +54,7 @@ function assertPlayer(player: DrawnPlayer): void {
   }
 }
 
-function assertScore(result: Simulation, iterations: number): void {
+function assertScore(result: LegacySimulation, iterations: number): void {
   for (const side of [result.away, result.home]) {
     let activeMinutes = 0;
     const sums = { min: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pts: 0, reb: 0, ast: 0 };
@@ -114,15 +112,15 @@ test('largest remainder gives the extra minute to the largest fraction', () => {
 });
 
 test('the same seed replays the displayed box score', () => {
-  const first = simulate(game, 42, 300);
-  const second = simulate(game, 42, 300);
+  const first = legacySimulate(game, 42, 300);
+  const second = legacySimulate(game, 42, 300);
   assert.deepEqual(first, second);
   assert.equal(first.index, percentileDrawIndex(first.combinedTotals));
   assert.equal(percentileDrawIndex([5, 9, 9]), 1);
   assert.equal(percentileDrawIndex([1, 2, 3, 10, 50]), 4);
   assert.equal(shownDrawIndex(42, 10000), iterationSeed(42, 10000) % 10000);
   assertScore(first, 300);
-  const redraw = drawGame(game, mulberry32(iterationSeed(42, first.index)));
+  const redraw = legacyDrawGame(game, mulberry32(iterationSeed(42, first.index)));
   assert.equal(redraw.overtime, first.overtime);
   assert.equal(redraw.budget, first.budget);
   assert.deepEqual(redraw.away.map(core), first.away.players.map(core));
@@ -138,13 +136,13 @@ test('the same seed replays the displayed box score', () => {
 
 test('10,000 draws stay legal and finish within 15 seconds', { timeout: 20_000 }, () => {
   const started = Date.now();
-  const result = simulate(game, 1, ITERATIONS);
+  const result = legacySimulate(game, 1, ITERATIONS);
   const elapsed = Date.now() - started;
   assert.ok(elapsed < 15_000, `took ${elapsed}ms`);
   assert.equal(result.combinedTotals.length, ITERATIONS);
   assert.equal(result.wins.away + result.wins.tie + result.wins.home, 10000);
   assertScore(result, ITERATIONS);
-  const redraw = drawGame(game, mulberry32(iterationSeed(1, result.index)));
+  const redraw = legacyDrawGame(game, mulberry32(iterationSeed(1, result.index)));
   assert.deepEqual(redraw.away.map(core), result.away.players.map(core));
   assert.deepEqual(redraw.home.map(core), result.home.players.map(core));
 });
@@ -157,7 +155,7 @@ function drawTotals(rateGame: RateCard['games'][number], firstSeed: number, last
   const away: number[] = [];
   const home: number[] = [];
   for (let seed = firstSeed; seed <= lastSeed; seed += 1) {
-    const draw = drawGame(rateGame, mulberry32(seed));
+    const draw = legacyDrawGame(rateGame, mulberry32(seed));
     away.push(teamTotal(draw.away));
     home.push(teamTotal(draw.home));
   }
