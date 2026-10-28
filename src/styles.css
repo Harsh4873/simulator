@@ -84,7 +84,7 @@ button, input { font: inherit; }
   color: var(--accent);
 }
 
-.sub, .tip, .status, .tag, .spread, .note, .state, .legend, .draw-index, .sim-label, .median-caption, .win-caption {
+.sub, .tip, .status, .tag, .spread, .note, .state, .legend, .draw-index, .sim-label, .percentile-caption, .interval-caption, .win-caption {
   color: var(--muted);
 }
 
@@ -192,7 +192,7 @@ button, input { font: inherit; }
 
 [hidden] { display: none !important; }
 
-.tip, .status, .tag, .spread, .note, .state, .legend, .draw-index, .sim-label, .median-caption, .win-caption { margin: 0; }
+.tip, .status, .tag, .spread, .note, .state, .legend, .draw-index, .sim-label, .percentile-caption, .interval-caption, .win-caption { margin: 0; }
 
 .spread { font-family: 'DM Mono', monospace; font-size: 13px; }
 
@@ -302,8 +302,29 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .club-name.home { grid-area: 2 / 3; text-align: right; }
 .score.home { grid-area: 3 / 3; text-align: right; }
 .win-pct.win-home { grid-area: 4 / 3; text-align: right; }
-.median-caption { grid-area: 5 / 1 / 6 / 4; text-align: center; }
-.win-caption { grid-area: 6 / 1 / 7 / 4; text-align: center; }
+.interval {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+.interval.away { grid-area: 5 / 1; }
+.interval.home { grid-area: 5 / 3; text-align: right; }
+.interval-caption { grid-area: 6 / 1 / 7 / 4; text-align: center; color: var(--muted); }
+.scoreboard .team-pct.away { grid-area: 7 / 1; }
+.scoreboard .team-pct.home { grid-area: 7 / 3; justify-self: end; }
+.percentile-caption { grid-area: 8 / 1 / 9 / 4; text-align: center; }
+.win-caption { grid-area: 9 / 1 / 10 / 4; text-align: center; }
+
+.team-box { margin-top: 28px; }
+
+.team-box h2 {
+  margin: 0 0 8px;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.75rem;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
 
 .team-head {
   display: flex;
@@ -667,12 +688,18 @@ td[data-bucket],
   .win-pct.win-away,
   .win-pct.win-home { grid-row: 6; }
 
-  .median-caption,
+  .interval.away { grid-column: 1; grid-row: 7; }
+  .interval.home { grid-column: 2; grid-row: 7; }
+
+  .interval-caption,
+  .percentile-caption,
   .win-caption { grid-column: 1 / -1; }
 
-  .median-caption { grid-row: 7; }
-
-  .win-caption { grid-row: 8; }
+  .interval-caption { grid-row: 8; }
+  .scoreboard .team-pct.away { grid-column: 1; grid-row: 9; }
+  .scoreboard .team-pct.home { grid-column: 2; grid-row: 9; }
+  .percentile-caption { grid-row: 10; }
+  .win-caption { grid-row: 11; }
 
   .score { font-size: clamp(2.75rem, 14vw, 4.5rem); }
 

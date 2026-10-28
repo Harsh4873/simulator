@@ -1,5 +1,5 @@
 import './styles.css';
-import { DEFAULT_BOX_SORT, isColumnKey, nextBoxSort, renderBoxScore, renderPlayerPanel, type BoxSort } from './boxscore.ts';
+import { DEFAULT_SIDE_SORTS, isColumnKey, nextBoxSort, renderBoxScore, renderPlayerPanel, type SideSorts } from './boxscore.ts';
 import { nextPanelAthlete, probabilityColorsOn, themeFromStorage } from './display.ts';
 import { fnv1a } from './rng.ts';
 import { renderSlate } from './slate.ts';
@@ -23,7 +23,7 @@ let bound = false;
 let running = false;
 let panelAthlete: string | null = null;
 let view: { game: SlateGame; rates: RateGame; result: Simulation } | null = null;
-let boxSort: BoxSort = DEFAULT_BOX_SORT;
+let sideSorts: SideSorts = DEFAULT_SIDE_SORTS;
 
 function rateGame(eventId: string): RateGame | null {
   return card?.games.find((game) => game.event_id === eventId) ?? null;
@@ -68,8 +68,10 @@ function showSlate(): void {
 
 function paintScore(): void {
   if (!boxRoot || !view) return;
-  boxRoot.innerHTML = renderBoxScore(view.game, view.rates, view.result, new Date(), boxSort);
+  const scrollY = window.scrollY;
+  boxRoot.innerHTML = renderBoxScore(view.game, view.rates, view.result, new Date(), sideSorts);
   applyProbabilityColors();
+  window.scrollTo(0, scrollY);
 }
 
 function showScore(): void {
@@ -146,8 +148,9 @@ function onDeskClick(event: Event): void {
   const sortButton = target.closest('button[data-sort]');
   if (sortButton instanceof HTMLButtonElement) {
     const key = sortButton.dataset.sort ?? '';
-    if (!isColumnKey(key) || !view) return;
-    boxSort = nextBoxSort(boxSort, key);
+    const side = sortButton.dataset.side;
+    if (!isColumnKey(key) || (side !== 'away' && side !== 'home') || !view) return;
+    sideSorts = { ...sideSorts, [side]: nextBoxSort(sideSorts[side], key) };
     paintScore();
     syncPanel();
     return;

@@ -15,9 +15,11 @@ export const PHI_REB = 8;
 export const PHI_AST = 8;
 
 export interface PointsBand {
+  p05: number;
   p10: number;
   p50: number;
   p90: number;
+  p95: number;
 }
 
 export interface DrawnPlayer {
@@ -98,6 +100,21 @@ export function quantile(sortedAsc: number[], p: number): number {
   const n = sortedAsc.length;
   const index = Math.min(n - 1, Math.max(0, Math.ceil(p * n) - 1));
   return sortedAsc[index];
+}
+
+export function percentileDrawIndex(combined: number[], percentile = 0.95): number {
+  if (combined.length === 0) return 0;
+  const sorted = combined.slice().sort((a, b) => a - b);
+  const threshold = quantile(sorted, percentile);
+  let best = 0;
+  let bestDistance = Infinity;
+  for (let index = 0; index < combined.length; index += 1) {
+    const distance = combined[index] - threshold;
+    if (distance < 0 || distance >= bestDistance) continue;
+    bestDistance = distance;
+    best = index;
+  }
+  return best;
 }
 
 export function closestIndex(combined: number[]): number {
@@ -315,9 +332,11 @@ export function drawGame(game: RateGame, rng: Rng): Draw {
 function bandFrom(values: ArrayLike<number>): PointsBand {
   const sorted = Array.from(values).sort((a, b) => a - b);
   return {
+    p05: quantile(sorted, 0.05),
     p10: quantile(sorted, 0.1),
     p50: quantile(sorted, 0.5),
     p90: quantile(sorted, 0.9),
+    p95: quantile(sorted, 0.95),
   };
 }
 
@@ -417,7 +436,7 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
     }
   }
 
-  const index = shownDrawIndex(seed, iterations);
+  const index = percentileDrawIndex(combinedTotals, 0.95);
   const chosen = drawGame(game, mulberry32(iterationSeed(seed, index)));
   return {
     overtime: chosen.overtime,

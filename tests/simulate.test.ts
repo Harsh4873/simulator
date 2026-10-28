@@ -9,6 +9,7 @@ import {
   ITERATIONS,
   drawGame,
   largestRemainder,
+  percentileDrawIndex,
   quantile,
   shownDrawIndex,
   simulate,
@@ -55,7 +56,7 @@ function assertPlayer(player: DrawnPlayer): void {
   }
 }
 
-function assertScore(result: Simulation, seed: number, iterations: number): void {
+function assertScore(result: Simulation, iterations: number): void {
   for (const side of [result.away, result.home]) {
     let activeMinutes = 0;
     const sums = { min: 0, fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, pts: 0, reb: 0, ast: 0 };
@@ -76,10 +77,14 @@ function assertScore(result: Simulation, seed: number, iterations: number): void
     assert.ok(Number.isFinite(side.volumeShock) && side.volumeShock > 0);
     assert.equal(side.pointsRead.bucket, typicalityBucket(side.pointsRead.percent, side.pointsRead.constant));
     for (const key of KEYS) assert.equal(sums[key], side.players.reduce((sum, player) => sum + player[key], 0));
-    assert.ok(side.band.p10 <= side.band.p50 && side.band.p50 <= side.band.p90);
+    assert.ok(side.band.p05 <= side.band.p10 && side.band.p10 <= side.band.p50 && side.band.p50 <= side.band.p90 && side.band.p90 <= side.band.p95);
   }
   assert.equal(result.budget, result.overtime ? 265 : 240);
-  assert.equal(result.index, shownDrawIndex(seed, iterations));
+  assert.equal(result.index, percentileDrawIndex(result.combinedTotals));
+  const sorted = result.combinedTotals.slice().sort((a, b) => a - b);
+  const threshold = quantile(sorted, 0.95);
+  assert.ok(result.away.pts + result.home.pts >= threshold);
+  assert.equal(result.away.pts + result.home.pts - threshold, Math.min(...result.combinedTotals.filter((total) => total >= threshold).map((total) => total - threshold)));
   assert.equal(result.combinedTotals[result.index], result.away.pts + result.home.pts);
   assert.equal(result.wins.away + result.wins.tie + result.wins.home, iterations);
 }
@@ -112,9 +117,11 @@ test('the same seed replays the displayed box score', () => {
   const first = simulate(game, 42, 300);
   const second = simulate(game, 42, 300);
   assert.deepEqual(first, second);
-  assert.equal(first.index, shownDrawIndex(42, 300));
+  assert.equal(first.index, percentileDrawIndex(first.combinedTotals));
+  assert.equal(percentileDrawIndex([5, 9, 9]), 1);
+  assert.equal(percentileDrawIndex([1, 2, 3, 10, 50]), 4);
   assert.equal(shownDrawIndex(42, 10000), iterationSeed(42, 10000) % 10000);
-  assertScore(first, 42, 300);
+  assertScore(first, 300);
   const redraw = drawGame(game, mulberry32(iterationSeed(42, first.index)));
   assert.equal(redraw.overtime, first.overtime);
   assert.equal(redraw.budget, first.budget);
@@ -136,7 +143,7 @@ test('10,000 draws stay legal and finish within 15 seconds', { timeout: 20_000 }
   assert.ok(elapsed < 15_000, `took ${elapsed}ms`);
   assert.equal(result.combinedTotals.length, ITERATIONS);
   assert.equal(result.wins.away + result.wins.tie + result.wins.home, 10000);
-  assertScore(result, 1, ITERATIONS);
+  assertScore(result, ITERATIONS);
   const redraw = drawGame(game, mulberry32(iterationSeed(1, result.index)));
   assert.deepEqual(redraw.away.map(core), result.away.players.map(core));
   assert.deepEqual(redraw.home.map(core), result.home.players.map(core));

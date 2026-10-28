@@ -50,7 +50,7 @@ function player(overrides: Partial<SimulatedPlayer> = {}): SimulatedPlayer {
     pts: 17,
     reb: 5,
     ast: 4,
-    band: { p10: 8, p50: 17, p90: 22 },
+    band: { p05: 4, p10: 8, p50: 17, p90: 22, p95: 28 },
     reads: reads(),
     ...overrides,
   };
@@ -126,7 +126,7 @@ function score(overtime: boolean): Simulation {
     away: {
       team_id: '17',
       pts: awayPts,
-      band: { p10: 90, p50: 108, p90: 124 },
+      band: { p05: 80, p10: 90, p50: 108, p90: 124, p95: 140 },
       volumeShock: 1.25,
       pointsRead: read(64),
       players: awayPlayers,
@@ -134,7 +134,7 @@ function score(overtime: boolean): Simulation {
     home: {
       team_id: '2',
       pts: homePts,
-      band: { p10: 88, p50: 104, p90: 120 },
+      band: { p05: 70, p10: 88, p50: 104, p90: 120, p95: 130 },
       volumeShock: 0.5,
       pointsRead: read(12),
       players: homePlayers,
@@ -227,33 +227,45 @@ test('stat toggles reorder each team and leave players who did not play at the b
   const fewestPoints = orderPlayers(model.away.players, { key: 'pts', direction: 'asc' });
   assert.deepEqual(fewestPoints.map((item) => item.athlete_id), ['2', '1', '3']);
   assert.deepEqual(nextBoxSort({ key: 'reb', direction: 'desc' }, 'reb'), { key: 'reb', direction: 'asc' });
-  const html = renderBoxScore(game, null, model, now, { key: 'reb', direction: 'desc' });
-  assert.match(html, /aria-label="Sort the box score"/);
-  assert.match(html, /data-sort="reb" aria-pressed="true"/);
-  assert.match(html, /aria-sort="descending"/);
-  assert.match(html, /data-sort="pts" aria-pressed="false"/);
-  const away = html.split('class="section"')[1] ?? '';
+  model.home.players.push(player({
+    athlete_id: '8',
+    name: 'Bench Player',
+    team_id: '2',
+    min: 10,
+    pts: 30,
+    reb: 12,
+  }));
+  const html = renderBoxScore(game, null, model, now, {
+    away: { key: 'min', direction: 'desc' },
+    home: { key: 'pts', direction: 'desc' },
+  });
+  assert.match(html, /aria-label="Sort Away Name"/);
+  assert.match(html, /aria-label="Sort Home Name"/);
+  const away = html.split('<section class="team-box" data-side="away">')[1]?.split('<section class="team-box" data-side="home">')[0] ?? '';
+  const home = html.split('<section class="team-box" data-side="home">')[1] ?? '';
+  assert.match(away, /data-sort="min" aria-pressed="true"/);
+  assert.match(home, /data-sort="pts" aria-pressed="true"/);
+  assert.match(away, /data-sort="pts" aria-pressed="false"/);
+  assert.equal(away.includes('data-side="home"'), false);
   assert.ok(away.indexOf('data-athlete="1"') < away.indexOf('data-athlete="2"'));
   assert.ok(away.indexOf('data-athlete="2"') < away.indexOf('data-athlete="3"'));
+  assert.ok(home.indexOf('data-athlete="8"') < home.indexOf('data-athlete="9"'));
 });
 
-test('the scoreboard headlines the median and keeps one random draw', () => {
+test('the scoreboard shows the 95th percentile game and its interval', () => {
   const model = score(false);
   const html = renderBoxScore(game, null, model, now);
   assert.match(html, /Away Name/);
   assert.match(html, /Home Name/);
-  assert.match(html, /<p class="score away">108<\/p>/);
-  assert.match(html, /<p class="score home">104<\/p>/);
-  assert.match(html, /Median of 10,000 games/);
-  assert.match(html, /Win rate in 10,000 games/);
-  assert.match(html, /<p class="draw-score away">26<\/p>/);
-  assert.match(html, /<p class="draw-score home">11<\/p>/);
-  assert.match(html, /One simulated game/);
-  assert.match(html, /Random draw index 0/);
-  const medianAt = html.indexOf('Median of 10,000 games');
-  const drawAt = html.indexOf('One simulated game');
-  const pctAt = html.indexOf('class="team-pct away');
-  assert.ok(medianAt >= 0 && drawAt > medianAt && pctAt > drawAt);
+  assert.match(html, /<p class="score away">26<\/p>/);
+  assert.match(html, /<p class="score home">11<\/p>/);
+  assert.match(html, /95th percentile of 10,000 games/);
+  assert.match(html, /5th to 95th percentile/);
+  assert.match(html, /<p class="interval away">80–140<\/p>/);
+  assert.match(html, /<p class="interval home">70–130<\/p>/);
+  assert.equal(html.includes('One simulated game'), false);
+  assert.equal(html.includes('Random draw'), false);
+  assert.equal(html.includes('Median of 10,000 games'), false);
   assert.match(html, /Away wins 25\.0%\. Tie 0\.0%\. Home wins 75\.0%/);
   assert.match(html, /Tie 0\.0%/);
   assert.match(html, /flex-grow: 2500/);
@@ -284,14 +296,14 @@ test('the scoreboard headlines the median and keeps one random draw', () => {
   assert.equal(html.includes('undefined'), false);
   assert.equal(html.includes('<a '), false);
   assert.equal(html.includes('title='), false);
-  assert.match(html, /This box score is one of the 10,000 games\. The median above is the middle of those games\./);
+  assert.match(html, /This box score is the simulated game at the 95th percentile of the combined score\./);
   assert.match(html, /The minutes column totals team-minutes: five players on the floor at once\. Regulation is 240 \(5 × 48\)\. Overtime is 265 \(5 × 53\)\. It is not the length of the game\./);
   assert.match(html, /240 team-minutes · 5 × 48/);
   assert.equal(html.includes('not a five-man lineup'), false);
   assert.equal(html.includes('265 minutes'), false);
   assert.equal(html.includes('265 team-minutes'), false);
   const tableAt = html.indexOf('<table');
-  const noteAt = html.indexOf('The median above is the middle of those games.');
+  const noteAt = html.indexOf('This box score is the simulated game at the 95th percentile');
   assert.ok(tableAt >= 0 && noteAt > tableAt);
   assert.match(html, /Brighter blue means that number is further from this player's middle in the 10,000 games\./);
   assert.match(html, /<span class="pct">/);
@@ -313,10 +325,8 @@ test('an empty abbreviation falls back to the team name', () => {
   const html = renderBoxScore(blank, null, score(false), now);
   assert.match(html, /class="abbr away">Away Name</);
   assert.match(html, /class="abbr home">Home Name</);
-  assert.match(html, /class="score away">108</);
-  assert.match(html, /class="score home">104</);
-  assert.match(html, /class="draw-score away">26</);
-  assert.match(html, /class="draw-score home">11</);
+  assert.match(html, /class="score away">26</);
+  assert.match(html, /class="score home">11</);
   assert.equal(html.includes('undefined'), false);
 });
 
@@ -352,7 +362,7 @@ test('the panel opens, swaps, and closes from the player button', () => {
   assert.match(open, /Away Name/);
   assert.match(open, /PG/);
   assert.match(open, /Guard/);
-  assert.match(open, /This line is one random draw from 10,000 simulated games\. It is not a prediction\./);
+  assert.match(open, /This line is from the simulated game at the 95th percentile of the combined score\./);
   assert.equal(open.includes('<a '), false);
   assert.equal(open.includes('title='), false);
   const swapped = renderPlayerPanel(game, card, model, '9');
