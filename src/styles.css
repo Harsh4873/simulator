@@ -352,6 +352,35 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 }
 .prop-figure { margin: 4px 0; font-size: 1.5rem; }
 .prop-note { color: var(--muted); font-size: 0.875rem; line-height: 1.4; }
+.prop-caption { margin: 0 0 4px; color: var(--muted); }
+.verdict-mark {
+  margin: 0;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 4rem;
+  line-height: 0.9;
+  letter-spacing: 0.04em;
+}
+.verdict-mark.lean { color: var(--gold); }
+html[data-theme="light"] .verdict-mark.lean { color: #8a6a00; }
+.verdict-mark.bet { color: var(--accent); }
+.verdict-mark.pass { color: var(--text); }
+.verdict-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+.verdict-stats div { min-width: 0; }
+.verdict-stats dt { color: var(--muted); font-size: 0.75rem; }
+.verdict-stats dd {
+  margin: 0;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.75rem;
+  line-height: 1;
+}
+.verdict-why { margin: 0 0 12px; line-height: 1.4; }
+.prop-advanced { margin-top: 4px; }
+.prop-advanced summary { cursor: pointer; }
 .prop-row { display: grid; grid-template-columns: 4.5rem 1fr; gap: 8px; align-items: center; margin: 6px 0; }
 .prop-track { display: block; height: 10px; background: var(--surface); }
 .prop-fill { display: block; height: 10px; }

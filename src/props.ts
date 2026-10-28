@@ -184,6 +184,150 @@ export function gradeProp(sample: PlayerSample, market: PropMarket, side: PropSi
   return grade;
 }
 
+/**
+ * Decision policy for the prop panel.
+ *
+ * The sportsbook price is applied only after the simulations exist. It does not
+ * change who plays, the rates, or the 10,000 draws.
+ *
+ * A verdict needs more than a large edge. The win rate has to beat the price,
+ * the expected return has to survive pushes and games not played, the gap has
+ * to clear sampling noise, and the player data has to be usable.
+ *
+ * `calibrated` stays false until a walk-forward backtest has checked these
+ * probabilities. While it is false the panel can say LEAN or PASS, never BET.
+ * A gap of `extremeEdge` or more is a reliability problem, not a recommendation,
+ * even after calibration is turned on.
+ */
+export const PROP_POLICY = {
+  calibrated: false,
+  leanEdge: 0.03,
+  leanReturn: 0.01,
+  betEdge: 0.08,
+  betReturn: 0.05,
+  extremeEdge: 0.25,
+  maxVoidShare: 0.35,
+  minDecided: 200,
+  noiseMultiple: 1.96,
+} as const;
+
+export interface PropPolicy {
+  calibrated: boolean;
+  leanEdge: number;
+  leanReturn: number;
+  betEdge: number;
+  betReturn: number;
+  extremeEdge: number;
+  maxVoidShare: number;
+  minDecided: number;
+  noiseMultiple: number;
+}
+
+export type PropVerdict = 'BET' | 'LEAN' | 'PASS';
+
+export interface PropContext {
+  available: boolean;
+  missingShooting: boolean;
+  thinSample: boolean;
+  onCard: boolean;
+}
+
+export interface VerdictResult {
+  verdict: PropVerdict;
+  text: string;
+}
+
+export function propContextFromPlayer(player: {
+  minutes_weight?: number;
+  missing_shooting?: boolean;
+  shooting_games?: number;
+  thin_sample?: boolean;
+} | null): PropContext {
+  if (!player) return { available: false, missingShooting: true, thinSample: true, onCard: false };
+  return {
+    available: player.minutes_weight !== 0,
+    missingShooting: player.missing_shooting === true || player.shooting_games === 0,
+    thinSample: player.thin_sample === true,
+    onCard: true,
+  };
+}
+
+function usesShooting(market: PropMarket): boolean {
+  return market === 'pts' || market === 'pra' || market === 'tpm';
+}
+
+function pass(text: string): VerdictResult {
+  return { verdict: 'PASS', text };
+}
+
+export function decideVerdict(
+  quote: PropQuote,
+  context: PropContext,
+  market: PropMarket,
+  policy: PropPolicy = PROP_POLICY,
+): VerdictResult | null {
+  if (quote.breakEven === null || quote.expectedReturn === null) return null;
+  const decided = quote.grade.wins + quote.grade.losses;
+  const total = decided + quote.grade.pushes + quote.grade.voids;
+  const voidShare = total === 0 ? 1 : quote.grade.voids / total;
+  if (!context.available) {
+    return pass('This player does not play in the simulations, so the prop is not graded.');
+  }
+  if (total === 0 || voidShare > policy.maxVoidShare) {
+    return pass('This player sits out of too many simulations for the price to be useful.');
+  }
+  if (quote.modelProbability === null || quote.edge === null || decided < policy.minDecided) {
+    return pass('Too few simulated games decide this prop, so the price comparison is not useful.');
+  }
+  if (Math.abs(quote.edge) >= policy.extremeEdge) {
+    return pass('The simulations and the sportsbook price disagree by too much to trust. That gap needs a reliability check before it is a recommendation.');
+  }
+  const noise = quote.standardError === null ? Number.POSITIVE_INFINITY : policy.noiseMultiple * quote.standardError;
+  const favored = quote.edge >= policy.leanEdge && quote.expectedReturn >= policy.leanReturn && quote.edge > noise;
+  if (!favored) {
+    if (quote.edge >= policy.leanEdge && quote.expectedReturn < policy.leanReturn) {
+      return pass('The win rate beats the sportsbook price, but pushes and missed games take the return away.');
+    }
+    if (quote.edge >= policy.leanEdge && quote.edge <= noise) {
+      return pass('The gap is inside the sampling noise, so it is not an advantage yet.');
+    }
+    return pass('The simulations do not clear this line often enough to beat the sportsbook price.');
+  }
+  if (!context.onCard) {
+    return pass('This player is not on the rate card, so the price is hard to trust.');
+  }
+  if (usesShooting(market) && context.missingShooting) {
+    return pass('Shot rates for this player are a prior, so this price is hard to trust.');
+  }
+  const strong =
+    policy.calibrated &&
+    !context.thinSample &&
+    quote.edge >= policy.betEdge &&
+    quote.expectedReturn >= policy.betReturn;
+  if (strong) {
+    return {
+      verdict: 'BET',
+      text: 'The simulations clear this price by a wide margin, the player data is in place, and the probabilities have been checked against past games.',
+    };
+  }
+  if (context.thinSample) {
+    return {
+      verdict: 'LEAN',
+      text: 'The simulations favor this price, but the player sample is thin, so this is not a confident recommendation.',
+    };
+  }
+  if (!policy.calibrated) {
+    return {
+      verdict: 'LEAN',
+      text: 'The simulations hit this line more often than the sportsbook price requires, but the model has not yet been historically calibrated.',
+    };
+  }
+  return {
+    verdict: 'LEAN',
+    text: 'The simulations favor this price, but the advantage is modest.',
+  };
+}
+
 export function quoteProp(
   sample: PlayerSample | null,
   market: PropMarket,

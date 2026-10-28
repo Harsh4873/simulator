@@ -217,7 +217,12 @@ function paintPropResults(): void {
   if (!view || !panelAthlete) return;
   const results = document.querySelector<HTMLElement>('[data-prop-results]');
   if (!results) return;
-  results.innerHTML = renderPropResults(view.result, panelAthlete, propForm);
+  const open = results.querySelector('details.prop-advanced');
+  const keepOpen = open instanceof HTMLDetailsElement && open.open;
+  const player = view.rates.players.find((item) => item.athlete_id === panelAthlete) ?? null;
+  results.innerHTML = renderPropResults(view.result, panelAthlete, propForm, player);
+  const details = results.querySelector('details.prop-advanced');
+  if (keepOpen && details instanceof HTMLDetailsElement) details.open = true;
 }
 
 function onPropEdit(event: Event): void {

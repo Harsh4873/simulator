@@ -2,9 +2,11 @@ import { formatTip } from './date.ts';
 import { playerHeadshotUrl } from './display.ts';
 import { escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
 import {
+  decideVerdict,
   formatFairPrice,
   parseBookPrice,
   priceError,
+  propContextFromPlayer,
   quoteProp,
   type PlayerSample,
   type PriceStyle,
@@ -622,15 +624,30 @@ export const DEFAULT_PROP_FORM: PropFormState = {
 export type PanelTab = 'forecast' | 'props';
 
 function percent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
+  const tenths = Math.round(value * 1000) / 10;
+  const text = Number.isInteger(tenths) ? tenths.toFixed(0) : tenths.toFixed(1);
+  return `${text}%`;
 }
+
+const MARKET_LABEL: Record<PropMarket, string> = {
+  pts: 'points',
+  reb: 'rebounds',
+  ast: 'assists',
+  pra: 'points + rebounds + assists',
+  tpm: 'threes',
+};
 
 function signedPoints(value: number): string {
   const points = value * 100;
   return `${points >= 0 ? '+' : ''}${points.toFixed(1)} pp`;
 }
 
-export function renderPropResults(score: Simulation, athleteId: string, form: PropFormState): string {
+export function renderPropResults(
+  score: Simulation,
+  athleteId: string,
+  form: PropFormState,
+  player: Parameters<typeof propContextFromPlayer>[0] = null,
+): string {
   const sample = score.playerDraws?.get(athleteId) ?? null;
   if (!sample) return '<p class="prop-note">This player\'s simulations are not in the data.</p>';
   if (form.line.trim() === '' || form.odds.trim() === '') {
@@ -641,33 +658,48 @@ export function renderPropResults(score: Simulation, athleteId: string, form: Pr
   if (!price) return `<p class="prop-note">${escapeHtml(priceError(form.odds, form.style))}</p>`;
   const opposite = form.opposite.trim() === '' ? null : parseBookPrice(form.opposite, form.style);
   const quote = quoteProp(sample as PlayerSample, form.market, form.side, line, price, opposite);
-  if (!quote || quote.modelProbability === null || quote.breakEven === null || quote.edge === null || quote.expectedReturn === null) {
+  if (!quote || quote.breakEven === null || quote.expectedReturn === null) {
     return `<p class="prop-note">${escapeHtml(priceError(form.odds, form.style))}</p>`;
   }
-  const modelWidth = Math.max(0, Math.min(100, quote.modelProbability * 100));
-  const bookWidth = Math.max(0, Math.min(100, quote.breakEven * 100));
-  const fair = formatFairPrice(quote.modelProbability, price.style) ?? 'not in the data';
+  const verdict = decideVerdict(quote, propContextFromPlayer(player), form.market);
+  if (!verdict) return `<p class="prop-note">${escapeHtml(priceError(form.odds, form.style))}</p>`;
+  const stats =
+    quote.modelProbability === null || quote.edge === null
+      ? ''
+      : `<dl class="verdict-stats">
+          <div><dt>Model chance</dt><dd>${percent(quote.modelProbability)}</dd></div>
+          <div><dt>Book break-even</dt><dd>${percent(quote.breakEven)}</dd></div>
+          <div><dt>Estimated edge</dt><dd>${signedPoints(quote.edge)}</dd></div>
+        </dl>`;
+  const side = form.side === 'over' ? 'Over' : 'Under';
+  const caption = `${side} ${form.line} ${MARKET_LABEL[form.market]}`;
+  const fair = quote.modelProbability === null ? 'not in the data' : (formatFairPrice(quote.modelProbability, price.style) ?? 'not in the data');
   const error = quote.standardError === null ? '' : ` Sampling noise about ±${(quote.standardError * 1.96 * 100).toFixed(1)} pp.`;
+  const modelWidth = quote.modelProbability === null ? 0 : Math.max(0, Math.min(100, quote.modelProbability * 100));
+  const bookWidth = Math.max(0, Math.min(100, quote.breakEven * 100));
   const oppositeNote =
     form.opposite.trim() !== '' && opposite === null
       ? '<p>The opposite price was not valid in this format, so the no-vig price is left out.</p>'
       : '';
   const noVig = quote.noVig === null ? '' : `<p>No-vig price on this side: ${percent(quote.noVig)}. That is not the break-even of the price you would bet.</p>`;
   return `<div class="prop-results">
-    <p class="prop-figure">Model ${percent(quote.modelProbability)}</p>
-    <p class="prop-figure">Book break-even ${percent(quote.breakEven)}</p>
-    <div class="prop-compare" role="img" aria-label="Model ${percent(quote.modelProbability)} versus book ${percent(quote.breakEven)}">
-      <div class="prop-row"><span>Model</span><span class="prop-track"><span class="prop-fill model" style="width:${modelWidth}%"></span></span></div>
-      <div class="prop-row"><span>Book</span><span class="prop-track"><span class="prop-fill book" style="width:${bookWidth}%"></span></span></div>
-    </div>
-    <p>Difference ${signedPoints(quote.edge)}</p>
-    <p>Expected return per $1 risked ${(quote.expectedReturn * 100).toFixed(1)}%</p>
-    <p>Read as ${escapeHtml(price.label)}</p>
-    <p>Model fair price ${escapeHtml(fair)}</p>
-    <p>${quote.grade.wins} wins, ${quote.grade.losses} losses, ${quote.grade.pushes} pushes, ${quote.grade.voids} did not play, out of ${sample.min.length}.${error}</p>
-    ${oppositeNote}
-    ${noVig}
-    <p class="prop-note">A positive difference is not a validated betting edge. The model has not been walk-forward calibrated, and some players are missing current-season shooting.</p>
+    <p class="prop-caption">${escapeHtml(caption)}</p>
+    <p class="verdict-mark ${verdict.verdict.toLowerCase()}">${verdict.verdict}</p>
+    ${stats}
+    <p class="verdict-why">Why: ${escapeHtml(verdict.text)}</p>
+    <details class="prop-advanced">
+      <summary>Advanced details</summary>
+      <p>Expected return per $1 risked ${(quote.expectedReturn * 100).toFixed(1)}%</p>
+      <p>Read as ${escapeHtml(price.label)}</p>
+      <p>Model fair price ${escapeHtml(fair)}</p>
+      <p>${quote.grade.wins} wins, ${quote.grade.losses} losses, ${quote.grade.pushes} pushes, ${quote.grade.voids} did not play, out of ${sample.min.length}.${error}</p>
+      <div class="prop-compare" role="img" aria-label="Model ${quote.modelProbability === null ? 'not graded' : percent(quote.modelProbability)} versus book ${percent(quote.breakEven)}">
+        <div class="prop-row"><span>Model</span><span class="prop-track"><span class="prop-fill model" style="width:${modelWidth}%"></span></span></div>
+        <div class="prop-row"><span>Book</span><span class="prop-track"><span class="prop-fill book" style="width:${bookWidth}%"></span></span></div>
+      </div>
+      ${oppositeNote}
+      ${noVig}
+    </details>
   </div>`;
 }
 
@@ -743,6 +775,6 @@ export function renderPlayerPanel(
       <h3>Prop Analyzer</h3>
       <p class="prop-note">The sportsbook is compared after the 10,000 games. It does not change them.</p>
       ${propFormMarkup(form)}
-      <div data-prop-results>${renderPropResults(score, athleteId, form)}</div>
+      <div data-prop-results aria-live="polite">${renderPropResults(score, athleteId, form, row)}</div>
     </div>`;
 }
