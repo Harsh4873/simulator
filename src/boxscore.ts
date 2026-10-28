@@ -1,7 +1,16 @@
 import { formatTip } from './date.ts';
 import { playerHeadshotUrl } from './display.ts';
 import { escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
-import { quoteProp, type PlayerSample, type PropMarket, type PropSide } from './props.ts';
+import {
+  formatFairPrice,
+  parseBookPrice,
+  priceError,
+  quoteProp,
+  type PlayerSample,
+  type PriceStyle,
+  type PropMarket,
+  type PropSide,
+} from './props.ts';
 import type { MarginForecast, MarginalRead, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
 import type { ColumnKey, RatePlayer, SlateGame, TeamSide } from './types.ts';
 
@@ -596,6 +605,7 @@ export interface PropFormState {
   market: PropMarket;
   side: PropSide;
   line: string;
+  style: PriceStyle;
   odds: string;
   opposite: string;
 }
@@ -604,6 +614,7 @@ export const DEFAULT_PROP_FORM: PropFormState = {
   market: 'pts',
   side: 'over',
   line: '',
+  style: 'american',
   odds: '',
   opposite: '',
 };
@@ -623,20 +634,25 @@ export function renderPropResults(score: Simulation, athleteId: string, form: Pr
   const sample = score.playerDraws?.get(athleteId) ?? null;
   if (!sample) return '<p class="prop-note">This player\'s simulations are not in the data.</p>';
   if (form.line.trim() === '' || form.odds.trim() === '') {
-    return '<p class="prop-note">Enter a line and American odds. The book is not used in the simulation.</p>';
+    return '<p class="prop-note">Enter a line and a price: American -110, multiplier 1.91, or percent 52.4. The book is not used in the simulation.</p>';
   }
   const line = Number(form.line);
-  const odds = Number(form.odds);
-  const opposite = form.opposite.trim() === '' ? null : Number(form.opposite);
-  const quote = quoteProp(sample as PlayerSample, form.market, form.side, line, odds, opposite);
+  const price = parseBookPrice(form.odds, form.style);
+  if (!price) return `<p class="prop-note">${escapeHtml(priceError(form.odds, form.style))}</p>`;
+  const opposite = form.opposite.trim() === '' ? null : parseBookPrice(form.opposite, form.style);
+  const quote = quoteProp(sample as PlayerSample, form.market, form.side, line, price, opposite);
   if (!quote || quote.modelProbability === null || quote.breakEven === null || quote.edge === null || quote.expectedReturn === null) {
-    return '<p class="prop-note">American odds must be -100 or lower, or +100 or higher.</p>';
+    return `<p class="prop-note">${escapeHtml(priceError(form.odds, form.style))}</p>`;
   }
   const modelWidth = Math.max(0, Math.min(100, quote.modelProbability * 100));
   const bookWidth = Math.max(0, Math.min(100, quote.breakEven * 100));
-  const fair = quote.fairAmerican === null ? 'not in the data' : (quote.fairAmerican > 0 ? `+${quote.fairAmerican}` : `${quote.fairAmerican}`);
+  const fair = formatFairPrice(quote.modelProbability, price.style) ?? 'not in the data';
   const error = quote.standardError === null ? '' : ` Sampling noise about ±${(quote.standardError * 1.96 * 100).toFixed(1)} pp.`;
-  const noVig = quote.noVig === null ? '' : `<p>No-vig price on this side: ${percent(quote.noVig)}. That is not the break-even of the odds you would bet.</p>`;
+  const oppositeNote =
+    form.opposite.trim() !== '' && opposite === null
+      ? '<p>The opposite price was not valid in this format, so the no-vig price is left out.</p>'
+      : '';
+  const noVig = quote.noVig === null ? '' : `<p>No-vig price on this side: ${percent(quote.noVig)}. That is not the break-even of the price you would bet.</p>`;
   return `<div class="prop-results">
     <p class="prop-figure">Model ${percent(quote.modelProbability)}</p>
     <p class="prop-figure">Book break-even ${percent(quote.breakEven)}</p>
@@ -646,8 +662,10 @@ export function renderPropResults(score: Simulation, athleteId: string, form: Pr
     </div>
     <p>Difference ${signedPoints(quote.edge)}</p>
     <p>Expected return per $1 risked ${(quote.expectedReturn * 100).toFixed(1)}%</p>
-    <p>Model fair odds ${fair}</p>
+    <p>Read as ${escapeHtml(price.label)}</p>
+    <p>Model fair price ${escapeHtml(fair)}</p>
     <p>${quote.grade.wins} wins, ${quote.grade.losses} losses, ${quote.grade.pushes} pushes, ${quote.grade.voids} did not play, out of ${sample.min.length}.${error}</p>
+    ${oppositeNote}
     ${noVig}
     <p class="prop-note">A positive difference is not a validated betting edge. The model has not been walk-forward calibrated, and some players are missing current-season shooting.</p>
   </div>`;
@@ -664,6 +682,16 @@ function propFormMarkup(form: PropFormState): string {
   const options = markets
     .map((market) => `<option value="${market.value}"${form.market === market.value ? ' selected' : ''}>${market.label}</option>`)
     .join('');
+  const styles: { value: PriceStyle; label: string }[] = [
+    { value: 'american', label: 'American odds' },
+    { value: 'multiplier', label: 'Multiplier' },
+    { value: 'percent', label: 'Percent' },
+  ];
+  const styleOptions = styles
+    .map((style) => `<option value="${style.value}"${form.style === style.value ? ' selected' : ''}>${style.label}</option>`)
+    .join('');
+  const priceLabel = form.style === 'multiplier' ? 'Multiplier' : form.style === 'percent' ? 'Percent' : 'American odds';
+  const placeholder = form.style === 'multiplier' ? '1.91' : form.style === 'percent' ? '52.4' : '-110';
   return `<form class="prop-form" data-prop-form>
     <label>Market <select data-prop-market>${options}</select></label>
     <fieldset>
@@ -672,8 +700,10 @@ function propFormMarkup(form: PropFormState): string {
       <label><input type="radio" name="prop-side" value="under" data-prop-side${form.side === 'under' ? ' checked' : ''}> Under</label>
     </fieldset>
     <label>Prop line <input data-prop-line inputmode="decimal" value="${escapeHtml(form.line)}"></label>
-    <label>American odds <input data-prop-odds value="${escapeHtml(form.odds)}"></label>
-    <label>Opposite side odds, optional <input data-prop-opposite value="${escapeHtml(form.opposite)}"></label>
+    <label>Price format <select data-prop-style>${styleOptions}</select></label>
+    <label>${priceLabel} <input data-prop-odds inputmode="decimal" placeholder="${placeholder}" value="${escapeHtml(form.odds)}"></label>
+    <label>Opposite side, same format, optional <input data-prop-opposite inputmode="decimal" placeholder="${placeholder}" value="${escapeHtml(form.opposite)}"></label>
+    <p class="prop-note">The same price three ways: -110, 1.91x, or 52.4%. A trailing x or % sets the format for that box.</p>
   </form>`;
 }
 

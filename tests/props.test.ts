@@ -3,7 +3,9 @@ import test from 'node:test';
 import {
   americanBreakEven,
   fairAmericanOdds,
+  formatFairPrice,
   gradeProp,
+  parseBookPrice,
   quoteProp,
   type PlayerSample,
 } from '../src/props.ts';
@@ -59,6 +61,42 @@ test('American odds break-even, return, fair price and no-vig', () => {
   assert.equal(quote.expectedReturn, (6 * (100 / 110) - 4) / 10);
   assert.equal(fairAmericanOdds(0.6), -150);
   assert.equal(fairAmericanOdds(0.4), 150);
+});
+
+test('a multiplier and a percent match the same American price', () => {
+  const rows = Array.from({ length: 10 }, (_, index) => played(index < 6 ? 40 : 10));
+  const american = quoteProp(sample(rows), 'pts', 'over', 34.5, -110, -110);
+  const decimal = 210 / 110;
+  const multiplier = parseBookPrice(String(decimal), 'multiplier');
+  const percent = parseBookPrice(`${(110 / 210) * 100}%`, 'percent');
+  assert.ok(american && multiplier && percent);
+  const fromMultiplier = quoteProp(sample(rows), 'pts', 'over', 34.5, multiplier, multiplier);
+  const fromPercent = quoteProp(sample(rows), 'pts', 'over', 34.5, percent, percent);
+  assert.ok(fromMultiplier && fromPercent);
+  assert.ok(Math.abs((fromMultiplier.breakEven ?? 0) - (american.breakEven ?? 0)) < 1e-12);
+  assert.ok(Math.abs((fromPercent.breakEven ?? 0) - (american.breakEven ?? 0)) < 1e-12);
+  assert.ok(Math.abs((fromMultiplier.expectedReturn ?? 0) - (american.expectedReturn ?? 0)) < 1e-12);
+  assert.ok(Math.abs((fromPercent.expectedReturn ?? 0) - (american.expectedReturn ?? 0)) < 1e-12);
+  assert.equal(fromMultiplier.noVig, 0.5);
+  assert.equal(fromPercent.noVig, 0.5);
+  assert.deepEqual(fromMultiplier.grade, american.grade);
+  assert.equal(parseBookPrice('2.5x', 'american')?.breakEven, 0.4);
+  assert.equal(parseBookPrice('2.5x', 'american')?.profit, 1.5);
+  assert.equal(parseBookPrice('40%', 'multiplier')?.breakEven, 0.4);
+  assert.ok(Math.abs((parseBookPrice('40', 'percent')?.profit ?? 0) - 1.5) < 1e-12);
+  assert.equal(parseBookPrice('0.4', 'percent')?.breakEven, 0.4);
+  assert.equal(parseBookPrice('-110', 'percent')?.breakEven, 110 / 210);
+  assert.equal(parseBookPrice('1', 'multiplier'), null);
+  assert.equal(parseBookPrice('0.91', 'multiplier'), null);
+  assert.equal(parseBookPrice('0', 'percent'), null);
+  assert.equal(parseBookPrice('100', 'percent'), null);
+  assert.equal(parseBookPrice('150%', 'percent'), null);
+  assert.equal(parseBookPrice('+10000', 'american')?.breakEven, 100 / 10100);
+  assert.equal(parseBookPrice('101', 'multiplier')?.breakEven, 1 / 101);
+  assert.equal(parseBookPrice('1%', 'percent')?.profit, 99);
+  assert.equal(formatFairPrice(0.6, 'multiplier'), '1.6667x');
+  assert.equal(formatFairPrice(0.6, 'percent'), '60%');
+  assert.equal(formatFairPrice(0.6, 'american'), '-150');
 });
 
 test('the quote does not depend on which example game is on screen', () => {

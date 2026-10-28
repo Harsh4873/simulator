@@ -200,12 +200,14 @@ function readPropForm(): void {
   const line = document.querySelector<HTMLInputElement>('[data-prop-line]');
   const odds = document.querySelector<HTMLInputElement>('[data-prop-odds]');
   const opposite = document.querySelector<HTMLInputElement>('[data-prop-opposite]');
+  const style = document.querySelector<HTMLSelectElement>('[data-prop-style]');
   const side = document.querySelector<HTMLInputElement>('[data-prop-side]:checked');
   if (!market || !line || !odds || !opposite) return;
   propForm = {
     market: market.value === 'reb' || market.value === 'ast' || market.value === 'pra' || market.value === 'tpm' ? market.value : 'pts',
     side: side?.value === 'under' ? 'under' : 'over',
     line: line.value,
+    style: style?.value === 'multiplier' || style?.value === 'percent' ? style.value : 'american',
     odds: odds.value,
     opposite: opposite.value,
   };
@@ -222,6 +224,10 @@ function onPropEdit(event: Event): void {
   const target = event.target;
   if (!(target instanceof Element) || !target.closest('[data-prop-form]')) return;
   readPropForm();
+  if (target instanceof HTMLSelectElement && target.matches('[data-prop-style]')) {
+    syncPanel();
+    return;
+  }
   paintPropResults();
 }
 
