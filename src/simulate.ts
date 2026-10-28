@@ -1,12 +1,15 @@
 import { shownPercent, typicalityBucket, winCounts, type TypicalityBucket, type WinCounts } from './display.ts';
 import type { RateGame, RatePlayer } from './types.ts';
-import { binomial, gamma, gammaMean1, iterationSeed, mulberry32, normal, poisson, type Rng } from './rng.ts';
+import { binomial, gammaMean1, iterationSeed, mulberry32, normal, poisson, type Rng } from './rng.ts';
 
 export const ITERATIONS = 10000;
 export const REGULATION_MINUTES = 240;
 export const OT_PERIOD_MINUTES = 25;
 export const DIRICHLET_KAPPA = 80;
 export const MINUTES_CONCENTRATION = 320;
+export const STARTER_MINUTE_SD = 2;
+export const ROTATION_MINUTE_SD = 4;
+export const BENCH_MINUTE_SD = 6;
 export const PLAY_PRIOR_STRENGTH = 6;
 export const CAMEO_MINUTE_CAP = 12;
 export const QUESTIONABLE_SIGMA = 0.35;
@@ -75,8 +78,23 @@ export interface MarginalRead {
   bucket: TypicalityBucket;
 }
 
+export interface PlayerExpectation {
+  playRate: number;
+  minMean: number;
+  ptsMean: number;
+  rebMean: number;
+  astMean: number;
+  praMean: number;
+  minP10: number;
+  minP90: number;
+  ptsP10: number;
+  ptsP90: number;
+  ptsP95: number;
+}
+
 export interface SimulatedPlayer extends DrawnPlayer {
   band: PointsBand;
+  expectation?: PlayerExpectation;
   reads: {
     min: MarginalRead;
     tpm: MarginalRead;
@@ -159,14 +177,21 @@ export function teamGamesPlayed(roster: readonly Pick<RatePlayer, 'minutes_weigh
   return max;
 }
 
+export function isConfirmedStarter(player: AppearancePlayer, teamGames: number): boolean {
+  if (player.minutes_weight === 0 || player.questionable_widen) return false;
+  if (player.minutes_mean < 24) return false;
+  return teamGames >= 1 && player.games_2027 >= teamGames;
+}
+
 export function playProbability(player: AppearancePlayer, teamGames: number): number {
   if (player.minutes_weight === 0) return 0;
+  if (isConfirmedStarter(player, teamGames)) return 1;
   const games = Math.max(teamGames, player.games_2027);
   let priorMean = 0.12;
   if (player.games_2026 >= 40 || (player.games_2026 >= 20 && player.minutes_mean >= 24)) priorMean = 0.85;
   else if (player.games_2026 >= 10 && player.minutes_mean >= 20) priorMean = 0.35;
   let probability = (player.games_2027 + priorMean * PLAY_PRIOR_STRENGTH) / (games + PLAY_PRIOR_STRENGTH);
-  if (games >= 2 && player.games_2027 >= games) probability = Math.max(probability, 0.85);
+  if (!player.questionable_widen && games >= 2 && player.games_2027 >= games) return 1;
   if (player.questionable_widen) probability *= 0.5;
   return Math.min(1, Math.max(0, probability));
 }
@@ -188,6 +213,7 @@ function cameo(player: Pick<RatePlayer, 'games_2026' | 'games_2027' | 'minutes_w
 
 export function quantile(sortedAsc: number[], p: number): number {
   const n = sortedAsc.length;
+  if (n === 0) return 0;
   const index = Math.min(n - 1, Math.max(0, Math.ceil(p * n) - 1));
   return sortedAsc[index];
 }
@@ -344,43 +370,67 @@ function restedLine(player: RatePlayer): DrawnPlayer {
   };
 }
 
+function minuteNoise(baseline: number): number {
+  if (baseline >= 24) return STARTER_MINUTE_SD;
+  if (baseline >= 12) return ROTATION_MINUTE_SD;
+  return BENCH_MINUTE_SD;
+}
+
+function roleBaselines(baselines: number[], budget: number): number[] {
+  const anchor = baselines.map((value) => value >= 24);
+  let anchorSum = 0;
+  for (let index = 0; index < baselines.length; index += 1) {
+    if (anchor[index]) anchorSum += baselines[index];
+  }
+  if (anchorSum >= budget) {
+    return baselines.map((value, index) => (anchor[index] ? (value * budget) / anchorSum : 0));
+  }
+  let restSum = 0;
+  for (let index = 0; index < baselines.length; index += 1) {
+    if (!anchor[index]) restSum += baselines[index];
+  }
+  const restBudget = budget - anchorSum;
+  return baselines.map((value, index) => {
+    if (anchor[index]) return value;
+    if (!(restSum > 0)) return 0;
+    return (value * restBudget) / restSum;
+  });
+}
+
 function rawMinutes(players: RatePlayer[], budget: number, rng: Rng): number[] {
   if (players.length === 0 || !(budget > 0)) throw new Error('minute cap cannot fill the team budget');
-  const meanSum = players.reduce((sum, player) => sum + conditionalMinutes(player), 0);
-  const scaled =
-    meanSum > 0
-      ? players.map((player) => (conditionalMinutes(player) * budget) / meanSum)
-      : players.map(() => budget / players.length);
-  const shares = new Array<number>(players.length);
-  let shareSum = 0;
-  for (let i = 0; i < players.length; i += 1) {
-    const alpha = (MINUTES_CONCENTRATION * scaled[i]) / budget;
-    const drawn = alpha > 0 ? gamma(alpha, rng) : 0;
-    shares[i] = drawn;
-    shareSum += drawn;
+  const targets = players.map((player) => conditionalMinutes(player));
+  const baseline = roleBaselines(targets, budget);
+  const noisy = baseline.map((value, index) => {
+    let next = Math.max(0, value + normal(rng) * minuteNoise(value));
+    if (players[index].questionable_widen) {
+      next *= Math.exp(normal(rng) * QUESTIONABLE_SIGMA - (QUESTIONABLE_SIGMA ** 2) / 2);
+    }
+    return next;
+  });
+  let gap = budget - noisy.reduce((sum, value) => sum + value, 0);
+  const order = noisy
+    .map((_value, index) => ({ index, value: baseline[index] }))
+    .sort((a, b) => a.value - b.value || (players[a.index].athlete_id < players[b.index].athlete_id ? -1 : 1));
+  for (const item of order) {
+    if (Math.abs(gap) < 1e-6) break;
+    if (baseline[item.index] >= 24) continue;
+    if (gap > 0) {
+      noisy[item.index] += gap;
+      gap = 0;
+    } else {
+      const cut = Math.min(noisy[item.index], -gap);
+      noisy[item.index] -= cut;
+      gap += cut;
+    }
   }
-  if (!(shareSum > 0)) {
-    for (let i = 0; i < shares.length; i += 1) shares[i] = 1 / shares.length;
-  } else {
-    for (let i = 0; i < shares.length; i += 1) shares[i] /= shareSum;
+  if (Math.abs(gap) > 1e-6) {
+    const total = noisy.reduce((sum, value) => sum + value, 0);
+    if (total > 0) {
+      for (let index = 0; index < noisy.length; index += 1) noisy[index] = (noisy[index] * budget) / total;
+    }
   }
-  for (let i = 0; i < players.length; i += 1) {
-    if (!players[i].questionable_widen) continue;
-    const noise = normal(rng);
-    shares[i] *= Math.exp(noise * QUESTIONABLE_SIGMA - (QUESTIONABLE_SIGMA ** 2) / 2);
-  }
-  let renorm = 0;
-  for (const share of shares) renorm += share;
-  if (!(renorm > 0)) {
-    for (let i = 0; i < shares.length; i += 1) shares[i] = 1 / shares.length;
-  } else {
-    for (let i = 0; i < shares.length; i += 1) shares[i] /= renorm;
-  }
-  const raw = shares.map((share) => share * budget);
-  let rawSum = 0;
-  for (const value of raw) rawSum += value;
-  if (!(rawSum > 0)) return players.map(() => budget / players.length);
-  return raw.map((value) => (value * budget) / rawSum);
+  return noisy;
 }
 
 function cappedMinutes(rows: { athlete_id: string; raw: number; cap: number }[], budget: number): number[] {
@@ -691,12 +741,42 @@ function readsFor(series: ToneSeries | undefined, line: DrawnPlayer): SimulatedP
   };
 }
 
+function expectationFrom(series: ToneSeries | undefined): PlayerExpectation {
+  const minutes = series ? Array.from(series.min) : [];
+  const points = series ? Array.from(series.pts) : [];
+  const rebounds = series ? Array.from(series.reb) : [];
+  const assists = series ? Array.from(series.ast) : [];
+  const count = Math.max(minutes.length, 1);
+  const mean = (values: number[]) => (values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length);
+  const played = minutes.filter((value) => value > 0).length;
+  const minMean = mean(minutes);
+  const ptsMean = mean(points);
+  const rebMean = mean(rebounds);
+  const astMean = mean(assists);
+  const minuteBand = bandFrom(minutes);
+  const pointBand = bandFrom(points);
+  return {
+    playRate: played / count,
+    minMean,
+    ptsMean,
+    rebMean,
+    astMean,
+    praMean: ptsMean + rebMean + astMean,
+    minP10: minuteBand.p10,
+    minP90: minuteBand.p90,
+    ptsP10: pointBand.p10,
+    ptsP90: pointBand.p90,
+    ptsP95: pointBand.p95,
+  };
+}
+
 function withReads(players: DrawnPlayer[], series: Map<string, ToneSeries>): SimulatedPlayer[] {
   return players.map((player) => {
     const stats = series.get(player.athlete_id);
     return {
       ...player,
       band: bandFrom(stats?.pts ?? new Uint16Array()),
+      expectation: expectationFrom(stats),
       reads: readsFor(stats, player),
     };
   });

@@ -32,6 +32,10 @@ test('appearance probability follows this season, not a three-game cutoff', () =
   assert.ok(playProbability(sharp, games) >= 0.85, `sharp ${playProbability(sharp, games)}`);
   assert.ok(playProbability(lavine, games) >= 0.85);
   assert.ok(playProbability(sabonis, games) >= 0.85);
+  const tatum = player('401909877', 'Jayson Tatum');
+  const celtics = card.games.find((item) => item.event_id === '401909877');
+  assert.ok(celtics);
+  assert.equal(playProbability(tatum, teamGamesPlayed(celtics.players.filter((item) => item.team_id === '2'))), 1);
   assert.equal(playProbability({ ...pedulla, minutes_weight: 0 }, games), 0);
 });
 
@@ -56,4 +60,29 @@ test('Pedulla is not in every Kings draw and LaVine keeps a starter share', { ti
   assert.ok(pedullaPlays / draws < 0.4, `pedulla play rate ${pedullaPlays / draws}`);
   assert.ok(lavineMinutes / draws > 22, `lavine minutes ${lavineMinutes / draws}`);
   assert.ok(sabonisMinutes / draws > 20, `sabonis minutes ${sabonisMinutes / draws}`);
+});
+
+test('a healthy starter who has played every logged game does not draw a DNP', { timeout: 60_000 }, () => {
+  const game = card.games.find((item) => item.event_id === '401909877');
+  assert.ok(game);
+  const tatum = player('401909877', 'Jayson Tatum');
+  const draws = 200;
+  let minutes = 0;
+  let sits = 0;
+  const played: number[] = [];
+  for (let index = 0; index < draws; index += 1) {
+    const draw = drawGame(game, mulberry32(iterationSeed(401909877, index)));
+    const line = [...draw.away, ...draw.home].find((item) => item.athlete_id === tatum.athlete_id);
+    const value = line?.min ?? 0;
+    minutes += value;
+    if (value === 0) sits += 1;
+    else played.push(value);
+  }
+  played.sort((a, b) => a - b);
+  const p10 = played[Math.max(0, Math.ceil(0.1 * played.length) - 1)] ?? 0;
+  const p90 = played[Math.max(0, Math.ceil(0.9 * played.length) - 1)] ?? 0;
+  assert.equal(sits, 0);
+  assert.ok(minutes / draws > 28, `tatum mean ${minutes / draws}`);
+  assert.ok(p10 >= 24, `tatum conditional p10 ${p10}`);
+  assert.ok(p90 <= 40, `tatum conditional p90 ${p90}`);
 });

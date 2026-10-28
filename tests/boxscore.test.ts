@@ -395,7 +395,7 @@ test('the panel opens, swaps, and closes from the player button', () => {
   assert.match(open, /Away Name/);
   assert.match(open, /PG/);
   assert.match(open, /Guard/);
-  assert.match(open, /This line is from the simulated game nearest the median combined score\./);
+  assert.match(open, /The table shows this player's average across all 10,000 games\./);
   assert.equal(open.includes('<a '), false);
   assert.equal(open.includes('title='), false);
   const swapped = renderPlayerPanel(game, card, model, '9');

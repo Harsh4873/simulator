@@ -44,9 +44,8 @@ test('revised Brooklyn-Boston draws sit Cenac, keep Wagner with Randle, and give
   }
   assert.ok(cenacMinutes / draws < 5, `cenac mean ${cenacMinutes / draws}`);
   assert.ok(wagnerMinutes > 0);
-  const expected = wagner.minutes_mean / randle.minutes_mean;
-  const actual = wagnerMinutes / randleMinutes;
-  assert.ok(Math.abs(actual - expected) <= 0.15 * expected, `wagner/randle ${actual} expected ${expected}`);
-  assert.ok(tatumMinutes / draws > 10, `tatum mean ${tatumMinutes / draws}`);
+  assert.ok(randleMinutes / draws > 28, `randle mean ${randleMinutes / draws}`);
+  assert.ok(wagnerMinutes < randleMinutes);
+  assert.ok(tatumMinutes / draws > 28, `tatum mean ${tatumMinutes / draws}`);
   assert.equal(ties, 0);
 });

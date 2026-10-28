@@ -179,9 +179,33 @@ function readOf(player: SimulatedPlayer, key: 'min' | 'tpm' | 'pts' | 'reb' | 'a
   return player.reads?.[key];
 }
 
-function playerRow(player: SimulatedPlayer): string {
+function expectedValue(player: SimulatedPlayer, key: ColumnKey): number | null {
+  const expectation = player.expectation;
+  if (!expectation) return null;
+  if (key === 'min') return expectation.minMean;
+  if (key === 'pts') return expectation.ptsMean;
+  if (key === 'reb') return expectation.rebMean;
+  if (key === 'ast') return expectation.astMean;
+  return null;
+}
+
+function expectedCell(player: SimulatedPlayer, key: ColumnKey): string {
+  const value = expectedValue(player, key);
+  if (value === null) return `<td data-col="${key}">—</td>`;
+  const shown = Math.round(value);
+  if (key === 'min' && player.expectation) {
+    return `<td data-col="min"><span class="stat">${shown}</span><span class="pct">${player.expectation.minP10}–${player.expectation.minP90}</span></td>`;
+  }
+  if (key === 'pts' && player.expectation) {
+    return `<td data-col="pts"><span class="stat">${shown}</span><span class="pct">${player.expectation.ptsP10}–${player.expectation.ptsP90}</span></td>`;
+  }
+  return `<td data-col="${key}">${shown}</td>`;
+}
+
+function playerRow(player: SimulatedPlayer, expected: boolean): string {
   const held = heldLabel(player);
   const cells = COLUMNS.map((column) => {
+    if (expected && player.expectation) return expectedCell(player, column.key);
     if (column.key === 'min' || column.key === 'tpm' || column.key === 'pts' || column.key === 'reb' || column.key === 'ast') {
       return toneCell(column.key, player[column.key], readOf(player, column.key), held);
     }
@@ -203,9 +227,52 @@ function footerRow(side: string, team: SimulatedTeam): string {
   return `<tr data-footer="${side}"><th scope="row">Total</th>${cells}</tr>`;
 }
 
-function teamSection(side: string, team: SimulatedTeam, sort: BoxSort): string {
-  const rows = orderPlayers(team.players, sort).map(playerRow).join('');
-  return `${rows}${footerRow(side, team)}`;
+function sortValue(player: SimulatedPlayer, key: ColumnKey, expected: boolean): number {
+  if (expected) {
+    const value = expectedValue(player, key);
+    if (value !== null) return value;
+  }
+  return player[key];
+}
+
+function teamSection(side: string, team: SimulatedTeam, sort: BoxSort, expected: boolean): string {
+  const players = team.players.slice();
+  const active = players.filter((player) => player.minutes_weight !== 0);
+  const inactive = players.filter((player) => player.minutes_weight === 0);
+  const direction = sort.direction === 'asc' ? 1 : -1;
+  active.sort((a, b) => {
+    const delta = sortValue(a, sort.key, expected) - sortValue(b, sort.key, expected);
+    if (delta !== 0) return delta * direction;
+    return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+  });
+  inactive.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const rows = [...active, ...inactive].map((player) => playerRow(player, expected)).join('');
+  if (!expected) return `${rows}${footerRow(side, team)}`;
+  const totals = {
+    min: 0,
+    fgm: 0,
+    fga: 0,
+    tpm: 0,
+    tpa: 0,
+    ftm: 0,
+    fta: 0,
+    pts: 0,
+    reb: 0,
+    ast: 0,
+  };
+  for (const player of team.players) {
+    totals.min += player.expectation?.minMean ?? 0;
+    totals.pts += player.expectation?.ptsMean ?? 0;
+    totals.reb += player.expectation?.rebMean ?? 0;
+    totals.ast += player.expectation?.astMean ?? 0;
+  }
+  const cells = COLUMNS.map((column) => {
+    if (column.key === 'fgm' || column.key === 'fga' || column.key === 'tpm' || column.key === 'tpa' || column.key === 'ftm' || column.key === 'fta') {
+      return `<td data-col="${column.key}">—</td>`;
+    }
+    return `<td data-col="${column.key}">${Math.round(totals[column.key])}</td>`;
+  }).join('');
+  return `${rows}<tr data-footer="${side}"><th scope="row">Expected</th>${cells}</tr>`;
 }
 
 function sortMark(sort: BoxSort, key: ColumnKey): string {
@@ -303,7 +370,7 @@ function scoreboard(game: SlateGame, score: Simulation, scenario: BoxScenario, f
   </div>`;
 }
 
-function boxTable(side: 'away' | 'home', slateSide: TeamSide, team: SimulatedTeam, sort: BoxSort): string {
+function boxTable(side: 'away' | 'home', slateSide: TeamSide, team: SimulatedTeam, sort: BoxSort, expected: boolean): string {
   const head = COLUMNS.map((column) => {
     const aria = sort.key === column.key ? (sort.direction === 'desc' ? 'descending' : 'ascending') : 'none';
     return `<th aria-sort="${aria}"><button type="button" class="sort-toggle" data-side="${side}" data-sort="${column.key}" aria-pressed="${sortPressed(sort, column.key)}">${column.label}${sortMark(sort, column.key)}</button></th>`;
@@ -314,7 +381,7 @@ function boxTable(side: 'away' | 'home', slateSide: TeamSide, team: SimulatedTea
     ${sortBar(side, name, sort)}
     <div class="table-scroll"><table>
       <thead><tr><th>Player</th>${head}</tr></thead>
-      <tbody>${teamSection(side, team, sort)}</tbody>
+      <tbody>${teamSection(side, team, sort, expected)}</tbody>
     </table></div>
   </section>`;
 }
@@ -328,12 +395,13 @@ export function renderBoxScore(
   scenario: BoxScenario = 'median',
 ): string {
   const shown = presented(score, scenario);
+  const expected = scenario !== 'upside' && shown.away.players.some((player) => player.expectation);
   const eventId = textOf(rate?.event_id) || textOf(game.event_id);
   const note =
     scenario === 'upside'
       ? UPSIDE_LABEL
-      : score.forecast
-        ? 'The score above is the mean of 10,000 games. This box score is one draw near those team means. It is not each player\'s expected line. The percent in a cell is that stat\'s percentile rank, not a win probability.'
+      : expected
+        ? 'Each row is that player\'s average across all 10,000 games, including games they sit. The range under minutes and points is that player\'s own 10th to 90th percentile. It is not one box score.'
         : 'This box score is the simulated game nearest the median combined score. The range under each score is the 5th to 95th percentile.';
   const upsideChecked = scenario === 'upside' ? ' checked' : '';
   return `<div data-event="${escapeHtml(eventId)}">
@@ -346,8 +414,8 @@ export function renderBoxScore(
       </p>
       <label class="color-choice"><input type="checkbox" data-probability-colors> Probability colors</label>
       <label class="scenario-choice"><input type="checkbox" data-upside-scenario${upsideChecked}> ${UPSIDE_LABEL}</label>
-      ${boxTable('away', game.away, shown.away, sort.away)}
-      ${boxTable('home', game.home, shown.home, sort.home)}
+      ${boxTable('away', game.away, shown.away, sort.away, expected)}
+      ${boxTable('home', game.home, shown.home, sort.home, expected)}
       <p class="note">${note}</p>
       <p class="note">The minutes column totals team-minutes: five players on the floor at once. Regulation is 240 (5 × 48). Overtime is 265 (5 × 53). It is not the length of the game.</p>
       <p class="legend">Brighter blue means that number is further from this player's middle in the 10,000 games. The percent is the share of those games at or below the number shown.</p>
@@ -437,7 +505,7 @@ function whySentences(row: CardRow | null, scenario: BoxScenario): string[] {
     sentences.push('This line is from the upside scenario: the 95th percentile of the combined score. Not the forecast.');
   } else {
     sentences.push(
-      'This line is from the simulated game nearest the median combined score. It is not a random draw and it is not a prediction.',
+      'The table shows this player\'s average across all 10,000 games. A 40-point game can still happen in the tail. It is not the line from one draw.',
     );
   }
   return sentences;

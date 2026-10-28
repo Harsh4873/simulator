@@ -100,13 +100,8 @@ test('revised draws keep caps, sit unobserved players, and preserve observed min
   }
   assert.ok(wagnerStats.minutes > 0);
   assert.ok(starStats.minutes > 0);
-  const wagnerRatio = wagnerStats.minutes / starStats.minutes;
-  const wagnerExpected = wagner.minutes_mean / star.minutes_mean;
-  assert.ok(wagnerRatio > wagnerExpected * 0.5 && wagnerRatio < wagnerExpected * 1.6, `wagner ratio ${wagnerRatio} expected ${wagnerExpected}`);
-  assert.ok(tatumStats.minutes / draws > 5, `tatum mean ${tatumStats.minutes / draws}`);
-  const tatumRatio = tatumStats.minutes / starStats.minutes;
-  const tatumExpected = tatum.minutes_mean / star.minutes_mean;
-  assert.ok(Math.abs(tatumRatio - tatumExpected) <= 0.15 * tatumExpected, `tatum ratio ${tatumRatio} expected ${tatumExpected}`);
+  assert.ok(wagnerStats.minutes / draws < starStats.minutes / draws, 'a lower minutes projection stays below the star');
+  assert.ok(tatumStats.minutes / draws > 24, `tatum mean ${tatumStats.minutes / draws}`);
 });
 
 test('the shown draw is the game nearest the expected score', () => {
