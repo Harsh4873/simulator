@@ -1,12 +1,13 @@
 import { formatTip } from './date.ts';
 import { playerHeadshotUrl } from './display.ts';
 import { escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
+import { quoteProp, type PlayerSample, type PropMarket, type PropSide } from './props.ts';
 import type { MarginForecast, MarginalRead, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
 import type { ColumnKey, RatePlayer, SlateGame, TeamSide } from './types.ts';
 
 export type BoxScenario = 'median' | 'upside';
 
-const UPSIDE_LABEL = 'Upside scenario: the 95th percentile of the combined score. Not the forecast.';
+const UPSIDE_LABEL = 'Explore simulations: one high-total game from the 10,000. The winner and the leading scorer can differ from the forecast.';
 
 const COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'min', label: 'MIN' },
@@ -591,12 +592,99 @@ function whoBlock(game: SlateGame, line: SimulatedPlayer, row: CardRow | null): 
   </div>`;
 }
 
+export interface PropFormState {
+  market: PropMarket;
+  side: PropSide;
+  line: string;
+  odds: string;
+  opposite: string;
+}
+
+export const DEFAULT_PROP_FORM: PropFormState = {
+  market: 'pts',
+  side: 'over',
+  line: '',
+  odds: '',
+  opposite: '',
+};
+
+export type PanelTab = 'forecast' | 'props';
+
+function percent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function signedPoints(value: number): string {
+  const points = value * 100;
+  return `${points >= 0 ? '+' : ''}${points.toFixed(1)} pp`;
+}
+
+export function renderPropResults(score: Simulation, athleteId: string, form: PropFormState): string {
+  const sample = score.playerDraws?.get(athleteId) ?? null;
+  if (!sample) return '<p class="prop-note">This player\'s simulations are not in the data.</p>';
+  if (form.line.trim() === '' || form.odds.trim() === '') {
+    return '<p class="prop-note">Enter a line and American odds. The book is not used in the simulation.</p>';
+  }
+  const line = Number(form.line);
+  const odds = Number(form.odds);
+  const opposite = form.opposite.trim() === '' ? null : Number(form.opposite);
+  const quote = quoteProp(sample as PlayerSample, form.market, form.side, line, odds, opposite);
+  if (!quote || quote.modelProbability === null || quote.breakEven === null || quote.edge === null || quote.expectedReturn === null) {
+    return '<p class="prop-note">American odds must be -100 or lower, or +100 or higher.</p>';
+  }
+  const modelWidth = Math.max(0, Math.min(100, quote.modelProbability * 100));
+  const bookWidth = Math.max(0, Math.min(100, quote.breakEven * 100));
+  const fair = quote.fairAmerican === null ? 'not in the data' : (quote.fairAmerican > 0 ? `+${quote.fairAmerican}` : `${quote.fairAmerican}`);
+  const error = quote.standardError === null ? '' : ` Sampling noise about ±${(quote.standardError * 1.96 * 100).toFixed(1)} pp.`;
+  const noVig = quote.noVig === null ? '' : `<p>No-vig price on this side: ${percent(quote.noVig)}. That is not the break-even of the odds you would bet.</p>`;
+  return `<div class="prop-results">
+    <p class="prop-figure">Model ${percent(quote.modelProbability)}</p>
+    <p class="prop-figure">Book break-even ${percent(quote.breakEven)}</p>
+    <div class="prop-compare" role="img" aria-label="Model ${percent(quote.modelProbability)} versus book ${percent(quote.breakEven)}">
+      <div class="prop-row"><span>Model</span><span class="prop-track"><span class="prop-fill model" style="width:${modelWidth}%"></span></span></div>
+      <div class="prop-row"><span>Book</span><span class="prop-track"><span class="prop-fill book" style="width:${bookWidth}%"></span></span></div>
+    </div>
+    <p>Difference ${signedPoints(quote.edge)}</p>
+    <p>Expected return per $1 risked ${(quote.expectedReturn * 100).toFixed(1)}%</p>
+    <p>Model fair odds ${fair}</p>
+    <p>${quote.grade.wins} wins, ${quote.grade.losses} losses, ${quote.grade.pushes} pushes, ${quote.grade.voids} did not play, out of ${sample.min.length}.${error}</p>
+    ${noVig}
+    <p class="prop-note">A positive difference is not a validated betting edge. The model has not been walk-forward calibrated, and some players are missing current-season shooting.</p>
+  </div>`;
+}
+
+function propFormMarkup(form: PropFormState): string {
+  const markets: { value: PropMarket; label: string }[] = [
+    { value: 'pts', label: 'Points' },
+    { value: 'reb', label: 'Rebounds' },
+    { value: 'ast', label: 'Assists' },
+    { value: 'pra', label: 'Points + rebounds + assists' },
+    { value: 'tpm', label: 'Three-pointers made' },
+  ];
+  const options = markets
+    .map((market) => `<option value="${market.value}"${form.market === market.value ? ' selected' : ''}>${market.label}</option>`)
+    .join('');
+  return `<form class="prop-form" data-prop-form>
+    <label>Market <select data-prop-market>${options}</select></label>
+    <fieldset>
+      <legend>Bet direction</legend>
+      <label><input type="radio" name="prop-side" value="over" data-prop-side${form.side === 'over' ? ' checked' : ''}> Over</label>
+      <label><input type="radio" name="prop-side" value="under" data-prop-side${form.side === 'under' ? ' checked' : ''}> Under</label>
+    </fieldset>
+    <label>Prop line <input data-prop-line inputmode="decimal" value="${escapeHtml(form.line)}"></label>
+    <label>American odds <input data-prop-odds value="${escapeHtml(form.odds)}"></label>
+    <label>Opposite side odds, optional <input data-prop-opposite value="${escapeHtml(form.opposite)}"></label>
+  </form>`;
+}
+
 export function renderPlayerPanel(
   game: SlateGame,
   rate: PanelRate | null,
   score: Simulation,
   athleteId: string,
   scenario: BoxScenario = 'median',
+  tab: PanelTab = 'forecast',
+  form: PropFormState = DEFAULT_PROP_FORM,
 ): string {
   const shown = presented(score, scenario);
   const line = findLine(shown, athleteId);
@@ -605,12 +693,26 @@ export function renderPlayerPanel(
   }
   const row = rate?.players.find((player) => player.athlete_id === athleteId) ?? null;
   const sentences = whySentences(row, scenario).map((sentence) => `<p>${escapeHtml(sentence)}</p>`).join('');
+  const forecastHidden = tab === 'props' ? ' hidden' : '';
+  const propsHidden = tab === 'forecast' ? ' hidden' : '';
   return `<button type="button" data-close>Close</button>
     ${whoBlock(game, line, row)}
-    <h3>This simulated game</h3>
-    ${drawnLine(line)}
-    <h3>Why</h3>
-    <div class="why">${sentences}</div>
-    <h3>Shrunk rates on the card</h3>
-    ${samplingList(row, shown, shockFor(shown, line.team_id))}`;
+    <div class="panel-tabs" role="tablist">
+      <button type="button" role="tab" data-panel-tab="forecast" aria-selected="${tab === 'forecast' ? 'true' : 'false'}">Player Forecast</button>
+      <button type="button" role="tab" data-panel-tab="props" aria-selected="${tab === 'props' ? 'true' : 'false'}">Prop Analyzer</button>
+    </div>
+    <div data-panel-view="forecast"${forecastHidden}>
+      <h3>Expected line</h3>
+      ${drawnLine(line)}
+      <h3>Why</h3>
+      <div class="why">${sentences}</div>
+      <h3>Shrunk rates on the card</h3>
+      ${samplingList(row, shown, shockFor(shown, line.team_id))}
+    </div>
+    <div data-panel-view="props"${propsHidden}>
+      <h3>Prop Analyzer</h3>
+      <p class="prop-note">The sportsbook is compared after the 10,000 games. It does not change them.</p>
+      ${propFormMarkup(form)}
+      <div data-prop-results>${renderPropResults(score, athleteId, form)}</div>
+    </div>`;
 }

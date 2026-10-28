@@ -154,6 +154,7 @@ function score(overtime: boolean): Simulation {
     homeTotals: [homePts],
     wins: { away: 2500, tie: 0, home: 7500 },
     upside: view,
+    playerDraws: new Map(),
   };
 }
 
@@ -275,7 +276,7 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   assert.match(html, /<p class="score away">26<\/p>/);
   assert.match(html, /<p class="score home">11<\/p>/);
   assert.match(html, /Nearest the median combined score/);
-  assert.match(html, /Upside scenario: the 95th percentile of the combined score\. Not the forecast\./);
+  assert.match(html, /Explore simulations: one high-total game from the 10,000\./);
   assert.equal(html.includes('95th percentile of 10,000 games'), false);
   assert.match(html, /5th to 95th percentile/);
   assert.match(html, /<p class="interval away">80–140<\/p>/);
@@ -337,7 +338,7 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
 test('the upside control labels the 95th percentile scenario', () => {
   const model = score(false);
   const html = renderBoxScore(game, null, model, now, undefined, 'upside');
-  assert.match(html, /Upside scenario: the 95th percentile of the combined score\. Not the forecast\./);
+  assert.match(html, /Explore simulations: one high-total game from the 10,000\./);
   assert.match(html, /<input type="checkbox" data-upside-scenario checked>/);
   assert.equal(html.includes('Nearest the median combined score'), false);
   assert.equal(html.includes('This box score is the simulated game nearest the median combined score.'), false);

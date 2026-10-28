@@ -140,6 +140,7 @@ export interface Simulation {
   away: SimulatedTeam;
   home: SimulatedTeam;
   upside: ScenarioView;
+  playerDraws: Map<string, ToneSeries>;
 }
 
 const COUNT_KEYS = ['min', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'pts', 'reb', 'ast'] as const;
@@ -876,5 +877,6 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
     away: chosen.away,
     home: chosen.home,
     upside,
+    playerDraws: series,
   };
 }

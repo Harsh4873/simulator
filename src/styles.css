@@ -326,6 +326,38 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .team-box { margin-top: 28px; }
 
+.panel-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.panel-tabs button {
+  margin: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+}
+
+.panel-tabs button[aria-selected="true"] { border-color: var(--accent); }
+
+.prop-form { display: grid; gap: 10px; margin: 8px 0 12px; }
+.prop-form label, .prop-form fieldset { display: grid; gap: 4px; margin: 0; }
+.prop-form input, .prop-form select {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  padding: 8px;
+  font: inherit;
+}
+.prop-figure { margin: 4px 0; font-size: 1.5rem; }
+.prop-note { color: var(--muted); font-size: 0.875rem; line-height: 1.4; }
+.prop-row { display: grid; grid-template-columns: 4.5rem 1fr; gap: 8px; align-items: center; margin: 6px 0; }
+.prop-track { display: block; height: 10px; background: var(--surface); }
+.prop-fill { display: block; height: 10px; }
+.prop-fill.model { background: var(--blue); }
+.prop-fill.book { background: var(--accent); }
+
 .team-box h2 {
   margin: 0 0 8px;
   font-family: 'Bebas Neue', sans-serif;

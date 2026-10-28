@@ -3,9 +3,13 @@ import {
   DEFAULT_SIDE_SORTS,
   isColumnKey,
   nextBoxSort,
+  DEFAULT_PROP_FORM,
   renderBoxScore,
   renderPlayerPanel,
+  renderPropResults,
   type BoxScenario,
+  type PanelTab,
+  type PropFormState,
   type SideSorts,
 } from './boxscore.ts';
 import { nextPanelAthlete, probabilityColorsOn, themeFromStorage } from './display.ts';
@@ -33,6 +37,8 @@ let panelAthlete: string | null = null;
 let view: { game: SlateGame; rates: RateGame; result: Simulation } | null = null;
 let sideSorts: SideSorts = DEFAULT_SIDE_SORTS;
 let upsideOn = false;
+let panelTab: PanelTab = 'forecast';
+let propForm: PropFormState = { ...DEFAULT_PROP_FORM };
 
 function scenario(): BoxScenario {
   return upsideOn ? 'upside' : 'median';
@@ -106,7 +112,15 @@ function syncPanel(): void {
   }
   if (playerFrame) playerFrame.hidden = false;
   desk.classList.add('panel-open');
-  panelBody.innerHTML = renderPlayerPanel(view.game, view.rates, view.result, panelAthlete, scenario());
+  panelBody.innerHTML = renderPlayerPanel(
+    view.game,
+    view.rates,
+    view.result,
+    panelAthlete,
+    scenario(),
+    panelTab,
+    propForm,
+  );
 }
 
 async function onSimulate(button: HTMLButtonElement): Promise<void> {
@@ -159,6 +173,12 @@ function onDeskClick(event: Event): void {
     syncPanel();
     return;
   }
+  const tab = target.closest('[data-panel-tab]');
+  if (tab instanceof HTMLButtonElement) {
+    panelTab = tab.dataset.panelTab === 'props' ? 'props' : 'forecast';
+    syncPanel();
+    return;
+  }
   const sortButton = target.closest('button[data-sort]');
   if (sortButton instanceof HTMLButtonElement) {
     const key = sortButton.dataset.sort ?? '';
@@ -173,6 +193,36 @@ function onDeskClick(event: Event): void {
   if (!(player instanceof HTMLButtonElement)) return;
   panelAthlete = nextPanelAthlete(panelAthlete, player.dataset.athlete ?? null);
   syncPanel();
+}
+
+function readPropForm(): void {
+  const market = document.querySelector<HTMLSelectElement>('[data-prop-market]');
+  const line = document.querySelector<HTMLInputElement>('[data-prop-line]');
+  const odds = document.querySelector<HTMLInputElement>('[data-prop-odds]');
+  const opposite = document.querySelector<HTMLInputElement>('[data-prop-opposite]');
+  const side = document.querySelector<HTMLInputElement>('[data-prop-side]:checked');
+  if (!market || !line || !odds || !opposite) return;
+  propForm = {
+    market: market.value === 'reb' || market.value === 'ast' || market.value === 'pra' || market.value === 'tpm' ? market.value : 'pts',
+    side: side?.value === 'under' ? 'under' : 'over',
+    line: line.value,
+    odds: odds.value,
+    opposite: opposite.value,
+  };
+}
+
+function paintPropResults(): void {
+  if (!view || !panelAthlete) return;
+  const results = document.querySelector<HTMLElement>('[data-prop-results]');
+  if (!results) return;
+  results.innerHTML = renderPropResults(view.result, panelAthlete, propForm);
+}
+
+function onPropEdit(event: Event): void {
+  const target = event.target;
+  if (!(target instanceof Element) || !target.closest('[data-prop-form]')) return;
+  readPropForm();
+  paintPropResults();
 }
 
 function onProbabilityColors(event: Event): void {
@@ -218,6 +268,8 @@ function bind(): void {
   bound = true;
   desk.addEventListener('click', onDeskClick);
   desk.addEventListener('change', onProbabilityColors);
+  desk.addEventListener('input', onPropEdit);
+  desk.addEventListener('change', onPropEdit);
   desk.addEventListener('error', onImageError, true);
   document.addEventListener('keydown', onKey);
   applyProbabilityColors();
