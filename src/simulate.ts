@@ -6,6 +6,9 @@ export const ITERATIONS = 10000;
 export const REGULATION_MINUTES = 240;
 export const OT_PERIOD_MINUTES = 25;
 export const DIRICHLET_KAPPA = 80;
+export const MINUTES_CONCENTRATION = 320;
+export const PLAY_PRIOR_STRENGTH = 6;
+export const CAMEO_MINUTE_CAP = 12;
 export const QUESTIONABLE_SIGMA = 0.35;
 export const TEAM_SHOCK_SIGMA = 0.06;
 export const PHI_FGA = 10;
@@ -35,6 +38,8 @@ export interface DrawnPlayer {
   minutes_weight: 0 | 1;
   thin_sample: boolean;
   games: number;
+  games_2026: number;
+  games_2027: number;
   shooting_games: number;
   min: number;
   fgm: number;
@@ -110,7 +115,10 @@ export interface Simulation {
   regulationHomePts: number;
   missingShootingAthleteIds: string[];
   combinedTotals: number[];
+  awayTotals: number[];
+  homeTotals: number[];
   wins: WinCounts;
+  forecast?: MarginForecast;
   away: SimulatedTeam;
   home: SimulatedTeam;
   upside: ScenarioView;
@@ -137,6 +145,47 @@ export function isUnobservedProfile(player: {
   return player.minutes_weight !== 0 && player.shooting_games === 0 && player.games < UNOBSERVED_MAX_GAMES;
 }
 
+type AppearancePlayer = Pick<
+  RatePlayer,
+  'minutes_weight' | 'games_2026' | 'games_2027' | 'minutes_mean' | 'questionable_widen'
+>;
+
+export function teamGamesPlayed(roster: readonly Pick<RatePlayer, 'minutes_weight' | 'games_2027'>[]): number {
+  let max = 0;
+  for (const player of roster) {
+    if (player.minutes_weight === 0) continue;
+    if (player.games_2027 > max) max = player.games_2027;
+  }
+  return max;
+}
+
+export function playProbability(player: AppearancePlayer, teamGames: number): number {
+  if (player.minutes_weight === 0) return 0;
+  const games = Math.max(teamGames, player.games_2027);
+  let priorMean = 0.12;
+  if (player.games_2026 >= 40 || (player.games_2026 >= 20 && player.minutes_mean >= 24)) priorMean = 0.85;
+  else if (player.games_2026 >= 10 && player.minutes_mean >= 20) priorMean = 0.35;
+  let probability = (player.games_2027 + priorMean * PLAY_PRIOR_STRENGTH) / (games + PLAY_PRIOR_STRENGTH);
+  if (games >= 2 && player.games_2027 >= games) probability = Math.max(probability, 0.85);
+  if (player.questionable_widen) probability *= 0.5;
+  return Math.min(1, Math.max(0, probability));
+}
+
+export function conditionalMinutes(player: AppearancePlayer): number {
+  if (player.minutes_weight === 0) return 0;
+  if (player.games_2027 === 0 && player.games_2026 < 20) return Math.min(player.minutes_mean, CAMEO_MINUTE_CAP);
+  return Math.max(0, player.minutes_mean);
+}
+
+function cameo(player: Pick<RatePlayer, 'games_2026' | 'games_2027' | 'minutes_weight' | 'shooting_games'>): boolean {
+  return (
+    player.minutes_weight !== 0 &&
+    player.games_2027 === 0 &&
+    player.games_2026 < 20 &&
+    player.shooting_games === 0
+  );
+}
+
 export function quantile(sortedAsc: number[], p: number): number {
   const n = sortedAsc.length;
   const index = Math.min(n - 1, Math.max(0, Math.ceil(p * n) - 1));
@@ -156,6 +205,77 @@ export function percentileDrawIndex(combined: number[], percentile = 0.95): numb
     best = index;
   }
   return best;
+}
+
+export interface MarginForecast {
+  awayMean: number;
+  homeMean: number;
+  marginMean: number;
+  marginMedian: number;
+  totalMedian: number;
+  awayBy10: number;
+  awayBy20: number;
+  homeBy10: number;
+  homeBy20: number;
+}
+
+export function representativeIndex(away: ArrayLike<number>, home: ArrayLike<number>): number {
+  const count = away.length;
+  if (count === 0) return 0;
+  let awaySum = 0;
+  let homeSum = 0;
+  for (let index = 0; index < count; index += 1) {
+    awaySum += away[index];
+    homeSum += home[index];
+  }
+  const awayMean = awaySum / count;
+  const homeMean = homeSum / count;
+  let best = 0;
+  let bestDistance = Infinity;
+  for (let index = 0; index < count; index += 1) {
+    const distance = (away[index] - awayMean) ** 2 + (home[index] - homeMean) ** 2;
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = index;
+    }
+  }
+  return best;
+}
+
+export function marginForecast(away: ArrayLike<number>, home: ArrayLike<number>): MarginForecast {
+  const count = away.length;
+  const margins: number[] = [];
+  const totals: number[] = [];
+  let awaySum = 0;
+  let homeSum = 0;
+  let away10 = 0;
+  let away20 = 0;
+  let home10 = 0;
+  let home20 = 0;
+  for (let index = 0; index < count; index += 1) {
+    const margin = home[index] - away[index];
+    margins.push(margin);
+    totals.push(away[index] + home[index]);
+    awaySum += away[index];
+    homeSum += home[index];
+    if (margin <= -10) away10 += 1;
+    if (margin <= -20) away20 += 1;
+    if (margin >= 10) home10 += 1;
+    if (margin >= 20) home20 += 1;
+  }
+  const sortedMargins = margins.slice().sort((a, b) => a - b);
+  const sortedTotals = totals.slice().sort((a, b) => a - b);
+  return {
+    awayMean: count === 0 ? 0 : awaySum / count,
+    homeMean: count === 0 ? 0 : homeSum / count,
+    marginMean: count === 0 ? 0 : (homeSum - awaySum) / count,
+    marginMedian: count === 0 ? 0 : quantile(sortedMargins, 0.5),
+    totalMedian: count === 0 ? 0 : quantile(sortedTotals, 0.5),
+    awayBy10: count === 0 ? 0 : away10 / count,
+    awayBy20: count === 0 ? 0 : away20 / count,
+    homeBy10: count === 0 ? 0 : home10 / count,
+    homeBy20: count === 0 ? 0 : home20 / count,
+  };
 }
 
 export function closestIndex(combined: number[]): number {
@@ -208,6 +328,8 @@ function restedLine(player: RatePlayer): DrawnPlayer {
     minutes_weight: player.minutes_weight,
     thin_sample: player.thin_sample,
     games: player.games,
+    games_2026: player.games_2026,
+    games_2027: player.games_2027,
     shooting_games: player.shooting_games,
     min: 0,
     fgm: 0,
@@ -224,15 +346,15 @@ function restedLine(player: RatePlayer): DrawnPlayer {
 
 function rawMinutes(players: RatePlayer[], budget: number, rng: Rng): number[] {
   if (players.length === 0 || !(budget > 0)) throw new Error('minute cap cannot fill the team budget');
-  const meanSum = players.reduce((sum, player) => sum + Math.max(0, player.minutes_mean), 0);
+  const meanSum = players.reduce((sum, player) => sum + conditionalMinutes(player), 0);
   const scaled =
     meanSum > 0
-      ? players.map((player) => (Math.max(0, player.minutes_mean) * budget) / meanSum)
+      ? players.map((player) => (conditionalMinutes(player) * budget) / meanSum)
       : players.map(() => budget / players.length);
   const shares = new Array<number>(players.length);
   let shareSum = 0;
   for (let i = 0; i < players.length; i += 1) {
-    const alpha = (DIRICHLET_KAPPA * scaled[i]) / budget;
+    const alpha = (MINUTES_CONCENTRATION * scaled[i]) / budget;
     const drawn = alpha > 0 ? gamma(alpha, rng) : 0;
     shares[i] = drawn;
     shareSum += drawn;
@@ -362,7 +484,7 @@ function drawSquad(roster: RatePlayer[], playingIds: Set<string>, rng: Rng): Squ
   // Mean-1 lognormal shock shared by the team's volume rates.
   const shock = Math.exp(TEAM_SHOCK_SIGMA * z - (TEAM_SHOCK_SIGMA ** 2) / 2);
   const playing = playingRoster(roster, playingIds);
-  const caps = playing.map((player) => (isUnobservedProfile(player) ? UNOBSERVED_MINUTE_CAP : PLAYER_CAP_REGULATION));
+  const caps = playing.map((player) => minuteCap(player));
   const minutes = allocate(playing, caps, REGULATION_MINUTES, rng);
   const lines: DrawnPlayer[] = [];
   for (let i = 0; i < playing.length; i += 1) {
@@ -386,7 +508,7 @@ function extendSquad(state: SquadState, roster: RatePlayer[], playingIds: Set<st
   const byId = new Map(state.lines.map((line) => [line.athlete_id, line]));
   const caps = playing.map((player) => {
     const current = byId.get(player.athlete_id)?.min ?? 0;
-    if (isUnobservedProfile(player)) return Math.max(0, UNOBSERVED_MINUTE_CAP - current);
+    if (minuteCap(player) === UNOBSERVED_MINUTE_CAP) return Math.max(0, UNOBSERVED_MINUTE_CAP - current);
     return Math.max(0, PLAYER_CAP_REGULATION + PLAYER_CAP_PER_OT * periods - current);
   });
   const extra = allocate(playing, caps, OT_PERIOD_MINUTES, rng);
@@ -399,7 +521,7 @@ function extendSquad(state: SquadState, roster: RatePlayer[], playingIds: Set<st
 }
 
 function playerCap(player: DrawnPlayer, overtimePeriods: number): number {
-  if (isUnobservedProfile(player)) return UNOBSERVED_MINUTE_CAP;
+  if (cameo(player) || isUnobservedProfile(player)) return UNOBSERVED_MINUTE_CAP;
   return PLAYER_CAP_REGULATION + PLAYER_CAP_PER_OT * overtimePeriods;
 }
 
@@ -439,25 +561,43 @@ function validateDraw(draw: RevisedDraw, regulationMinutes: Map<string, number>)
   if (teamPoints(draw.away) === teamPoints(draw.home)) throw new Error('overtime did not separate the teams');
   for (const line of [...draw.away, ...draw.home]) {
     const regulation = regulationMinutes.get(`${line.team_id}:${line.athlete_id}`) ?? 0;
-    const cap = isUnobservedProfile(line) ? UNOBSERVED_MINUTE_CAP : PLAYER_CAP_REGULATION;
+    const cap = minuteCap(line);
     if (regulation > cap) throw new Error('player minutes exceed the cap');
   }
   validateTeam(draw.away, draw.budget, draw.overtimePeriods);
   validateTeam(draw.home, draw.budget, draw.overtimePeriods);
 }
 
+function minuteCap(player: Pick<RatePlayer, 'games_2026' | 'games_2027' | 'minutes_weight' | 'shooting_games' | 'games'>): number {
+  if (cameo(player) || isUnobservedProfile(player)) return UNOBSERVED_MINUTE_CAP;
+  return PLAYER_CAP_REGULATION;
+}
+
+function ensureBudget(roster: RatePlayer[], playing: Set<string>, budget: number): void {
+  const capSum = () =>
+    roster.filter((player) => playing.has(player.athlete_id)).reduce((sum, player) => sum + minuteCap(player), 0);
+  if (capSum() >= budget) return;
+  const extras = roster
+    .filter((player) => player.minutes_weight !== 0 && !playing.has(player.athlete_id))
+    .sort((a, b) => conditionalMinutes(b) - conditionalMinutes(a) || (a.athlete_id < b.athlete_id ? -1 : 1));
+  for (const player of extras) {
+    playing.add(player.athlete_id);
+    if (capSum() >= budget) return;
+  }
+}
+
 function participation(away: RatePlayer[], home: RatePlayer[], rng: Rng): Set<string> {
   const playing = new Set<string>();
-  const unobserved = [
-    ...away.filter(isUnobservedProfile).sort(byAthleteId),
-    ...home.filter(isUnobservedProfile).sort(byAthleteId),
-  ];
-  for (const player of unobserved) {
-    if (rng() < UNOBSERVED_PLAY_PROBABILITY) playing.add(player.athlete_id);
+  const awayIds = new Set(away.map((player) => player.athlete_id));
+  const awayGames = teamGamesPlayed(away);
+  const homeGames = teamGamesPlayed(home);
+  const ordered = [...away, ...home].sort(byAthleteId);
+  for (const player of ordered) {
+    const probability = playProbability(player, awayIds.has(player.athlete_id) ? awayGames : homeGames);
+    if (probability > 0 && rng() < probability) playing.add(player.athlete_id);
   }
-  for (const player of [...away, ...home]) {
-    if (player.minutes_weight !== 0 && !isUnobservedProfile(player)) playing.add(player.athlete_id);
-  }
+  ensureBudget(away, playing, REGULATION_MINUTES);
+  ensureBudget(home, playing, REGULATION_MINUTES);
   return playing;
 }
 
@@ -625,7 +765,8 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
     }
   }
 
-  const index = closestIndex(combinedTotals);
+  const index = representativeIndex(awayTotals, homeTotals);
+  const forecast = marginForecast(awayTotals, homeTotals);
   const upsideIndex = percentileDrawIndex(combinedTotals, 0.95);
   const chosen = scenarioFrom(drawGame(game, mulberry32(iterationSeed(seed, index))), game, awayTotals, homeTotals, series);
   const upside = scenarioFrom(
@@ -648,7 +789,10 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
       .map((player) => player.athlete_id)
       .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     combinedTotals,
+    awayTotals: Array.from(awayTotals),
+    homeTotals: Array.from(homeTotals),
     wins: winCounts(awayTotals, homeTotals),
+    forecast,
     away: chosen.away,
     home: chosen.home,
     upside,

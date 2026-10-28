@@ -10,12 +10,19 @@ export function escapeHtml(value: string): string {
     .replaceAll('"', '&quot;');
 }
 
-export function statusLabel(game: Pick<SlateGame, 'completed' | 'status_state' | 'start_time'>, now: Date): string {
+export function statusLabel(
+  game: Pick<SlateGame, 'completed' | 'status_state' | 'start_time'>,
+  now: Date,
+  capturedAt?: string | null,
+): string {
   if (game.completed === true || game.status_state === 'post') return 'final';
   if (game.status_state === 'in') return 'in progress';
-  if (game.status_state === 'pre') return 'not started';
   const tip = Date.parse(game.start_time);
   if (!Number.isNaN(tip) && now.getTime() < tip) return 'not started';
+  if (game.status_state === 'pre') {
+    const captured = capturedAt ? ` captured ${capturedAt}` : '';
+    return `pregame card${captured}; status may be stale`;
+  }
   return 'unknown';
 }
 
@@ -44,7 +51,7 @@ function matchupSide(side: TeamSide): string {
   return `<span class="side">${teamLogoMarkup(side)}<span class="side-copy"><span class="abbr">${escapeHtml(sideAbbr(side))}</span><span class="name">${escapeHtml(sideLabel(side))}</span></span></span>`;
 }
 
-function renderCard(game: SlateGame, card: RateCard, now: Date): string {
+function renderCard(game: SlateGame, card: RateCard, now: Date, capturedAt: string | null): string {
   const ready = card.games.some((item) => item.event_id === game.event_id);
   const season = game.season_type ? `<p class="tag">${escapeHtml(game.season_type)}</p>` : '';
   const spread = game.spread_caption ? `<p class="spread">${escapeHtml(game.spread_caption)}</p>` : '';
@@ -52,7 +59,7 @@ function renderCard(game: SlateGame, card: RateCard, now: Date): string {
   return `<article class="game-card">
     <h2 class="matchup">${matchupSide(game.away)}<span class="at">@</span>${matchupSide(game.home)}</h2>
     <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
-    <p class="status">${escapeHtml(statusLabel(game, now))}</p>
+    <p class="status">${escapeHtml(statusLabel(game, now, capturedAt))}</p>
     ${season}
     ${spread}
     <button type="button" data-event="${escapeHtml(game.event_id)}"${ready ? '' : ' disabled'}>${label}</button>
@@ -66,5 +73,5 @@ export function renderSlate(slate: Slate, card: RateCard, now: Date): string {
   if (slate.games.length === 0) {
     return `<p class="state">No NBA games on ${escapeHtml(slate.date ?? '')}.</p>`;
   }
-  return `<div class="slate">${slate.games.map((game) => renderCard(game, card, now)).join('')}</div>`;
+  return `<div class="slate">${slate.games.map((game) => renderCard(game, card, now, slate.generated_at)).join('')}</div>`;
 }

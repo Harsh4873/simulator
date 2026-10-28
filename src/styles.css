@@ -314,6 +314,14 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .scoreboard .team-pct.away { grid-area: 7 / 1; }
 .scoreboard .team-pct.home { grid-area: 7 / 3; justify-self: end; }
 .percentile-caption { grid-area: 8 / 1 / 9 / 4; text-align: center; }
+.margin-caption {
+  grid-area: 10 / 1 / 11 / 4;
+  margin: 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
 .win-caption { grid-area: 9 / 1 / 10 / 4; text-align: center; }
 
 .team-box { margin-top: 28px; }

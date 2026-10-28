@@ -39,6 +39,8 @@ function player(overrides: Partial<SimulatedPlayer> = {}): SimulatedPlayer {
     minutes_weight: 1,
     thin_sample: false,
     games: 40,
+    games_2026: 37,
+    games_2027: 3,
     shooting_games: 40,
     min: 30,
     fgm: 6,
@@ -148,6 +150,8 @@ function score(overtime: boolean): Simulation {
     upsideIndex: 0,
     missingShootingAthleteIds: [],
     combinedTotals: [awayPts + homePts],
+    awayTotals: [awayPts],
+    homeTotals: [homePts],
     wins: { away: 2500, tie: 0, home: 7500 },
     upside: view,
   };

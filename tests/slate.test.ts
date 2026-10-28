@@ -26,7 +26,10 @@ test('status uses the stored ESPN state and the clock only for not started', () 
   assert.equal(statusLabel(game({ completed: true, status_state: 'pre' }), now), 'final');
   assert.equal(statusLabel(game({ completed: false, status_state: 'post' }), now), 'final');
   assert.equal(statusLabel(game({ completed: false, status_state: 'in' }), now), 'in progress');
-  assert.equal(statusLabel(game({ completed: false, status_state: 'pre' }), later), 'not started');
+  assert.equal(
+    statusLabel(game({ completed: false, status_state: 'pre' }), later, '2026-10-27T21:31:55Z'),
+    'pregame card captured 2026-10-27T21:31:55Z; status may be stale',
+  );
   assert.equal(statusLabel(game({ status_state: 'unknown' }), now), 'not started');
   assert.equal(statusLabel(game({ status_state: 'unknown' }), later), 'unknown');
 });

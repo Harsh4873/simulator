@@ -1,7 +1,7 @@
 import { formatTip } from './date.ts';
 import { playerHeadshotUrl } from './display.ts';
 import { escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
-import type { MarginalRead, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
+import type { MarginForecast, MarginalRead, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
 import type { ColumnKey, RatePlayer, SlateGame, TeamSide } from './types.ts';
 
 export type BoxScenario = 'median' | 'upside';
@@ -257,13 +257,24 @@ function minutesMarkup(score: Pick<Simulation, 'overtime' | 'budget'>): string {
   return `<span class="ot">OT</span><span class="ot-minutes">${teamMinutes} team-minutes · 5 × ${playerMinutes}</span>`;
 }
 
-function scoreboard(game: SlateGame, score: Simulation, scenario: BoxScenario): string {
+function scoreboard(game: SlateGame, score: Simulation, scenario: BoxScenario, forecast?: MarginForecast): string {
   const wins = score.wins ?? { away: 0, tie: 0, home: 0 };
   const total = wins.away + wins.tie + wins.home;
   const awayPct = countPercent(wins.away, total);
   const tiePct = countPercent(wins.tie, total);
   const homePct = countPercent(wins.home, total);
   const label = `Away wins ${awayPct}%. Tie ${tiePct}%. Home wins ${homePct}%.`;
+  const useMeans = scenario !== 'upside' && forecast !== undefined;
+  const awayScore = useMeans ? Math.round(forecast.awayMean) : score.away.pts;
+  const homeScore = useMeans ? Math.round(forecast.homeMean) : score.home.pts;
+  const caption = scenario === 'upside'
+    ? UPSIDE_LABEL
+    : useMeans
+      ? 'Expected points from 10,000 games'
+      : 'Nearest the median combined score';
+  const margin = useMeans
+    ? `<p class="margin-caption">Mean margin ${forecast.marginMean >= 0 ? '+' : ''}${forecast.marginMean.toFixed(1)} home. Median margin ${forecast.marginMedian >= 0 ? '+' : ''}${forecast.marginMedian.toFixed(1)}. Home by 10+ ${(forecast.homeBy10 * 100).toFixed(1)}%. Home by 20+ ${(forecast.homeBy20 * 100).toFixed(1)}%. Away by 10+ ${(forecast.awayBy10 * 100).toFixed(1)}%. Away by 20+ ${(forecast.awayBy20 * 100).toFixed(1)}%.</p>`
+    : '';
   return `<div class="scoreboard">
     <div class="team-head away">${teamLogoMarkup(game.away)}<p class="abbr away">${escapeHtml(teamAbbr(game.away))}</p></div>
     <div class="bar-slot">
@@ -276,12 +287,13 @@ function scoreboard(game: SlateGame, score: Simulation, scenario: BoxScenario): 
     <div class="team-head home">${teamLogoMarkup(game.home)}<p class="abbr home">${escapeHtml(teamAbbr(game.home))}</p></div>
     <p class="club-name away">${escapeHtml(teamTitle(game.away))}</p>
     <p class="club-name home">${escapeHtml(teamTitle(game.home))}</p>
-    <p class="score away">${score.away.pts}</p>
-    <p class="score home">${score.home.pts}</p>
+    <p class="score away">${awayScore}</p>
+    <p class="score home">${homeScore}</p>
     <p class="interval away">${score.away.band.p05}–${score.away.band.p95}</p>
     <p class="interval home">${score.home.band.p05}–${score.home.band.p95}</p>
     <p class="interval-caption">5th to 95th percentile</p>
-    <p class="percentile-caption">${scenario === 'upside' ? UPSIDE_LABEL : 'Nearest the median combined score'}</p>
+    <p class="percentile-caption">${caption}</p>
+    ${margin}
     ${tailMarkup('away', score.away.pointsRead)}
     ${tailMarkup('home', score.home.pointsRead)}
     <p class="win-pct win-away">${awayPct}%</p>
@@ -320,11 +332,13 @@ export function renderBoxScore(
   const note =
     scenario === 'upside'
       ? UPSIDE_LABEL
-      : 'This box score is the simulated game nearest the median combined score. The range under each score is the 5th to 95th percentile.';
+      : score.forecast
+        ? 'The score above is the mean of 10,000 games. This box score is one draw near those team means. It is not each player\'s expected line. The percent in a cell is that stat\'s percentile rank, not a win probability.'
+        : 'This box score is the simulated game nearest the median combined score. The range under each score is the 5th to 95th percentile.';
   const upsideChecked = scenario === 'upside' ? ' checked' : '';
   return `<div data-event="${escapeHtml(eventId)}">
       <button type="button" data-back>Back to slate</button>
-      ${scoreboard(game, shown, scenario)}
+      ${scoreboard(game, shown, scenario, score.forecast)}
       <p class="status-row">
         <span class="tip">${escapeHtml(formatTip(game.start_time))}</span>
         <span class="status">${escapeHtml(statusLabel(game, now))}</span>
