@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-29T17:29:09Z",
+  "generated_at": "2026-10-29T17:58:22Z",
   "date": "2026-10-29",
   "iterations": 10000,
   "columns": [
@@ -43,7 +43,7 @@
           "fg2_pct": 0.5654226868435159,
           "tp_pct": 0.34871123405436094,
           "ft_pct": 0.7631093085040571,
-          "reb_per_min": 0.18589314402292387,
+          "reb_per_min": 0.1858931407777743,
           "ast_per_min": 0.10289789477576505,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/2995706.png"
         },
@@ -69,7 +69,7 @@
           "fg2_pct": 0.5662607904347854,
           "tp_pct": 0.3642269150107741,
           "ft_pct": 0.8578591899194155,
-          "reb_per_min": 0.13704027006042585,
+          "reb_per_min": 0.13704025184532945,
           "ast_per_min": 0.1492666667085811,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3908809.png"
         },
@@ -95,7 +95,7 @@
           "fg2_pct": 0.6192484977287065,
           "tp_pct": 0.34504616317293263,
           "ft_pct": 0.7947526997105178,
-          "reb_per_min": 0.26483301503491313,
+          "reb_per_min": 0.26483301425147837,
           "ast_per_min": 0.05713215365116592,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3934723.png"
         },
@@ -121,7 +121,7 @@
           "fg2_pct": 0.5023867690520755,
           "tp_pct": 0.3650928216203504,
           "ft_pct": 0.8711206387086037,
-          "reb_per_min": 0.13916913948609597,
+          "reb_per_min": 0.13916912183960362,
           "ast_per_min": 0.20469068525854883,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3992.png"
         },
@@ -147,7 +147,7 @@
           "fg2_pct": 0.6369117448521646,
           "tp_pct": 0.30771495254511766,
           "ft_pct": 0.6766153690633304,
-          "reb_per_min": 0.2881024319531222,
+          "reb_per_min": 0.2881024316195928,
           "ast_per_min": 0.061612020701199366,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4066328.png"
         },
@@ -173,7 +173,7 @@
           "fg2_pct": 0.5962271891158883,
           "tp_pct": 0.40600243903653427,
           "ft_pct": 0.8368675362891425,
-          "reb_per_min": 0.09854063226542478,
+          "reb_per_min": 0.09854060180426091,
           "ast_per_min": 0.08716915912445745,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4066757.png"
         },
@@ -199,7 +199,7 @@
           "fg2_pct": 0.5800760561044126,
           "tp_pct": 0.3451426881808161,
           "ft_pct": 0.7651962045019619,
-          "reb_per_min": 0.1779652917257148,
+          "reb_per_min": 0.17796528917441454,
           "ast_per_min": 0.09803004070045723,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4431734.png"
         },
@@ -225,7 +225,7 @@
           "fg2_pct": 0.624718143420237,
           "tp_pct": 0.3202791186104267,
           "ft_pct": 0.6152810639205383,
-          "reb_per_min": 0.2653539142329025,
+          "reb_per_min": 0.2653539139754239,
           "ast_per_min": 0.11074911088597804,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4432158.png"
         },
@@ -251,7 +251,7 @@
           "fg2_pct": 0.5361943548354204,
           "tp_pct": 0.3960665674460039,
           "ft_pct": 0.7401516001162136,
-          "reb_per_min": 0.16527160264790328,
+          "reb_per_min": 0.16527157039062165,
           "ast_per_min": 0.07456541680882442,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4576087.png"
         },
@@ -277,7 +277,7 @@
           "fg2_pct": 0.5346348710519211,
           "tp_pct": 0.41618418223937925,
           "ft_pct": 0.7388896032317877,
-          "reb_per_min": 0.19002572931692502,
+          "reb_per_min": 0.19002570265297286,
           "ast_per_min": 0.08831940320287399,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4683747.png"
         },
@@ -303,7 +303,7 @@
           "fg2_pct": 0.5179253761719753,
           "tp_pct": 0.35476736776786577,
           "ft_pct": 0.6775570903722982,
-          "reb_per_min": 0.18812886673156298,
+          "reb_per_min": 0.18812882348605356,
           "ast_per_min": 0.16932557900981224,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4701233.png"
         },
@@ -329,7 +329,7 @@
           "fg2_pct": 0.5253165706075369,
           "tp_pct": 0.34924004524820246,
           "ft_pct": 0.8497272250137775,
-          "reb_per_min": 0.12974701316409867,
+          "reb_per_min": 0.12974693604752863,
           "ast_per_min": 0.13051555602171988,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5023693.png"
         },
@@ -355,7 +355,7 @@
           "fg2_pct": 0.5614774357509569,
           "tp_pct": 0.3732303054539848,
           "ft_pct": 0.785960792379833,
-          "reb_per_min": 0.16810800857667563,
+          "reb_per_min": 0.16810773075489258,
           "ast_per_min": 0.10956154210118324,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5041951.png"
         },
@@ -381,7 +381,7 @@
           "fg2_pct": 0.6231821461428758,
           "tp_pct": 0.3510987386354001,
           "ft_pct": 0.7902259324568046,
-          "reb_per_min": 0.1656296271565808,
+          "reb_per_min": 0.16562962433931488,
           "ast_per_min": 0.10052738085069796,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5177362.png"
         },
@@ -407,7 +407,7 @@
           "fg2_pct": 0.524600963847753,
           "tp_pct": 0.3710774071376564,
           "ft_pct": 0.7549578036478322,
-          "reb_per_min": 0.1136599302800276,
+          "reb_per_min": 0.11365990824334743,
           "ast_per_min": 0.12344134178651066,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/2490149.png"
         },
@@ -433,7 +433,7 @@
           "fg2_pct": 0.5276869549890901,
           "tp_pct": 0.2896436941867675,
           "ft_pct": 0.8070933396456103,
-          "reb_per_min": 0.15906993782357584,
+          "reb_per_min": 0.15906993688700827,
           "ast_per_min": 0.0690531086178454,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/2578185.png"
         },
@@ -459,7 +459,7 @@
           "fg2_pct": 0.5851542046299164,
           "tp_pct": 0.3739223820658324,
           "ft_pct": 0.6592093318228007,
-          "reb_per_min": 0.25136450157135537,
+          "reb_per_min": 0.25136450108304914,
           "ast_per_min": 0.08158248771691531,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3146557.png"
         },
@@ -485,7 +485,7 @@
           "fg2_pct": 0.5172364632932511,
           "tp_pct": 0.39879624490572124,
           "ft_pct": 0.8783909957672879,
-          "reb_per_min": 0.10485317873027879,
+          "reb_per_min": 0.10485315935832411,
           "ast_per_min": 0.10833529327098684,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4278039.png"
         },
@@ -511,7 +511,7 @@
           "fg2_pct": 0.5877481806059006,
           "tp_pct": 0.3576576041552283,
           "ft_pct": 0.7853140532728463,
-          "reb_per_min": 0.1322713559988119,
+          "reb_per_min": 0.13227135538986995,
           "ast_per_min": 0.09042476066159348,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4280151.png"
         },
@@ -537,7 +537,7 @@
           "fg2_pct": 0.5075846265215384,
           "tp_pct": 0.3398902617262318,
           "ft_pct": 0.7601295024131555,
-          "reb_per_min": 0.13370097019427526,
+          "reb_per_min": 0.1337009456943915,
           "ast_per_min": 0.05480756204101928,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4397020.png"
         },
@@ -563,7 +563,7 @@
           "fg2_pct": 0.5152549688890993,
           "tp_pct": 0.3529521800687601,
           "ft_pct": 0.7486105072327078,
-          "reb_per_min": 0.140170210439853,
+          "reb_per_min": 0.14017017625568895,
           "ast_per_min": 0.0816475055506487,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4397183.png"
         },
@@ -589,7 +589,7 @@
           "fg2_pct": 0.5694439284633593,
           "tp_pct": 0.3760817442657801,
           "ft_pct": 0.7584717460513372,
-          "reb_per_min": 0.2362292745079146,
+          "reb_per_min": 0.23622927421078946,
           "ast_per_min": 0.09943939823100786,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4431680.png"
         },
@@ -615,7 +615,7 @@
           "fg2_pct": 0.4791949501288364,
           "tp_pct": 0.3572341062923574,
           "ft_pct": 0.7308795787735717,
-          "reb_per_min": 0.14219960069275034,
+          "reb_per_min": 0.14219959992376743,
           "ast_per_min": 0.06861980732557589,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4431714.png"
         },
@@ -641,7 +641,7 @@
           "fg2_pct": 0.45545574102569364,
           "tp_pct": 0.33699776304358325,
           "ft_pct": 0.8062145507809318,
-          "reb_per_min": 0.14727088407354783,
+          "reb_per_min": 0.1472707376626047,
           "ast_per_min": 0.14243065862567253,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4431941.png"
         },
@@ -667,7 +667,7 @@
           "fg2_pct": 0.5454298930509852,
           "tp_pct": 0.34057697345824595,
           "ft_pct": 0.8227666886609821,
-          "reb_per_min": 0.1415765654520453,
+          "reb_per_min": 0.14157634850736317,
           "ast_per_min": 0.1344045525621279,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4585618.png"
         },
@@ -693,7 +693,7 @@
           "fg2_pct": 0.540132882253704,
           "tp_pct": 0.34745654618118765,
           "ft_pct": 0.7936358839325431,
-          "reb_per_min": 0.278674718437962,
+          "reb_per_min": 0.2786747181684643,
           "ast_per_min": 0.2104760163082581,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4701230.png"
         },
@@ -719,7 +719,7 @@
           "fg2_pct": 0.5675458068034088,
           "tp_pct": 0.3088274911562924,
           "ft_pct": 0.6818173077177663,
-          "reb_per_min": 0.22508655687762802,
+          "reb_per_min": 0.225086556307075,
           "ast_per_min": 0.06699693396673848,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4712863.png"
         },
@@ -745,7 +745,7 @@
           "fg2_pct": 0.5713334592487606,
           "tp_pct": 0.2368273244292581,
           "ft_pct": 0.6452929405134195,
-          "reb_per_min": 0.20406118988235739,
+          "reb_per_min": 0.20406116965028415,
           "ast_per_min": 0.1741042008822256,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4869342.png"
         },
@@ -771,7 +771,7 @@
           "fg2_pct": 0.6162196200254075,
           "tp_pct": 0.3797661919458308,
           "ft_pct": 0.6547877206946402,
-          "reb_per_min": 0.18651647885918884,
+          "reb_per_min": 0.18651647771991517,
           "ast_per_min": 0.06954634583877124,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4873201.png"
         },
@@ -797,7 +797,7 @@
           "fg2_pct": 0.5638378397034035,
           "tp_pct": 0.36188154649346227,
           "ft_pct": 0.7564629475245574,
-          "reb_per_min": 0.21093946280246992,
+          "reb_per_min": 0.21093945855213037,
           "ast_per_min": 0.11236436870996012,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5105571.png"
         },
@@ -823,7 +823,7 @@
           "fg2_pct": 0.5489686946804236,
           "tp_pct": 0.36705032943814797,
           "ft_pct": 0.7696942308490006,
-          "reb_per_min": 0.18495582739359143,
+          "reb_per_min": 0.1849558233773924,
           "ast_per_min": 0.11225998312791544,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5106262.png"
         },
@@ -849,7 +849,7 @@
           "fg2_pct": 0.5445472032913131,
           "tp_pct": 0.36884620364838105,
           "ft_pct": 0.7688652063839599,
-          "reb_per_min": 0.1688633054338662,
+          "reb_per_min": 0.16886305286176975,
           "ast_per_min": 0.1382062774676994,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5149077.png"
         }
@@ -882,7 +882,7 @@
           "fg2_pct": 0.5552536084468378,
           "tp_pct": 0.3834920599420623,
           "ft_pct": 0.8615599580766534,
-          "reb_per_min": 0.09914063434990263,
+          "reb_per_min": 0.09914059403340648,
           "ast_per_min": 0.07855754565560719,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3064440.png"
         },
@@ -908,7 +908,7 @@
           "fg2_pct": 0.5872372761986075,
           "tp_pct": 0.28412643272079385,
           "ft_pct": 0.7455069202138347,
-          "reb_per_min": 0.33791361318460794,
+          "reb_per_min": 0.3379136120858365,
           "ast_per_min": 0.1330813712244578,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3155942.png"
         },
@@ -934,7 +934,7 @@
           "fg2_pct": 0.5299176335186709,
           "tp_pct": 0.34604441735793545,
           "ft_pct": 0.7828230782996421,
-          "reb_per_min": 0.16735616277098114,
+          "reb_per_min": 0.1673558651546066,
           "ast_per_min": 0.11216180202969238,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3907387.png"
         },
@@ -960,7 +960,7 @@
           "fg2_pct": 0.523310326173452,
           "tp_pct": 0.3149029465447696,
           "ft_pct": 0.8415476022323113,
-          "reb_per_min": 0.16183182859439635,
+          "reb_per_min": 0.16183182796070633,
           "ast_per_min": 0.07929663726278867,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4065732.png"
         },
@@ -986,7 +986,7 @@
           "fg2_pct": 0.4858059286658483,
           "tp_pct": 0.38730879118362505,
           "ft_pct": 0.8575524988977318,
-          "reb_per_min": 0.09659014090180287,
+          "reb_per_min": 0.09659010313202912,
           "ast_per_min": 0.1338445765449021,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4066262.png"
         },
@@ -1012,7 +1012,7 @@
           "fg2_pct": 0.5874395197086677,
           "tp_pct": 0.33556237042664366,
           "ft_pct": 0.8289201563163197,
-          "reb_per_min": 0.12467989171203099,
+          "reb_per_min": 0.12467983587929964,
           "ast_per_min": 0.06015604577988789,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4279318.png"
         },
@@ -1038,7 +1038,7 @@
           "fg2_pct": 0.4950683536185127,
           "tp_pct": 0.34259054591165583,
           "ft_pct": 0.792977678789551,
-          "reb_per_min": 0.17628076552511646,
+          "reb_per_min": 0.1762807641131397,
           "ast_per_min": 0.0673615762072329,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4395650.png"
         },
@@ -1064,7 +1064,7 @@
           "fg2_pct": 0.5720726665757799,
           "tp_pct": 0.29797837916512465,
           "ft_pct": 0.5874061428637718,
-          "reb_per_min": 0.2699079071649607,
+          "reb_per_min": 0.2699079067138218,
           "ast_per_min": 0.061637370936355663,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4431679.png"
         },
@@ -1090,7 +1090,7 @@
           "fg2_pct": 0.5786836841396021,
           "tp_pct": 0.35618701580343937,
           "ft_pct": 0.6016816456082672,
-          "reb_per_min": 0.33651408297104396,
+          "reb_per_min": 0.33651408213351025,
           "ast_per_min": 0.0738779358649032,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4433174.png"
         },
@@ -1116,7 +1116,7 @@
           "fg2_pct": 0.5130841197398245,
           "tp_pct": 0.2899703155956327,
           "ft_pct": 0.7777755198259072,
-          "reb_per_min": 0.16831347268502211,
+          "reb_per_min": 0.16831347180098735,
           "ast_per_min": 0.057955546480275615,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4594327.png"
         },
@@ -1142,7 +1142,7 @@
           "fg2_pct": 0.4800445853576331,
           "tp_pct": 0.33391573863009527,
           "ft_pct": 0.7360999397558209,
-          "reb_per_min": 0.1510817224235535,
+          "reb_per_min": 0.15108169394896734,
           "ast_per_min": 0.09686297378776239,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4702384.png"
         },
@@ -1168,7 +1168,7 @@
           "fg2_pct": 0.5199239694018502,
           "tp_pct": 0.33683553388634835,
           "ft_pct": 0.7828230782996421,
-          "reb_per_min": 0.15788412361123907,
+          "reb_per_min": 0.15788386593472434,
           "ast_per_min": 0.11875480695211461,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4709131.png"
         },
@@ -1194,7 +1194,7 @@
           "fg2_pct": 0.5966372386191879,
           "tp_pct": 0.3304581464504503,
           "ft_pct": 0.7814960267387356,
-          "reb_per_min": 0.2757689788656964,
+          "reb_per_min": 0.27576897843649906,
           "ast_per_min": 0.055386709753647345,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4898371.png"
         },
@@ -1220,7 +1220,7 @@
           "fg2_pct": 0.5350564393465758,
           "tp_pct": 0.3446478810936366,
           "ft_pct": 0.7649235112053075,
-          "reb_per_min": 0.18119177993844318,
+          "reb_per_min": 0.1811917755788963,
           "ast_per_min": 0.10097825183050314,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4917149.png"
         },
@@ -1246,7 +1246,7 @@
           "fg2_pct": 0.5203371979362731,
           "tp_pct": 0.35557073419195934,
           "ft_pct": 0.7877749950810835,
-          "reb_per_min": 0.15340620675284503,
+          "reb_per_min": 0.15340593953275566,
           "ast_per_min": 0.1054202487359752,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5106058.png"
         },
@@ -1272,7 +1272,7 @@
           "fg2_pct": 0.5708762784045216,
           "tp_pct": 0.32797947201265576,
           "ft_pct": 0.7302989044091578,
-          "reb_per_min": 0.2282164752452039,
+          "reb_per_min": 0.22821647333975564,
           "ast_per_min": 0.09728131074904643,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5107897.png"
         },
@@ -1298,7 +1298,7 @@
           "fg2_pct": 0.5027285556245538,
           "tp_pct": 0.3139070654011063,
           "ft_pct": 0.7840298048837453,
-          "reb_per_min": 0.1496740828321485,
+          "reb_per_min": 0.1496738441183931,
           "ast_per_min": 0.11663268660893714,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5142620.png"
         },
@@ -1324,7 +1324,7 @@
           "fg2_pct": 0.5929352725223949,
           "tp_pct": 0.34638524442334084,
           "ft_pct": 0.7218209989788404,
-          "reb_per_min": 0.30002092509072265,
+          "reb_per_min": 0.30002092291849375,
           "ast_per_min": 0.07702625300909756,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3442.png"
         },
@@ -1350,7 +1350,7 @@
           "fg2_pct": 0.5593512175714199,
           "tp_pct": 0.317715224017713,
           "ft_pct": 0.8407088155305096,
-          "reb_per_min": 0.18417327598877722,
+          "reb_per_min": 0.1841731823378108,
           "ast_per_min": 0.18830209490656843,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3907497.png"
         },
@@ -1376,7 +1376,7 @@
           "fg2_pct": 0.48378333852147276,
           "tp_pct": 0.3144108147636259,
           "ft_pct": 0.7997664460581916,
-          "reb_per_min": 0.12672150738650098,
+          "reb_per_min": 0.12672150691478373,
           "ast_per_min": 0.09679009856648464,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4277813.png"
         },
@@ -1402,7 +1402,7 @@
           "fg2_pct": 0.46296427874527557,
           "tp_pct": 0.33365862954610914,
           "ft_pct": 0.8484881806889233,
-          "reb_per_min": 0.09826132386752363,
+          "reb_per_min": 0.09826127247439133,
           "ast_per_min": 0.12562646931044316,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4277956.png"
         },
@@ -1428,7 +1428,7 @@
           "fg2_pct": 0.5976909848656023,
           "tp_pct": 0.3448675204591553,
           "ft_pct": 0.7214657063019243,
-          "reb_per_min": 0.18935960376188904,
+          "reb_per_min": 0.1893596033516952,
           "ast_per_min": 0.10660697374745619,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4395628.png"
         },
@@ -1454,7 +1454,7 @@
           "fg2_pct": 0.5155070766005239,
           "tp_pct": 0.36507495709353865,
           "ft_pct": 0.8365865113809661,
-          "reb_per_min": 0.17666793937146794,
+          "reb_per_min": 0.17666791538614107,
           "ast_per_min": 0.0833283233855146,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4397136.png"
         },
@@ -1480,7 +1480,7 @@
           "fg2_pct": 0.5726995376727374,
           "tp_pct": 0.37678365882837916,
           "ft_pct": 0.8741468981600374,
-          "reb_per_min": 0.16236592060522703,
+          "reb_per_min": 0.1623659202744869,
           "ast_per_min": 0.10594581239138604,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4397688.png"
         },
@@ -1506,7 +1506,7 @@
           "fg2_pct": 0.5808338360949689,
           "tp_pct": 0.26339666291568975,
           "ft_pct": 0.7777247786921249,
-          "reb_per_min": 0.1938491427947641,
+          "reb_per_min": 0.19384914201989156,
           "ast_per_min": 0.14056054687528977,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4431675.png"
         },
@@ -1532,7 +1532,7 @@
           "fg2_pct": 0.5283556210387522,
           "tp_pct": 0.3911650960593964,
           "ft_pct": 0.7823191208366455,
-          "reb_per_min": 0.11268209070215968,
+          "reb_per_min": 0.11268203573019782,
           "ast_per_min": 0.07781532792376225,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4576086.png"
         },
@@ -1558,7 +1558,7 @@
           "fg2_pct": 0.49702210000374425,
           "tp_pct": 0.3286778548782086,
           "ft_pct": 0.8641222523638288,
-          "reb_per_min": 0.1781654098395746,
+          "reb_per_min": 0.1781653780554439,
           "ast_per_min": 0.08335786453279911,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4683634.png"
         },
@@ -1584,7 +1584,7 @@
           "fg2_pct": 0.5322913117058717,
           "tp_pct": 0.34922740813319414,
           "ft_pct": 0.6951128317512751,
-          "reb_per_min": 0.28905224858043116,
+          "reb_per_min": 0.2890522471594025,
           "ast_per_min": 0.07338678363840515,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4683742.png"
         },
@@ -1610,7 +1610,7 @@
           "fg2_pct": 0.5297424448650908,
           "tp_pct": 0.350623944397493,
           "ft_pct": 0.7929963368193562,
-          "reb_per_min": 0.16963828122135938,
+          "reb_per_min": 0.16963798380930267,
           "ast_per_min": 0.11100037789953467,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4703115.png"
         },
@@ -1636,7 +1636,7 @@
           "fg2_pct": 0.5380024132558506,
           "tp_pct": 0.34922740813319414,
           "ft_pct": 0.7812783183198121,
-          "reb_per_min": 0.18504726822709777,
+          "reb_per_min": 0.18504726394980145,
           "ast_per_min": 0.10089421875159951,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4712862.png"
         },
@@ -1662,7 +1662,7 @@
           "fg2_pct": 0.505939040534346,
           "tp_pct": 0.28830228420715714,
           "ft_pct": 0.7939858739937595,
-          "reb_per_min": 0.27731540037176133,
+          "reb_per_min": 0.2773153999784563,
           "ast_per_min": 0.14144702664509645,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4869780.png"
         },
@@ -1688,7 +1688,7 @@
           "fg2_pct": 0.6659257305700171,
           "tp_pct": 0.3997654370043854,
           "ft_pct": 0.7501861861868112,
-          "reb_per_min": 0.239215374154974,
+          "reb_per_min": 0.23921537339270246,
           "ast_per_min": 0.0631578024061661,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4997538.png"
         },
@@ -1714,7 +1714,7 @@
           "fg2_pct": 0.5497126335914411,
           "tp_pct": 0.3379368238276496,
           "ft_pct": 0.6078816420529315,
-          "reb_per_min": 0.28672890986703703,
+          "reb_per_min": 0.2867289092773467,
           "ast_per_min": 0.06999377053649017,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5061589.png"
         },
@@ -1740,7 +1740,7 @@
           "fg2_pct": 0.48254826552217817,
           "tp_pct": 0.3301335545389639,
           "ft_pct": 0.7894278680495529,
-          "reb_per_min": 0.14451270439939878,
+          "reb_per_min": 0.14451267900344142,
           "ast_per_min": 0.12964310288613565,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5144091.png"
         },
@@ -1766,7 +1766,7 @@
           "fg2_pct": 0.4289639479994718,
           "tp_pct": 0.26829853377216206,
           "ft_pct": 0.8255698586368669,
-          "reb_per_min": 0.13576741411339216,
+          "reb_per_min": 0.13576732330055044,
           "ast_per_min": 0.10564897035100296,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5170947.png"
         }
@@ -1799,7 +1799,7 @@
           "fg2_pct": 0.5040700991388685,
           "tp_pct": 0.3854882548502197,
           "ft_pct": 0.8187198137158436,
-          "reb_per_min": 0.12077565419811988,
+          "reb_per_min": 0.12077565373051896,
           "ast_per_min": 0.07224382683863619,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/2991070.png"
         },
@@ -1825,7 +1825,7 @@
           "fg2_pct": 0.5303778863415228,
           "tp_pct": 0.399739623347401,
           "ft_pct": 0.852186884728709,
-          "reb_per_min": 0.13665918867492108,
+          "reb_per_min": 0.1366590868274452,
           "ast_per_min": 0.20151957826033057,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4065733.png"
         },
@@ -1851,7 +1851,7 @@
           "fg2_pct": 0.5229090095770231,
           "tp_pct": 0.3318840546808925,
           "ft_pct": 0.7925810726599212,
-          "reb_per_min": 0.13528370948144747,
+          "reb_per_min": 0.13528357263230723,
           "ast_per_min": 0.1714527620625087,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4431785.png"
         },
@@ -1877,7 +1877,7 @@
           "fg2_pct": 0.6242771191619043,
           "tp_pct": 0.3411751124417247,
           "ft_pct": 0.7555562778585083,
-          "reb_per_min": 0.21755188649543747,
+          "reb_per_min": 0.21755188590742347,
           "ast_per_min": 0.05369805400729781,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4432810.png"
         },
@@ -1903,7 +1903,7 @@
           "fg2_pct": 0.5105908578647953,
           "tp_pct": 0.44129935640585843,
           "ft_pct": 0.9145172597883265,
-          "reb_per_min": 0.11350938766456044,
+          "reb_per_min": 0.11350935695469513,
           "ast_per_min": 0.2200309748976369,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4433083.png"
         },
@@ -1929,7 +1929,7 @@
           "fg2_pct": 0.6044994031169332,
           "tp_pct": 0.3377215015158613,
           "ft_pct": 0.7813073480402433,
-          "reb_per_min": 0.2264624530042821,
+          "reb_per_min": 0.22646245228346817,
           "ast_per_min": 0.08413137751306207,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4593016.png"
         },
@@ -1955,7 +1955,7 @@
           "fg2_pct": 0.5993731747436472,
           "tp_pct": 0.2925636020564488,
           "ft_pct": 0.714935843261789,
-          "reb_per_min": 0.15776081079728024,
+          "reb_per_min": 0.15776081018697602,
           "ast_per_min": 0.06719500706564045,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4594326.png"
         },
@@ -1981,7 +1981,7 @@
           "fg2_pct": 0.6277275028420908,
           "tp_pct": 0.39460226201434634,
           "ft_pct": 0.7613145142381891,
-          "reb_per_min": 0.18862306736673204,
+          "reb_per_min": 0.1886230665518495,
           "ast_per_min": 0.061528210828852396,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4595400.png"
         },
@@ -2007,7 +2007,7 @@
           "fg2_pct": 0.6132314528903106,
           "tp_pct": 0.33492308245117747,
           "ft_pct": 0.7785466909892694,
-          "reb_per_min": 0.33798421192798156,
+          "reb_per_min": 0.33798420995684586,
           "ast_per_min": 0.06952040201439255,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4600663.png"
         },
@@ -2033,7 +2033,7 @@
           "fg2_pct": 0.49982782022879,
           "tp_pct": 0.2890529279066876,
           "ft_pct": 0.6612435477736238,
-          "reb_per_min": 0.1311026336709153,
+          "reb_per_min": 0.13110256517556113,
           "ast_per_min": 0.10667713245990737,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4683934.png"
         },
@@ -2059,7 +2059,7 @@
           "fg2_pct": 0.5734398517083454,
           "tp_pct": 0.3435034501944687,
           "ft_pct": 0.7120518632382278,
-          "reb_per_min": 0.19426691968376325,
+          "reb_per_min": 0.1942669189564585,
           "ast_per_min": 0.05793343650121271,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4684806.png"
         },
@@ -2085,7 +2085,7 @@
           "fg2_pct": 0.5144126584523407,
           "tp_pct": 0.4079180588421377,
           "ft_pct": 0.8212574161186209,
-          "reb_per_min": 0.15636824397446245,
+          "reb_per_min": 0.15636818611916328,
           "ast_per_min": 0.16971757790302855,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4781746.png"
         },
@@ -2111,7 +2111,7 @@
           "fg2_pct": 0.5619650130559722,
           "tp_pct": 0.34494346952704125,
           "ft_pct": 0.8348433165831594,
-          "reb_per_min": 0.22373208751797805,
+          "reb_per_min": 0.2237320869923047,
           "ast_per_min": 0.10627252687544368,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4903027.png"
         },
@@ -2137,7 +2137,7 @@
           "fg2_pct": 0.5002031397027509,
           "tp_pct": 0.33640495973098317,
           "ft_pct": 0.8166245579890649,
-          "reb_per_min": 0.2065032034721527,
+          "reb_per_min": 0.20650319955661225,
           "ast_per_min": 0.11550720312970102,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5041935.png"
         },
@@ -2163,7 +2163,7 @@
           "fg2_pct": 0.5841385183364746,
           "tp_pct": 0.3340471109832611,
           "ft_pct": 0.7479030919305019,
-          "reb_per_min": 0.19781350156886632,
+          "reb_per_min": 0.19781350087979843,
           "ast_per_min": 0.07422292595463358,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5105550.png"
         },
@@ -2189,7 +2189,7 @@
           "fg2_pct": 0.5527435900478073,
           "tp_pct": 0.35178846775757466,
           "ft_pct": 0.7744117183521977,
-          "reb_per_min": 0.20727602460164937,
+          "reb_per_min": 0.20727601961073375,
           "ast_per_min": 0.10727565790044194,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5105817.png"
         },
@@ -2215,7 +2215,7 @@
           "fg2_pct": 0.5230344798712314,
           "tp_pct": 0.3557870781879337,
           "ft_pct": 0.7818191522919067,
-          "reb_per_min": 0.12746948423304424,
+          "reb_per_min": 0.12746948376544331,
           "ast_per_min": 0.0654287317668473,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5112087.png"
         },
@@ -2241,7 +2241,7 @@
           "fg2_pct": 0.5410767624104632,
           "tp_pct": 0.35463063146742796,
           "ft_pct": 0.7876430016766408,
-          "reb_per_min": 0.18070544347421996,
+          "reb_per_min": 0.1807054386541897,
           "ast_per_min": 0.10893936705266194,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5231919.png"
         },
@@ -2267,7 +2267,7 @@
           "fg2_pct": 0.5226080618025876,
           "tp_pct": 0.37201777877650233,
           "ft_pct": 0.8244332125345897,
-          "reb_per_min": 0.1558903058634484,
+          "reb_per_min": 0.15589027638309205,
           "ast_per_min": 0.1926528454837398,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3995.png"
         },
@@ -2293,7 +2293,7 @@
           "fg2_pct": 0.6984306844320969,
           "tp_pct": 0.3522754948003072,
           "ft_pct": 0.6414688828560713,
-          "reb_per_min": 0.3784399554198184,
+          "reb_per_min": 0.37843995479983955,
           "ast_per_min": 0.06991976491819964,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4066211.png"
         },
@@ -2319,7 +2319,7 @@
           "fg2_pct": 0.6160830383509843,
           "tp_pct": 0.40660480499362817,
           "ft_pct": 0.8212233274278238,
-          "reb_per_min": 0.2497866952232293,
+          "reb_per_min": 0.24978669446895513,
           "ast_per_min": 0.07993568231903717,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4066399.png"
         },
@@ -2345,7 +2345,7 @@
           "fg2_pct": 0.490959975339629,
           "tp_pct": 0.2753465401434921,
           "ft_pct": 0.8724261230567708,
-          "reb_per_min": 0.12923596672997906,
+          "reb_per_min": 0.12923589210082803,
           "ast_per_min": 0.23837320757574573,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4279888.png"
         },
@@ -2371,7 +2371,7 @@
           "fg2_pct": 0.5688446988846737,
           "tp_pct": 0.36571144080275575,
           "ft_pct": 0.7292872446331504,
-          "reb_per_min": 0.15588227114501932,
+          "reb_per_min": 0.15588227089026718,
           "ast_per_min": 0.07253311956125293,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4431736.png"
         },
@@ -2397,7 +2397,7 @@
           "fg2_pct": 0.6006221894677645,
           "tp_pct": 0.381584598576495,
           "ft_pct": 0.7527759095602491,
-          "reb_per_min": 0.11486413355545713,
+          "reb_per_min": 0.11486409675840159,
           "ast_per_min": 0.07753606826385062,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4578893.png"
         },
@@ -2423,7 +2423,7 @@
           "fg2_pct": 0.6294163763861111,
           "tp_pct": 0.3548897707970034,
           "ft_pct": 0.6710759980900879,
-          "reb_per_min": 0.24242109367880232,
+          "reb_per_min": 0.2424210924658509,
           "ast_per_min": 0.07065778609683661,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4592435.png"
         },
@@ -2449,7 +2449,7 @@
           "fg2_pct": 0.5313532900552679,
           "tp_pct": 0.3365959533763312,
           "ft_pct": 0.7934468939052416,
-          "reb_per_min": 0.1826399153163906,
+          "reb_per_min": 0.18263991199419072,
           "ast_per_min": 0.09155897530313263,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4593043.png"
         },
@@ -2475,7 +2475,7 @@
           "fg2_pct": 0.5480844456814593,
           "tp_pct": 0.324275548698502,
           "ft_pct": 0.7893188254964737,
-          "reb_per_min": 0.20186595798061,
+          "reb_per_min": 0.2018659576786939,
           "ast_per_min": 0.19069708664364338,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4683021.png"
         },
@@ -2501,7 +2501,7 @@
           "fg2_pct": 0.49590586793706526,
           "tp_pct": 0.3593408900480123,
           "ft_pct": 0.8255214635626912,
-          "reb_per_min": 0.1132619355201017,
+          "reb_per_min": 0.11326188287744754,
           "ast_per_min": 0.1277988430426016,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4683678.png"
         },
@@ -2527,7 +2527,7 @@
           "fg2_pct": 0.5574727230783604,
           "tp_pct": 0.33301250826372514,
           "ft_pct": 0.7847979015407914,
-          "reb_per_min": 0.17949462011718267,
+          "reb_per_min": 0.17949435650696122,
           "ast_per_min": 0.09837437947635895,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4703889.png"
         },
@@ -2553,7 +2553,7 @@
           "fg2_pct": 0.5291451081172689,
           "tp_pct": 0.3392091395679629,
           "ft_pct": 0.8082183736941133,
-          "reb_per_min": 0.1630931837349324,
+          "reb_per_min": 0.1630930301666522,
           "ast_per_min": 0.08831654742363082,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4706557.png"
         },
@@ -2579,7 +2579,7 @@
           "fg2_pct": 0.517018566398905,
           "tp_pct": 0.3367007157994158,
           "ft_pct": 0.7819777845897238,
-          "reb_per_min": 0.1483619671053516,
+          "reb_per_min": 0.14836193333778092,
           "ast_per_min": 0.08987414991644609,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4914336.png"
         },
@@ -2605,7 +2605,7 @@
           "fg2_pct": 0.5438274350682691,
           "tp_pct": 0.3080554122490406,
           "ft_pct": 0.6922909423447059,
-          "reb_per_min": 0.12503609348334796,
+          "reb_per_min": 0.12503605820962957,
           "ast_per_min": 0.08070659337801296,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5081727.png"
         },
@@ -2631,7 +2631,7 @@
           "fg2_pct": 0.6039654508205583,
           "tp_pct": 0.3293771310358191,
           "ft_pct": 0.6838209169851748,
-          "reb_per_min": 0.40578643824692295,
+          "reb_per_min": 0.4057864379052117,
           "ast_per_min": 0.08110099893709806,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5105565.png"
         },
@@ -2657,7 +2657,7 @@
           "fg2_pct": 0.5059529926013293,
           "tp_pct": 0.2251016661206898,
           "ft_pct": 0.7903164983288269,
-          "reb_per_min": 0.21866518175627675,
+          "reb_per_min": 0.2186651801134907,
           "ast_per_min": 0.08197673499199157,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5217746.png"
         },
@@ -2683,7 +2683,7 @@
           "fg2_pct": 0.5386904847471734,
           "tp_pct": 0.3631658457708537,
           "ft_pct": 0.7797744869785685,
-          "reb_per_min": 0.17186768676524622,
+          "reb_per_min": 0.17186742926557363,
           "ast_per_min": 0.11429161114794247,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/6606.png"
         }
