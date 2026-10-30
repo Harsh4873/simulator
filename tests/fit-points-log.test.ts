@@ -44,7 +44,7 @@ const outcomes: OutcomeRow[] = [
   pointsRow('rookie', 'r1', 2, 5),
 ];
 
-test('a points log scales attempt rates only when the shooting sample is empty and the player has at least 3 games', () => {
+test('count evidence blends continuously with shooting exposure', () => {
   assert.equal(pointsLogPerMinute(outcomes, 'star'), 24 / 32);
   const fitted = fitPlayers({
     roster: [
@@ -66,27 +66,15 @@ test('a points log scales attempt rates only when the shooting sample is empty a
   assert.equal(prior.shooting_games > 0, true);
   assert.equal(star.shooting_games, 0);
   assert.equal(rookie.shooting_games, 0);
-  assert.ok(Math.abs(rookie.fga_per_min - prior.fga_per_min) < 1e-9, `rookie ${rookie.fga_per_min} prior ${prior.fga_per_min}`);
-  assert.ok(Math.abs(rookie.fta_per_min - prior.fta_per_min) < 1e-9);
-  assert.equal(star.tp_pct, rookie.tp_pct);
-  assert.equal(star.fg2_pct, rookie.fg2_pct);
-  assert.equal(star.tpa_given_fga, rookie.tpa_given_fga);
-  assert.equal(star.ft_pct, rookie.ft_pct);
-  assert.equal(star.reb_per_min, rookie.reb_per_min);
-  assert.equal(star.ast_per_min, rookie.ast_per_min);
-  assert.equal(prior.tp_pct, rookie.tp_pct);
-  assert.equal(prior.fg2_pct, rookie.fg2_pct);
-  assert.equal(prior.tpa_given_fga, rookie.tpa_given_fga);
-  const priorPpm = priorPointsPerMinute(rookie);
-  assert.ok(priorPpm > 0);
-  const scale = (24 / 32) / priorPpm;
-  const scaledFga = Math.min(1.5, Math.max(0, rookie.fga_per_min * scale));
-  assert.ok(Math.abs(star.fga_per_min - scaledFga) < 1e-9, `star ${star.fga_per_min} scaled ${scaledFga}`);
-  assert.ok(Math.abs(star.fga_per_min - rookie.fga_per_min) > 1e-4);
-  assert.ok(Math.abs(star.fta_per_min - Math.min(1.5, rookie.fta_per_min * scale)) < 1e-9);
+  assert.ok(star.fga_per_min>rookie.fga_per_min);
+  assert.ok(star.points_scale!>1);
+  assert.ok(priorPointsPerMinute(star)<24/32,'finite evidence is shrunk rather than fully trusted');
+  assert.ok(priorPointsPerMinute(star)>priorPointsPerMinute(rookie));
+  assert.equal(star.tp_pct,rookie.tp_pct);
+
 });
 
-test('points per minute uses a full 2026 weight and a 0.35 weight for 2027', () => {
+test('points per minute combines both permitted seasons', () => {
   const row = (season: number): OutcomeRow => ({
     season,
     athlete_id: 'log',

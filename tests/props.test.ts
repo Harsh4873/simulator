@@ -151,10 +151,10 @@ test('the shipped policy leans or passes and does not call a strong edge a bet',
   assert.equal(strong.verdict?.verdict, 'LEAN');
   assert.match(strong.verdict?.text ?? '', /not yet been historically calibrated/);
   const same = verdictFor(counted(7000, 3000), -110, ready, 'pts', checked);
-  assert.equal(same.verdict?.verdict, 'BET');
+  assert.equal(same.verdict?.verdict, 'LEAN'); // A manually toggled policy cannot certify calibration.
   const modest = verdictFor(counted(6000, 4000), -110, ready, 'pts', checked);
   assert.equal(modest.verdict?.verdict, 'LEAN');
-  assert.match(modest.verdict?.text ?? '', /modest/);
+  assert.match(modest.verdict?.text ?? '', /not yet been historically calibrated/);
   const example = verdictFor(counted(5800, 4200), -110);
   assert.equal(example.verdict?.verdict, 'LEAN');
   const coin = verdictFor(counted(5000, 5000), -110);
@@ -176,7 +176,7 @@ test('missing data, thin samples, and players who do not play cannot become a be
   assert.equal(noShots.verdict?.verdict, 'PASS');
   assert.match(noShots.verdict?.text ?? '', /prior/);
   const boards = verdictFor(counted(7000, 3000), -110, { ...ready, missingShooting: true }, 'reb', checked);
-  assert.equal(boards.verdict?.verdict, 'BET');
+  assert.equal(boards.verdict?.verdict, 'LEAN');
   const thin = verdictFor(counted(7000, 3000), -110, { ...ready, thinSample: true }, 'pts', checked);
   assert.equal(thin.verdict?.verdict, 'LEAN');
   assert.match(thin.verdict?.text ?? '', /thin/);

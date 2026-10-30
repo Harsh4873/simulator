@@ -1,3 +1,4 @@
+import {marginalRead} from './simulate.ts';
 import { formatTip } from './date.ts';
 import { playerHeadshotUrl } from './display.ts';
 import { escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
@@ -211,7 +212,8 @@ function expectedCell(player: SimulatedPlayer, key: ColumnKey): string {
   if (key === 'pts' && player.expectation) {
     return `<td data-col="pts"><span class="stat">${shown}</span><span class="pct">${player.expectation.ptsP10}–${player.expectation.ptsP90}</span></td>`;
   }
-  return `<td data-col="${key}">${shown}</td>`;
+  const band=player.expectation?.bands?.[key];
+  return `<td data-col="${key}">${shown}${band?`<span class="pct">${band.p10}–${band.p90}</span>`:''}</td>`;
 }
 
 function playerRow(player: SimulatedPlayer, expected: boolean): string {
@@ -306,7 +308,7 @@ function sortBar(side: 'away' | 'home', name: string, sort: BoxSort): string {
 
 function tailMarkup(side: string, read: MarginalRead | undefined): string {
   if (!read || read.constant) return '';
-  return `<p class="team-pct ${side} tone" data-bucket="${read.bucket}">${read.percent}%</p>`;
+  return `<p class="team-pct ${side} tone" data-bucket="${read.bucket}" title="Mid-CDF; tied mass ${((read.mass??0)*100).toFixed(1)}%">${read.percent}%</p>`;
 }
 
 function presented(score: Simulation, scenario: BoxScenario): Simulation {
@@ -373,13 +375,20 @@ function scoreboard(game: SlateGame, score: Simulation, scenario: BoxScenario, f
     <p class="interval-caption">5th to 95th percentile</p>
     <p class="percentile-caption">${caption}</p>
     ${margin}
-    ${tailMarkup('away', score.away.pointsRead)}
-    ${tailMarkup('home', score.home.pointsRead)}
+    ${tailMarkup('away', useMeans?marginalRead(score.awayTotals,awayScore):score.away.pointsRead)}
+    ${tailMarkup('home', useMeans?marginalRead(score.homeTotals,homeScore):score.home.pointsRead)}
     <p class="win-pct win-away">${awayPct}%</p>
     <p class="tie-line">Tie ${tiePct}%</p>
     <p class="win-pct win-home">${homePct}%</p>
     <p class="win-caption">Win rate in 10,000 games</p>
   </div>`;
+}
+
+function distributionPanel(score:Simulation):string{
+  if(!score.distributions)return '';
+  return `<section aria-label="Game distributions"><h3>Game distributions</h3><p>Includes overtime. Margin = home points minus away points; a positive margin favors home. Enter a margin threshold (the negative of a home spread).</p>${(['total','margin'] as const).map(kind=>{
+    const d=score.distributions![kind];return `<p>${kind==='total'?'Total':'Home margin'}: mean ${d.mean.toFixed(1)}; median ${d.median.toFixed(1)}; 10–90% ${d.p10.toFixed(1)} to ${d.p90.toFixed(1)}; 5–95% ${d.p05.toFixed(1)} to ${d.p95.toFixed(1)}. Monte Carlo SE of mean ${d.standardError.toFixed(2)} (sampling noise only).</p><label>${kind} line <input type="number" step="0.5" data-game-line="${kind}"></label><p data-line-result="${kind}" role="status">Enter a line.</p>`;
+  }).join('')}</section>`;
 }
 
 function boxTable(side: 'away' | 'home', slateSide: TeamSide, team: SimulatedTeam, sort: BoxSort, expected: boolean): string {
@@ -413,7 +422,7 @@ export function renderBoxScore(
     scenario === 'upside'
       ? UPSIDE_LABEL
       : expected
-        ? 'Each row is that player\'s average across all 10,000 games, including games they sit. The range under minutes and points is that player\'s own 10th to 90th percentile. It is not one box score.'
+        ? 'Each row is that player\'s average across all 10,000 games, including games they sit. The range under each stat is that player\'s own 10th to 90th percentile. It is not one box score.'
         : 'This box score is the simulated game nearest the median combined score. The range under each score is the 5th to 95th percentile.';
   const upsideChecked = scenario === 'upside' ? ' checked' : '';
   return `<div data-event="${escapeHtml(eventId)}">
@@ -426,11 +435,12 @@ export function renderBoxScore(
       </p>
       <label class="color-choice"><input type="checkbox" data-probability-colors> Probability colors</label>
       <label class="scenario-choice"><input type="checkbox" data-upside-scenario${upsideChecked}> ${UPSIDE_LABEL}</label>
+      ${distributionPanel(score)}
       ${boxTable('away', game.away, shown.away, sort.away, expected)}
       ${boxTable('home', game.home, shown.home, sort.home, expected)}
       <p class="note">${note}</p>
       <p class="note">The minutes column totals team-minutes: five players on the floor at once. Regulation is 240 (5 × 48). Overtime is 265 (5 × 53). It is not the length of the game.</p>
-      <p class="legend">Brighter blue means that number is further from this player's middle in the 10,000 games. The percent is the share of those games at or below the number shown.</p>
+      <p class="legend">Brighter blue means that number is further from this player's middle in the 10,000 games. The percent is the mid-CDF: the share below the displayed value plus half the share tied with it. Common discrete outcomes stay near the middle.</p>
     </div>`;
 }
 
@@ -488,6 +498,16 @@ function whySentences(row: CardRow | null, scenario: BoxScenario): string[] {
   if (games2026 !== undefined && games2027 !== undefined) {
     sentences.push(`Prior season (2026): ${games2026} games. This season (2027): ${games2027} games.`);
   }
+  const scale=readNumber(row,'points_scale');
+  if(scale!==undefined)sentences.push(`Attempts scale: ${scale.toFixed(3)} from the exposure-weighted points blend.`);
+  const conditional=readNumber(row,'minutes_mean');
+  if(conditional!==undefined)sentences.push(`Conditional minute target: ${conditional.toFixed(1)} before the team-minute allocation.`);
+  const restriction=readNumber(row,'minutes_restriction');
+  if(restriction!==undefined)sentences.push(`Reported full-game minute cap: ${restriction}.`);
+  if(row&&'evidence' in row&&row.evidence){
+    const evidence=row.evidence as import('./model-evidence.ts').PlayerEvidence;
+    for(const key of ['minutes','shooting','reb','ast'] as const){const e=evidence[key];sentences.push(`${key}: ${e.state}; weighted exposure ${e.exposure.toFixed(1)}, prior contribution ${(100*e.prior_fraction).toFixed(1)}%, last observation ${e.last_observed??'unknown'}.`);}
+  }
   const games = readNumber(row, 'games');
   const shooting = readNumber(row, 'shooting_games');
   const missing = readBoolean(row, 'missing_shooting');
@@ -495,7 +515,7 @@ function whySentences(row: CardRow | null, scenario: BoxScenario): string[] {
     sentences.push(`Shooting sample: ${shooting} games.`);
   }
   if (shooting === 0 || missing === true) {
-    sentences.push('Missing shooting: shot mix and accuracy use team/position priors. When at least three counting games exist, attempts are rescaled to the observed points rate.');
+    sentences.push('Missing shooting: shot mix and accuracy use team/position priors. Counting-game points, including zeros, blend continuously with the shooting prior according to exposure.');
   }
   if (games2026 === 0 && games2027 !== undefined && games2027 < 8) {
     sentences.push('Thin sample: no games in 2026 and fewer than 8 in 2027.');
@@ -644,6 +664,7 @@ const MARKET_LABEL: Record<PropMarket, string> = {
   reb: 'rebounds',
   ast: 'assists',
   pra: 'points + rebounds + assists',
+  pa:'points + assists',pr:'points + rebounds',ra:'rebounds + assists',dd:'double-double (yes = over 0.5)',td:'triple-double (yes = over 0.5)',
   tpm: 'threes', stl: 'steals', blk: 'blocks', tov: 'turnovers',
 };
 
@@ -718,6 +739,8 @@ export function renderPropResults(
 
 function propFormMarkup(form: PropFormState): string {
   const markets: { value: PropMarket; label: string }[] = [
+    {value:'pa',label:'Points + assists'},{value:'pr',label:'Points + rebounds'},{value:'ra',label:'Rebounds + assists'},
+    {value:'dd',label:'Double-double (line 0.5)'},{value:'td',label:'Triple-double (line 0.5)'},
     { value: 'pts', label: 'Points' },
     { value: 'reb', label: 'Rebounds' },
     { value: 'ast', label: 'Assists' },

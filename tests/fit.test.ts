@@ -180,7 +180,7 @@ test('rates use shooting attempts and gzip rebounds, and an id injury wins', () 
   assert.equal(alpha.position_group, 'Forward');
   assert.equal(alpha.headshot_url, 'https://a.espncdn.com/i/headshots/nba/players/full/1.png');
   assert.equal(Object.hasOwn(beta, 'headshot_url'), false);
-  assert.ok(Math.abs(alpha.fga_per_min - 0.5) < 1e-9);
+  assert.ok(Math.abs(alpha.fga_per_min / alpha.points_scale! - 0.5) < 1e-9);
   assert.ok(Math.abs(alpha.ft_pct - 0.8) < 1e-9);
   assert.ok(Math.abs(alpha.reb_per_min - 1 / 3) < 1e-9);
   assert.equal(beta.injury_status, 'questionable');

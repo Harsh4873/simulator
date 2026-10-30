@@ -1,3 +1,4 @@
+import { minuteLineups } from './lineups.ts';
 import type { DrawnPlayer } from './simulate.ts';
 import type { MatchupContext, RatePlayer, TeamProfile } from './types.ts';
 import type { Rng } from './rng.ts';
@@ -13,24 +14,26 @@ const sum = (xs: number[]) => xs.reduce((a,b)=>a+b,0);
 const bound = (v:number) => Math.max(0,Math.min(1,v));
 
 /** Aggregate possession model: shared pace, competitive rebounds, one assister per make.
- * Player exposure is period minutes; five-player substitution sequences are not modeled.
+ * Synthetic five-player stints realize period minutes; actual substitution history is unknown.
  */
 export function drawPossessions(
   away: DrawnPlayer[], home: DrawnPlayer[], roster: RatePlayer[], awayMinutes: number[], homeMinutes: number[],
   context: MatchupContext, possessions: number, rng: Rng,
 ): void {
+  const periodLength=awayMinutes.reduce((a,b)=>a+b,0)/5;
+  const awayLineups=minuteLineups(awayMinutes,periodLength,rng),homeLineups=minuteLineups(homeMinutes,periodLength,rng);
   const rates = new Map(roster.map(p=>[p.athlete_id,p]));
-  const attack = (off: DrawnPlayer[], def: DrawnPlayer[], mins: number[], defMins: number[], profile: TeamProfile, opponent: TeamProfile, venue: number) => {
+  const attack = (off: DrawnPlayer[], def: DrawnPlayer[], mins: number[], defMins: number[], profile: TeamProfile, opponent: TeamProfile, venue: number, offStints:number[][], defStints:number[][]) => {
     const p = off.map(x=>rates.get(x.athlete_id)!);
     const q = def.map(x=>rates.get(x.athlete_id)!);
-    const shots = p.map((x,i)=>mins[i]*x.fga_per_min);
-    const fts = p.map((x,i)=>mins[i]*x.fta_per_min);
-    const creators = p.map((x,i)=>mins[i]*x.ast_per_min);
-    const offensiveBoards = p.map((x,i)=>mins[i]*x.reb_per_min);
-    const defensiveBoards = q.map((x,i)=>defMins[i]*x.reb_per_min);
-    const steals = q.map((x,i)=>defMins[i]*(x.stl_per_min ?? 0));
-    const blocks = q.map((x,i)=>defMins[i]*(x.blk_per_min ?? 0));
-    const turnovers = p.map((x,i)=>mins[i]*(x.tov_per_min ?? 0));
+    let shots = p.map((x,i)=>mins[i]*x.fga_per_min);
+    let fts = p.map((x,i)=>mins[i]*x.fta_per_min);
+    let creators = p.map((x,i)=>mins[i]*x.ast_per_min);
+    let offensiveBoards = p.map((x,i)=>mins[i]*x.reb_per_min);
+    let defensiveBoards = q.map((x,i)=>defMins[i]*x.reb_per_min);
+    let steals = q.map((x,i)=>defMins[i]*(x.stl_per_min ?? 0));
+    let blocks = q.map((x,i)=>defMins[i]*(x.blk_per_min ?? 0));
+    let turnovers = p.map((x,i)=>mins[i]*(x.tov_per_min ?? 0));
     const fga=sum(shots), fta=sum(fts);
     const ftShare = fta/2/Math.max(1,fga+fta/2);
     const fgValue = sum(p.map((x,i)=>shots[i]*(2*(1-x.tpa_given_fga)*x.fg2_pct+3*x.tpa_given_fga*x.tp_pct)))/Math.max(1,fga);
@@ -54,6 +57,12 @@ export function drawPossessions(
     const stealChance=bound(sum(steals)/Math.max(1,possessions*tov));
     const blockChance=bound(sum(blocks)/Math.max(1,possessions*(1-tov)*(1-fgPct)));
     for(let n=0;n<possessions;n++) {
+      const minute=Math.min(periodLength-1,Math.floor(n*periodLength/possessions));
+      const on=new Set(offStints[minute]),against=new Set(defStints[minute]);
+      shots=p.map((x,i)=>on.has(i)?x.fga_per_min:0);fts=p.map((x,i)=>on.has(i)?x.fta_per_min:0);
+      creators=p.map((x,i)=>on.has(i)?x.ast_per_min:0);offensiveBoards=p.map((x,i)=>on.has(i)?x.reb_per_min:0);
+      turnovers=p.map((x,i)=>on.has(i)?x.tov_per_min??0:0);
+      defensiveBoards=q.map((x,i)=>against.has(i)?x.reb_per_min:0);steals=q.map((x,i)=>against.has(i)?x.stl_per_min??0:0);blocks=q.map((x,i)=>against.has(i)?x.blk_per_min??0:0);
       let live=true;
       let guard=0;
       while(live) {
@@ -104,7 +113,8 @@ export function drawPossessions(
       }
     }
   };
-  const venue=context.neutral?0:context.home_log_advantage;
-  attack(away,home,awayMinutes,homeMinutes,context.away,context.home,-venue);
-  attack(home,away,homeMinutes,awayMinutes,context.home,context.away,venue);
+  const rest=context.away.rest_days!==null&&context.home.rest_days!==null?(context.rest_coefficient??0)*(Math.log1p(context.home.rest_days)-Math.log1p(context.away.rest_days)):0;
+  const venue=(context.neutral?0:context.home_log_advantage)+rest;
+  attack(away,home,awayMinutes,homeMinutes,context.away,context.home,-venue,awayLineups,homeLineups);
+  attack(home,away,homeMinutes,awayMinutes,context.home,context.away,venue,homeLineups,awayLineups);
 }

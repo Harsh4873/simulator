@@ -18,24 +18,35 @@ jobs:
     timeout-minutes: 40
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: main
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "22"
+          node-version: "22.21.1"
           cache: npm
+      - name: Check pre-tip refresh window
+        id: window
+        run: node --experimental-strip-types scripts/refresh-window.ts
       - name: Install dependencies
         run: npm ci
       - name: Build the rate card
-        run: GENERATOR_SHA="$(git rev-parse HEAD)" npm run rate-card
+        env:
+          PRETIP_WINDOW: ${{ steps.window.outputs.run }}
+        run: |
+          if [ "$PRETIP_WINDOW" = true ]; then
+            GENERATOR_SHA="$(git rev-parse HEAD)" npm run rate-card
+          else
+            GENERATOR_SHA="$(git rev-parse HEAD)" npm run rate-card -- --cached-summaries
+          fi
       - name: Verify before publication
         run: |
           npm test
           npm run typecheck
           npm run build
           npm run validate-artifact
+          npm run validate-privacy
       - name: Commit validated generation
         id: commit
         shell: bash
@@ -54,7 +65,7 @@ jobs:
           git fetch origin main
           # Never copy an old build onto a newer generator revision. A later run rebuilds.
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-          git add -- public/data/slate.json public/data/rate-card.json data/shooting-cache.json data/forecast-archive
+          git add -- public/data/slate.json public/data/rate-card.json public/data/manifest.json data/shooting-cache.json data/forecast-archive data/market-archive
           if ! git diff --cached --quiet; then
             git commit -m 'chore(data): refresh validated simulator generation'
             AUTHOR=$(git show -s --format='%an' HEAD)

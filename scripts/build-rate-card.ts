@@ -1,18 +1,20 @@
-import { mkdirSync, readFileSync, realpathSync, writeFileSync, renameSync } from 'node:fs';
+import {marketObservations} from '../src/market-evaluation.ts';
+import { mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { chicagoDate } from '../src/date.ts';
 import { fitPlayers, hasFreeThrowAttempts, type InjuryInput, type RosterPlayer } from '../src/fit.ts';
-import { fitMatchup, fitCurrentRoles, eligibleEvents } from '../src/team-model.ts';
+import { fitMatchup, fitCurrentRoles, eligibleEvents, MODEL_VERSION } from '../src/team-model.ts';
+import { addEvidence, MISSING_FEATURES } from '../src/model-evidence.ts';
+import { canonical, generationTime } from '../src/generation.ts';
+import { upsertEvents, aggregateShooting, pendingEvents } from '../src/event-cache.ts';
 import { createHash } from 'node:crypto';
 import { validateGeneration } from '../src/validate-card.ts';
-import { parseCompletedSummary, parseSummary, type CompletedEvent } from '../src/parse-summary.ts';
-import type { OutcomeRow, RateCard, SeasonType, ShootingCache, ShootingRow, Slate, SlateGame, TeamSide } from '../src/types.ts';
+import { parseCompletedSummary, type CompletedEvent } from '../src/parse-summary.ts';
+import type { OutcomeRow, RateCard, SeasonType, ShootingCache, Slate, SlateGame, TeamSide } from '../src/types.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const SLATE_PATH = join(ROOT, 'public/data/slate.json');
-const RATE_CARD_PATH = join(ROOT, 'public/data/rate-card.json');
 const CACHE_PATH = join(ROOT, 'data/shooting-cache.json');
 // Development replay can reuse already validated events while refreshing current feeds.
 const SUMMARY_CAP = process.argv.includes('--cached-summaries') ? 0 : 400;
@@ -310,7 +312,7 @@ export function parseInjuries(payload: unknown): InjuryInput[] {
       const athleteId = String(athlete.id ?? uniqueIds[0] ?? '').trim();
       const name = String(athlete.displayName || athlete.fullName || '').trim();
       if ((!athleteId && !name) || typeof item.status !== 'string' || !item.status.trim()) throw new Error('Missing injury identity or designation');
-      injuries.push({ athlete_id: athleteId, name, status: String((isRecord(item.type) && item.type.description) || item.status || 'unknown') });
+      injuries.push({ reported_at:typeof item.date==='string'?item.date:null, minutes_restriction:null, athlete_id: athleteId, name, status: String((isRecord(item.type) && item.type.description) || item.status || 'unknown') });
     }
   }
   return injuries;
@@ -359,7 +361,9 @@ export function parseOutcomeLines(text: string): OutcomeRow[] {
     if (value.actual === null || value.actual === undefined || value.actual === '' || value.minutes === null || value.minutes === undefined || value.minutes === '' || !Number.isInteger(actual) || actual < 0 || !Number.isFinite(minutes) || minutes < 0 || minutes > 90 || !String(value.team_id ?? '').trim()) continue;
     if (value.status === 'pending' || value.result === 'pending') continue;
     const key = `${season}:${eventId}:${athleteId}:${statKey}`;
+    const eventDate=String(value.event_date ?? value.game_date ?? value.date ?? value.start_time ?? '');
     const row: OutcomeRow = {
+      ...(Number.isFinite(Date.parse(eventDate))?{event_date:new Date(eventDate).toISOString()}:{}),
       season,
       athlete_id: athleteId,
       team_id: String(value.team_id ?? '').trim(),
@@ -417,54 +421,15 @@ function eventSeasons(rows: OutcomeRow[]): Map<string, number> {
   return seasons;
 }
 
-function loadCache(): ShootingCache {
-  const parsed = JSON.parse(readFileSync(CACHE_PATH, 'utf8')) as Partial<ShootingCache>;
+function loadCache(path=CACHE_PATH): ShootingCache {
+  const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<ShootingCache>;
   return {
     schema_version: 1,
     fetched_event_ids: Array.isArray(parsed.fetched_event_ids) ? parsed.fetched_event_ids.map((id) => String(id)) : [],
     rows: Array.isArray(parsed.rows) ? parsed.rows : [],
     events: Array.isArray(parsed.events) ? parsed.events : [],
+    retries: parsed.retries ?? {},
   };
-}
-
-function mergeShooting(cache: ShootingCache, season: number, games: ReturnType<typeof parseSummary>): void {
-  const index = new Map<string, ShootingRow>();
-  for (const row of cache.rows) index.set(`${row.athlete_id}|${row.team_id}|${row.season}`, row);
-  for (const game of games) {
-    const key = `${game.athlete_id}|${game.team_id}|${season}`;
-    const existing = index.get(key);
-    if (!existing) {
-      index.set(key, {
-        athlete_id: game.athlete_id,
-        team_id: game.team_id,
-        season,
-        games: 1,
-        minutes: game.minutes,
-        fgm: game.fgm,
-        fga: game.fga,
-        tpm: game.tpm,
-        tpa: game.tpa,
-        ftm: game.ftm,
-        fta: game.fta,
-        reb: game.reb,
-        ast: game.ast,
-        pts: game.pts,
-      });
-      continue;
-    }
-    existing.games += 1;
-    existing.minutes += game.minutes;
-    existing.fgm += game.fgm;
-    existing.fga += game.fga;
-    existing.tpm += game.tpm;
-    existing.tpa += game.tpa;
-    existing.ftm += game.ftm;
-    existing.fta += game.fta;
-    existing.reb += game.reb;
-    existing.ast += game.ast;
-    existing.pts += game.pts;
-  }
-  cache.rows = [...index.values()];
 }
 
 export function eventOutcomes(events: CompletedEvent[]): OutcomeRow[] {
@@ -513,10 +478,12 @@ async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Prom
   return results;
 }
 
-export async function buildRateCard(): Promise<void> {
-  const now = new Date();
+export async function buildRateCard(options:{now?:Date;outputRoot?:string;summaryCap?:number}={}): Promise<void> {
+  const now = options.now??new Date();
+  const outputRoot=options.outputRoot??ROOT;
+  const SLATE_PATH=join(outputRoot,'public/data/slate.json'),RATE_CARD_PATH=join(outputRoot,'public/data/rate-card.json'),CACHE_PATH=join(outputRoot,'data/shooting-cache.json');
   const date = chicagoDate(now);
-  const generatedAt = stamp(now);
+  let generatedAt = stamp(now);
   const scoreboardUrl = new URL(SCOREBOARD);
   scoreboardUrl.searchParams.set('dates', date.replaceAll('-', ''));
   scoreboardUrl.searchParams.set('limit', '100');
@@ -572,7 +539,7 @@ export async function buildRateCard(): Promise<void> {
   const outcomes = gzipText === null ? null : parseOutcomeLines(gzipText);
   if (!outcomes?.length) throw new Error('Required outcome history is empty');
   for (const team of slateTeamIds) if (!roster.some(p => p.team_id === team)) throw new Error(`Missing roster ${team}`);
-  const cache = loadCache();
+  const cache = loadCache(CACHE_PATH);
   const previousCache = serialize(cache);
   let summariesFetched = 0;
   let summariesFailed = 0;
@@ -581,23 +548,25 @@ export async function buildRateCard(): Promise<void> {
     const fetched = new Set((cache.events ?? []).map(e => e.event_id));
     const seasons = eventSeasons(outcomes);
     const recent = cache.events!.slice(-20).map(e=>e.event_id).filter(id=>seasons.has(id));
-    const pending = [...recent, ...orderPendingEventIds(
-      [...seasons.keys()].filter((eventId) => !fetched.has(eventId)),
-      { slateTeamIds, eventTeamIds: teamsByEvent(outcomes) },
-    )].slice(0, SUMMARY_CAP);
+    const dates=new Map(outcomes.filter(r=>r.event_date).map(r=>[r.event_id,r.event_date!]));
+    for(const e of cache.events!)dates.set(e.event_id,e.start_time);
+    const backlog=[...seasons.keys()].filter(id=>!fetched.has(id));
+    const pending=pendingEvents([...recent,...backlog],{now:generatedAt,dates,seasons,teams:teamsByEvent(outcomes),slateTeams:slateTeamIds,retries:cache.retries!,limit:Math.min(SUMMARY_CAP,options.summaryCap??SUMMARY_CAP)});
+    console.log(JSON.stringify({authorized_backlog:backlog.length,unknown_backlog_dates:backlog.filter(id=>!dates.has(id)).length,oldest_known_backlog:backlog.map(id=>dates.get(id)).filter(Boolean).sort()[0]??null,summary_requests:pending.length}));
     await mapLimit(pending, SUMMARY_CONCURRENCY, async (eventId) => {
       try {
         const event = parseCompletedSummary(await fetchJson(summaryUrl(eventId), SUMMARY_TIMEOUT_MS), eventId);
         if (Date.parse(event.start_time) >= now.getTime()) throw new Error('Future summary');
-        cache.events = cache.events!.filter(e=>e.event_id!==eventId);
-        cache.events.push(event);
-        const rows = event.players;
+        cache.events = upsertEvents(cache.events!,event);
+        delete cache.retries![eventId];
+
         fetched.add(eventId);
         summariesFetched += 1;
-        const season = seasons.get(eventId);
-        if (season) mergeShooting(cache, season, rows);
+
       } catch (error) {
         summariesFailed += 1;
+        const failures=(cache.retries![eventId]?.failures??0)+1;
+        cache.retries![eventId]={failures,next_check:new Date(now.getTime()+Math.min(72,2**Math.min(7,failures))*3600000).toISOString(),last_error:message(error)};
         console.error(`summary ${eventId} failed: ${message(error)}`);
       }
     });
@@ -608,15 +577,27 @@ export async function buildRateCard(): Promise<void> {
   // Legacy aggregates lack event lineage; rebuild solely from validated regular-season boxes.
   cache.rows = [];
   const trainingEvents = eligibleEvents(cache.events!,generatedAt);
-  for (const event of trainingEvents) mergeShooting(cache,event.season,event.players);
+  cache.rows=aggregateShooting(trainingEvents);
   finishCache(cache);
   const nextCache = `${JSON.stringify(cache,null,2)}\n`;
   if (nextCache !== previousCache) writeFileSync(CACHE_PATH, nextCache);
 
+  const activeSeason=games[0]?.season??fallbackSeason(isRecord(scoreboard)?scoreboard:{},date);
+  if(activeSeason!==2026&&activeSeason!==2027)throw new Error('Active season outside approved 2026/2027 history window; migrate source policy explicitly');
+  const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
+  const modelHash=hash(canonical(['src','scripts'].flatMap(dir=>readdirSync(join(ROOT,dir)).filter(f=>/\.(ts|mjs)$/.test(f)).sort().map(f=>[`${dir}/${f}`,readFileSync(join(ROOT,dir,f),'utf8')]))));
+  const inputs={date,games,roster:[...roster].sort((a,b)=>a.athlete_id.localeCompare(b.athlete_id)||a.team_id.localeCompare(b.team_id)),injuries:[...injuries].sort((a,b)=>canonical(a).localeCompare(canonical(b))),events:trainingEvents};
+  const inputHash=hash(canonical(inputs));
+  let previous:RateCard|null=null;
+  try{previous=JSON.parse(readFileSync(RATE_CARD_PATH,'utf8'));}catch{/* First build. */}
+  generatedAt=generationTime(previous,inputHash,modelHash,generatedAt);
+  slate.generated_at=generatedAt;
   let rateCardPublished = false;
   if (outcomes && hasFreeThrowAttempts(cache.rows)) {
-    const fitted = fitPlayers({ roster, injuries, outcomes: eventOutcomes(trainingEvents), shooting: cache.rows });
-    fitCurrentRoles(fitted.players, trainingEvents, games[0]?.season ?? 2027);
+    const fitted = fitPlayers({ roster, injuries, outcomes: eventOutcomes(trainingEvents), shooting: cache.rows, activeSeason });
+    fitCurrentRoles(fitted.players, trainingEvents, activeSeason,[],generatedAt);
+    addEvidence(fitted.players,trainingEvents,generatedAt);
+    fitted.players.forEach(p=>{p.model_version=MODEL_VERSION;p.as_of=generatedAt;p.calibration=null;});
     const covered = games.length === 0 || fitted.players.some((player) => slateTeamIds.includes(player.team_id));
     if (fitted.publish && covered) {
       const rateCard: RateCard = {
@@ -624,10 +605,13 @@ export async function buildRateCard(): Promise<void> {
         generated_at: generatedAt,
         date,
         iterations: 10000,
-        model_version: 'possessions-v1',
+        model_version: MODEL_VERSION,
+        calibration:null,
+        unavailable_features:[...MISSING_FEATURES],
         source_cutoff: generatedAt,
-        generator_sha: process.env.GENERATOR_SHA ?? process.env.GITHUB_SHA ?? 'local-uncommitted',
-        input_hash: createHash('sha256').update(serialize({roster,injuries,events:trainingEvents})).digest('hex'),
+        generator_sha: previous?.input_hash===inputHash&&previous.model_hash===modelHash?previous.generator_sha:process.env.GENERATOR_SHA ?? process.env.GITHUB_SHA ?? 'local-uncommitted',
+        input_hash: inputHash,
+        model_hash:modelHash,
         columns: [...COLUMNS],
         games: games.flatMap((game) => {
           const awayPlayers = fitted.players
@@ -651,15 +635,28 @@ export async function buildRateCard(): Promise<void> {
       };
       mkdirSync(dirname(RATE_CARD_PATH), { recursive: true });
       validateGeneration(slate, rateCard);
+      console.log(JSON.stringify({team_coverage:slateTeamIds.map(team=>({team_id:team,regular_games:trainingEvents.filter(e=>[e.home_team_id,e.away_team_id].includes(team)).length,current_season_games:trainingEvents.filter(e=>e.season===activeSeason&&[e.home_team_id,e.away_team_id].includes(team)).length,roster_players:roster.filter(p=>p.team_id===team).length,players_without_shooting:fitted.players.filter(p=>p.team_id===team&&p.shooting_games===0).length,latest_completed_start:trainingEvents.filter(e=>[e.home_team_id,e.away_team_id].includes(team)).at(-1)?.start_time??null}))}));
       writeFileSync(`${SLATE_PATH}.tmp`, serialize(slate));
       writeFileSync(`${RATE_CARD_PATH}.tmp`, serialize(rateCard));
       renameSync(`${RATE_CARD_PATH}.tmp`, RATE_CARD_PATH);
       renameSync(`${SLATE_PATH}.tmp`, SLATE_PATH);
+      writeFileSync(join(outputRoot,'public/data/manifest.json'),serialize({schema_version:1,input_hash:inputHash,model_hash:modelHash,generated_at:generatedAt,slate_hash:hash(serialize(slate)),card_hash:hash(serialize(rateCard))}));
+      writeFileSync(join(outputRoot,'.refresh-status.json'),serialize({checked_at:stamp(now),input_hash:inputHash,model_hash:modelHash,expected_date:date,completed_at:stamp(new Date())}));
       const upcoming = new Set(games.filter(g => Date.parse(g.start_time)>now.getTime() && g.status_state==='pre').map(g=>g.event_id));
       if(upcoming.size){
-        const archive=join(ROOT,'data/forecast-archive',date);
+        const archive=join(outputRoot,'data/forecast-archive',date);
         mkdirSync(archive,{recursive:true});
-        writeFileSync(join(archive,`${generatedAt.replaceAll(':','-')}.json`),serialize({slate:{...slate,games:slate.games.filter(g=>upcoming.has(g.event_id))},card:{...rateCard,games:rateCard.games.filter(g=>upcoming.has(g.event_id))}}));
+        const sourcePath=join(archive,`inputs-${inputHash}.json`);
+        // Full input snapshots are large (~10 MB); keep them out of the committed archive unless explicitly requested.
+        if(process.env.ARCHIVE_INPUT_SNAPSHOTS==='1'){try{readFileSync(sourcePath);}catch{writeFileSync(sourcePath,serialize(inputs));}}
+        writeFileSync(join(archive,`${generatedAt.replaceAll(':','-')}.json`),serialize({source_lineage:{input_hash:inputHash,model_hash:modelHash,fetch_started:generatedAt,maximum_event_start:trainingEvents.at(-1)?.start_time??null,injuries,roster,training_event_ids:trainingEvents.map(e=>e.event_id)},slate:{...slate,games:slate.games.filter(g=>upcoming.has(g.event_id))},card:{...rateCard,games:rateCard.games.filter(g=>upcoming.has(g.event_id))}}));
+      }
+      const quotes=marketObservations(scoreboard,stamp(now));
+      if(quotes.length){
+        const marketDir=join(outputRoot,'data/market-archive',date);mkdirSync(marketDir,{recursive:true});
+        const quoteHash=hash(canonical(quotes.map(({captured_at,...q})=>q)));
+        const path=join(marketDir,`${quoteHash}.json`);
+        try{readFileSync(path);}catch{writeFileSync(path,serialize(quotes));}
       }
       rateCardPublished = true;
     }

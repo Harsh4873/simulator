@@ -1,3 +1,4 @@
+import type {RefreshHealth} from './generation.ts';
 import { freshnessIssue, validateGame } from './validate-card.ts';
 import { formatTip } from './date.ts';
 import { teamLogoUrl } from './display.ts';
@@ -69,11 +70,11 @@ function renderCard(game: SlateGame, card: RateCard, now: Date, capturedAt: stri
   </article>`;
 }
 
-export function renderSlate(slate: Slate, card: RateCard, now: Date): string {
+export function renderSlate(slate: Slate, card: RateCard, now: Date, health:RefreshHealth|null=null): string {
   if (slate.generated_at === null) {
     return '<p class="state">Today\'s slate has not been built yet.</p>';
   }
-  const issue = freshnessIssue(slate,card,now);
+  const issue = freshnessIssue(slate,card,now,health);
   if(issue) return `<p class="state" role="alert">${escapeHtml(issue)}. Captured ${escapeHtml(card.generated_at ?? 'unknown')}. <button data-retry>Retry</button></p>`;
   if (slate.games.length === 0) {
     return `<p class="state">No NBA games on ${escapeHtml(slate.date ?? '')}.</p>`;

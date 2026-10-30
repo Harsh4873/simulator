@@ -1,4 +1,5 @@
-export type PropMarket = 'pts' | 'reb' | 'ast' | 'pra' | 'tpm' | 'stl' | 'blk' | 'tov';
+import { calibrationIssue, type PlayerEvidence, type CalibrationArtifact } from './model-evidence.ts';
+export type PropMarket = 'pts' | 'reb' | 'ast' | 'pra' | 'tpm' | 'stl' | 'blk' | 'tov' | 'pa' | 'pr' | 'ra' | 'dd' | 'td';
 export type PropSide = 'over' | 'under';
 
 export interface PlayerSample {
@@ -159,7 +160,11 @@ export function fairAmericanOdds(probability: number): number | null {
   return Math.round((100 * (1 - probability)) / probability);
 }
 
-function valueAt(sample: PlayerSample, index: number, market: PropMarket): number {
+export function valueAt(sample: PlayerSample, index: number, market: PropMarket): number {
+  if(market==='pa')return sample.pts[index]+sample.ast[index];
+  if(market==='pr')return sample.pts[index]+sample.reb[index];
+  if(market==='ra')return sample.reb[index]+sample.ast[index];
+  if(market==='dd'||market==='td'){const double=[sample.pts[index],sample.reb[index],sample.ast[index],sample.stl?.[index]??NaN,sample.blk?.[index]??NaN].filter(x=>x>=10).length;return Number(double>=(market==='dd'?2:3));}
   if (market === 'stl' || market === 'blk' || market === 'tov') return sample[market]?.[index] ?? NaN;
   if (market === 'pts') return sample.pts[index];
   if (market === 'reb') return sample.reb[index];
@@ -171,7 +176,9 @@ function valueAt(sample: PlayerSample, index: number, market: PropMarket): numbe
 export function gradeProp(sample: PlayerSample, market: PropMarket, side: PropSide, line: number): PropGrade {
   if(!Number.isFinite(line)||line<0||!Number.isInteger(line*2))throw new Error('Line must be a nonnegative whole or half point');
   const count = sample.min.length;
-  const series=market==='pra'?[sample.pts,sample.reb,sample.ast]:[sample[market]];
+  const keys=market==='pra'?['pts','reb','ast']:market==='pa'?['pts','ast']:market==='pr'?['pts','reb']:market==='ra'?['reb','ast']:market==='dd'||market==='td'?['pts','reb','ast','stl','blk']:[market];
+  const series=keys.map(k=>sample[k as keyof PlayerSample]);
+  if((market==='dd'||market==='td')&&line!==.5)throw new Error('Milestones settle as yes over 0.5 or no under 0.5');
   if(series.some(xs=>!xs||xs.length!==count||Array.from(xs).some(v=>!Number.isFinite(v)||v<0)))throw new Error('Missing or invalid stat samples');
   const grade: PropGrade = { wins: 0, losses: 0, pushes: 0, voids: 0 };
   for (let index = 0; index < count; index += 1) {
@@ -237,6 +244,10 @@ export interface PropContext {
   missingShooting: boolean;
   thinSample: boolean;
   onCard: boolean;
+  evidence?: PlayerEvidence;
+  calibration?: CalibrationArtifact | null;
+  modelVersion?: string;
+  cutoff?: string;
 }
 
 export interface VerdictResult {
@@ -249,9 +260,14 @@ export function propContextFromPlayer(player: {
   missing_shooting?: boolean;
   shooting_games?: number;
   thin_sample?: boolean;
+  evidence?: PlayerEvidence;
+  calibration?: CalibrationArtifact | null;
+  model_version?: string;
+  as_of?: string;
 } | null): PropContext {
   if (!player) return { available: false, missingShooting: true, thinSample: true, onCard: false };
   return {
+    evidence:player.evidence, calibration:player.calibration,modelVersion:player.model_version,cutoff:player.as_of,
     available: player.minutes_weight !== 0,
     missingShooting: player.missing_shooting === true || player.shooting_games === 0,
     thinSample: player.thin_sample === true,
@@ -260,7 +276,7 @@ export function propContextFromPlayer(player: {
 }
 
 function usesShooting(market: PropMarket): boolean {
-  return market === 'pts' || market === 'pra' || market === 'tpm';
+  return !['reb','ast','ra','stl','blk','tov'].includes(market);
 }
 
 function pass(text: string): VerdictResult {
@@ -274,6 +290,12 @@ export function decideVerdict(
   policy: PropPolicy = PROP_POLICY,
 ): VerdictResult | null {
   if (quote.breakEven === null || quote.expectedReturn === null) return null;
+  if(context.evidence){
+    const keys=market==='pra'?['minutes','shooting','reb','ast']:market==='pa'?['minutes','shooting','ast']:market==='pr'?['minutes','shooting','reb']:market==='ra'?['minutes','reb','ast']:market==='dd'||market==='td'?['minutes','shooting','reb','ast','stl','blk']:market==='reb'?['minutes','reb']:market==='ast'?['minutes','ast']:market==='stl'?['minutes','stl']:market==='blk'?['minutes','blk']:['minutes','shooting'];
+    if(keys.some(k=>context.evidence![k as 'minutes'|'shooting'|'reb'|'ast'|'stl'|'blk'].state!=='observed')||context.evidence.role_changed)return pass('Insufficient, stale, or changed-role evidence for this market. Price cannot repair the data.');
+    const issue=calibrationIssue(context.calibration,context.modelVersion??'',market,context.cutoff??'');
+    if(issue)return pass(issue+'. The simulation is exploratory.');
+  }
   const decided = quote.grade.wins + quote.grade.losses;
   const total = decided + quote.grade.pushes + quote.grade.voids;
   const voidShare = total === 0 ? 1 : quote.grade.voids / total;
@@ -307,7 +329,7 @@ export function decideVerdict(
     return pass('Shot rates for this player are a prior, so this price is hard to trust.');
   }
   const strong =
-    policy.calibrated &&
+    context.calibration !== undefined && context.calibration !== null && calibrationIssue(context.calibration,context.modelVersion??'',market,context.cutoff??'')===null &&
     !context.thinSample &&
     quote.edge >= policy.betEdge &&
     quote.expectedReturn >= policy.betReturn;
@@ -323,7 +345,7 @@ export function decideVerdict(
       text: 'The simulations favor this price, but the player sample is thin, so this is not a confident recommendation.',
     };
   }
-  if (!policy.calibrated) {
+  if (calibrationIssue(context.calibration,context.modelVersion??'',market,context.cutoff??'')!==null) {
     return {
       verdict: 'LEAN',
       text: 'The simulations hit this line more often than the sportsbook price requires, but the model has not yet been historically calibrated.',
@@ -344,6 +366,7 @@ export function quoteProp(
   oppositeOdds?: number | BookPrice | null,
 ): PropQuote | null {
   if (!sample || sample.min.length === 0 || !Number.isFinite(line) || line < 0 || !Number.isInteger(line*2)) return null;
+  if((market==='dd'||market==='td')&&(line!==.5||!sample.stl||!sample.blk))return null;
   if ((market === 'stl' || market === 'blk' || market === 'tov') && !sample[market]) return null;
   const grade = gradeProp(sample, market, side, line);
   const decided = grade.wins + grade.losses;

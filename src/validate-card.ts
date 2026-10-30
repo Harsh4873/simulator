@@ -1,3 +1,5 @@
+import {freshnessBudget} from './refresh-window.ts';
+import { healthyCheck, type RefreshHealth } from './generation.ts';
 import { chicagoDate } from './date.ts';
 import type { RateCard, RateGame, Slate } from './types.ts';
 
@@ -15,6 +17,8 @@ export function validateGame(game: RateGame): void {
     for (const key of ['tpa_given_fga', 'fg2_pct', 'tp_pct', 'ft_pct'] as const) {
       if (!Number.isFinite(p[key]) || p[key] < 0 || p[key] > 1) throw new Error(`Invalid ${key}`);
     }
+    for(const key of ['stl_per_min','blk_per_min','tov_per_min','points_scale'] as const)if(p[key]!==undefined&&(!Number.isFinite(p[key])||p[key]!<0))throw new Error(`Invalid ${key}`);
+    if(p.minutes_restriction!=null&&(!Number.isFinite(p.minutes_restriction)||p.minutes_restriction<0||p.minutes_restriction>48))throw new Error('Invalid minutes restriction');
     if(p.play_probability !== undefined && (!Number.isFinite(p.play_probability)||p.play_probability<0||p.play_probability>1))throw new Error('Invalid participation probability');
     if (p.minutes_weight !== 0 && p.minutes_weight !== 1) throw new Error('Unknown availability');
   }
@@ -29,7 +33,7 @@ export function validateGame(game: RateGame): void {
   for (const team of [game.away_team_id, game.home_team_id]) {
     const active = game.players.filter(p => p.team_id === team && p.minutes_weight === 1 && (p.play_probability ?? 1)>0);
     const capacity = active.reduce((n, p) => n + (p.shooting_games === 0 && (p.games < 3 || (p.games_2027 === 0 && p.games_2026 < 20)) ? 12 : 48), 0);
-    if (active.filter(p => !(p.shooting_games === 0 && (p.games < 3 || (p.games_2027 === 0 && p.games_2026 < 20)))).length < 5 || capacity < 240) throw new Error(`Insufficient active roster: ${team}`);
+    if (active.filter(p => (p.minutes_restriction==null||p.minutes_restriction===48)&&!(p.shooting_games === 0 && (p.games < 3 || (p.games_2027 === 0 && p.games_2026 < 20)))).length < 5 || capacity < 240) throw new Error(`Insufficient active roster: ${team}`);
     if (!active.some(p => p.shooting_games > 0 && p.fga_per_min > 0 && p.fta_per_min > 0)) throw new Error(`Missing shooting coverage: ${team}`);
   }
 }
@@ -37,8 +41,10 @@ export function validateGame(game: RateGame): void {
 export function validateGeneration(slate: Slate, card: RateCard): void {
   if (slate?.schema_version !== 1 || card?.schema_version !== 1 || !Array.isArray(slate.games) || !Array.isArray(card.games)) throw new Error('Invalid data schema');
   if (!slate.generated_at || !Number.isFinite(Date.parse(slate.generated_at)) || slate.generated_at !== card.generated_at || slate.date !== card.date) throw new Error('Mismatched data generations');
+  if(card.model_version&&!['possessions-v1','possessions-v2'].includes(card.model_version))throw new Error('Unsupported model version');
   if (slate.timezone !== 'America/Chicago' || card.iterations !== 10000 || !Array.isArray(card.columns)) throw new Error('Invalid simulation contract');
   if (slate.games.length !== card.games.length || new Set(card.games.map(g => g.event_id)).size !== card.games.length || new Set(slate.games.map(g => g.event_id)).size !== slate.games.length) throw new Error('Incomplete slate coverage');
+  if(!['min','fgm','fga','tpm','tpa','ftm','fta','pts','reb','ast'].every(k=>card.columns.includes(k as typeof card.columns[number])))throw new Error('Missing display columns');
   const memberships = new Map<string, string>();
   for (const g of slate.games) {
     if (g.date !== slate.date || !Number.isFinite(Date.parse(g.start_time))) throw new Error('Invalid game date');
@@ -54,9 +60,9 @@ export function validateGeneration(slate: Slate, card: RateCard): void {
 
 // Operational expiry policy, not an assertion that injury information remains valid until expiry.
 export const MAX_CARD_AGE_MS = 6 * 60 * 60 * 1000;
-export function freshnessIssue(slate: Slate, card: RateCard, now: Date): string | null {
+export function freshnessIssue(slate: Slate, card: RateCard, now: Date, health:RefreshHealth|null=null): string | null {
   try { validateGeneration(slate, card); } catch (e) { return e instanceof Error ? e.message : 'Invalid data'; }
-  const age = now.getTime() - Date.parse(card.generated_at!);
-  if (card.date !== chicagoDate(now) || age > MAX_CARD_AGE_MS || age < -300_000) return 'Stale data: wait for a fresh rate card';
+  const age = now.getTime() - Date.parse(healthyCheck(health,card,now.getTime())??card.generated_at!);
+  if (card.date !== chicagoDate(now) || age > Math.min(MAX_CARD_AGE_MS,freshnessBudget(slate,now)) || age < -300_000) return 'Stale data: wait for a fresh rate card';
   return null;
 }

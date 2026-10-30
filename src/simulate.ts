@@ -1,5 +1,8 @@
+import {discreteRead,summarizeDistribution,type DistributionSummary} from './distributions.ts';
+import { conditionalParticipants } from './availability.ts';
+import { validateGame } from './validate-card.ts';
 import { drawPossessions } from './possessions.ts';
-import { shownPercent, typicalityBucket, winCounts, type TypicalityBucket, type WinCounts } from './display.ts';
+import { typicalityBucket, winCounts, type TypicalityBucket, type WinCounts } from './display.ts';
 import type { RateGame, RatePlayer } from './types.ts';
 import { binomial, gammaMean1, iterationSeed, mulberry32, normal, poisson, type Rng } from './rng.ts';
 
@@ -44,6 +47,7 @@ export interface DrawnPlayer {
   games_2026: number;
   games_2027: number;
   shooting_games: number;
+  minutes_restriction?:number|null;
   min: number;
   fgm: number;
   fga: number;
@@ -82,6 +86,7 @@ export interface RevisedDraw extends Draw {
 export interface MarginalRead {
   percent: number;
   constant: boolean;
+  mass?:number;
   bucket: TypicalityBucket;
 }
 
@@ -93,6 +98,7 @@ export interface PlayerExpectation {
   astMean: number;
   praMean: number;
   counts?: Partial<Record<'fgm'|'fga'|'tpm'|'tpa'|'ftm'|'fta'|'stl'|'blk'|'tov',number>>;
+  bands?:Partial<Record<keyof ToneSeries,PointsBand>>;
   minP10: number;
   minP90: number;
   ptsP10: number;
@@ -145,6 +151,7 @@ export interface Simulation {
   homeTotals: number[];
   wins: WinCounts;
   forecast?: MarginForecast;
+  distributions?:{total:DistributionSummary;margin:DistributionSummary};
   away: SimulatedTeam;
   home: SimulatedTeam;
   upside: ScenarioView;
@@ -366,6 +373,7 @@ function restedLine(player: RatePlayer): DrawnPlayer {
     games_2026: player.games_2026,
     games_2027: player.games_2027,
     shooting_games: player.shooting_games,
+    minutes_restriction:player.minutes_restriction,
     min: 0,
     fgm: 0,
     fga: 0,
@@ -494,6 +502,7 @@ function extendSquad(state: SquadState, roster: RatePlayer[], playingIds: Set<st
   const byId = new Map(state.lines.map((line) => [line.athlete_id, line]));
   const caps = playing.map((player) => {
     const current = byId.get(player.athlete_id)?.min ?? 0;
+    if(player.minutes_restriction!=null)return Math.min(5,Math.max(0,player.minutes_restriction-current));
     if (minuteCap(player) === UNOBSERVED_MINUTE_CAP) return Math.min(5, Math.max(0, UNOBSERVED_MINUTE_CAP - current));
     return PLAYER_CAP_PER_OT;
   });
@@ -555,26 +564,21 @@ function validateDraw(draw: RevisedDraw, regulationMinutes: Map<string, number>)
   validateTeam(draw.home, draw.budget, draw.overtimePeriods);
 }
 
-function minuteCap(player: Pick<RatePlayer, 'games_2026' | 'games_2027' | 'minutes_weight' | 'shooting_games' | 'games'>): number {
+function minuteCap(player: Pick<RatePlayer, 'games_2026' | 'games_2027' | 'minutes_weight' | 'shooting_games' | 'games' | 'minutes_restriction'>): number {
+  if(player.minutes_restriction!=null)return Math.floor(Math.min(player.minutes_restriction,cameo(player)||isUnobservedProfile(player)?UNOBSERVED_MINUTE_CAP:48));
   if (cameo(player) || isUnobservedProfile(player)) return UNOBSERVED_MINUTE_CAP;
   return PLAYER_CAP_REGULATION;
 }
 
 function participation(away: RatePlayer[], home: RatePlayer[], rng: Rng): Set<string> {
-  const awayIds = new Set(away.map(p=>p.athlete_id));
-  const awayGames=teamGamesPlayed(away),homeGames=teamGamesPlayed(home);
-  const ordered=[...away,...home].sort(byAthleteId);
-  const probabilities=ordered.map(p=>playProbability(p,awayIds.has(p.athlete_id)?awayGames:homeGames));
-  for(const team of [away,home]) {
-    if(team.filter(p=>minuteCap(p)===48 && playProbability(p,teamGamesPlayed(team))>0).length<5)throw new Error('Insufficient eligible rotation for regulation and overtime');
+  const playing=new Set<string>();
+  for(const roster of [away,home]){
+    const games=teamGamesPlayed(roster),full=roster.filter(p=>minuteCap(p)===48).sort(byAthleteId);
+    const chosen=conditionalParticipants(full.map(p=>playProbability(p,games)),5,rng);
+    full.forEach((p,i)=>{if(chosen[i])playing.add(p.athlete_id);});
+    for(const p of roster.filter(p=>minuteCap(p)!==48).sort(byAthleteId))if(rng()<playProbability(p,games))playing.add(p.athlete_id);
   }
-  // Joint availability is conditioned on a feasible game; never force a zero-probability player in.
-  for(let attempt=0;attempt<1000;attempt++) {
-    const playing=new Set<string>();
-    ordered.forEach((p,i)=>{if(probabilities[i]>0 && rng()<probabilities[i])playing.add(p.athlete_id);});
-    if([away,home].every(team=>team.filter(p=>playing.has(p.athlete_id)&&minuteCap(p)===48).length>=5))return playing;
-  }
-  throw new Error('Availability scenarios could not form a feasible rotation');
+  return playing;
 }
 
 export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
@@ -673,11 +677,10 @@ function blankSeries(iterations: number, defensiveStats: boolean): ToneSeries {
   };
 }
 
-function marginalRead(values: ArrayLike<number>, shown: number): MarginalRead {
-  const sorted = Array.from(values, (value) => value).sort((a, b) => a - b);
-  const constant = sorted.length > 0 && sorted[0] === sorted[sorted.length - 1];
-  const percent = shownPercent(sorted, shown);
-  return { percent, constant, bucket: typicalityBucket(percent, constant) };
+export function marginalRead(values: ArrayLike<number>, shown: number): MarginalRead {
+  const {percent,mass}=discreteRead(values,shown);
+  const constant=values.length>0&&mass===1;
+  return {percent:Math.round(percent),mass,constant,bucket:typicalityBucket(percent,constant)};
 }
 
 function readsFor(series: ToneSeries | undefined, line: DrawnPlayer): SimulatedPlayer['reads'] {
@@ -691,7 +694,9 @@ function readsFor(series: ToneSeries | undefined, line: DrawnPlayer): SimulatedP
   };
 }
 
+const expectationCache=new WeakMap<ToneSeries,PlayerExpectation>();
 function expectationFrom(series: ToneSeries | undefined): PlayerExpectation {
+  if(series&&expectationCache.has(series))return expectationCache.get(series)!;
   const minutes = series ? Array.from(series.min) : [];
   const points = series ? Array.from(series.pts) : [];
   const rebounds = series ? Array.from(series.reb) : [];
@@ -705,7 +710,8 @@ function expectationFrom(series: ToneSeries | undefined): PlayerExpectation {
   const astMean = mean(assists);
   const minuteBand = bandFrom(minutes);
   const pointBand = bandFrom(points);
-  return {
+  const result:PlayerExpectation={
+    bands:series?Object.fromEntries(Object.entries(series).map(([key,values])=>[key,bandFrom(values)])):{},
     counts: Object.fromEntries((['fgm','fga','tpm','tpa','ftm','fta','stl','blk','tov'] as const).filter(k=>series?.[k]!==undefined).map(k=>[k,mean(Array.from(series?.[k]??[]))])),
     playRate: played / count,
     minMean,
@@ -719,6 +725,8 @@ function expectationFrom(series: ToneSeries | undefined): PlayerExpectation {
     ptsP90: pointBand.p90,
     ptsP95: pointBand.p95,
   };
+  if(series)expectationCache.set(series,result);
+  return result;
 }
 
 function withReads(players: DrawnPlayer[], series: Map<string, ToneSeries>): SimulatedPlayer[] {
@@ -769,8 +777,10 @@ function scenarioFrom(
   };
 }
 
-export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIONS): Simulation {
+export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIONS, progress?:(completed:number)=>void): Simulation {
   if (!Number.isInteger(iterations) || iterations < 1) throw new Error('iterations must be a positive integer');
+  validateGame(game);
+  for(const team of [game.away_team_id,game.home_team_id])if(!game.players.some(p=>p.team_id===team&&p.minutes_weight!==0&&((p.fga_per_min>0&&(p.fg2_pct>0||p.tp_pct>0))||(p.fta_per_min>0&&p.ft_pct>0))))throw new Error('Forecast unavailable: no scoring support');
   const seed = baseSeed >>> 0;
   const awayTotals = new Float64Array(iterations);
   const homeTotals = new Float64Array(iterations);
@@ -779,6 +789,7 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
   const combinedTotals = new Array<number>(iterations);
 
   for (let index = 0; index < iterations; index += 1) {
+    if(index%250===0)progress?.(index);
     const draw = drawGame(game, mulberry32(iterationSeed(seed, index)));
     const awayPts = teamPoints(draw.away);
     const homePts = teamPoints(draw.home);
@@ -825,6 +836,7 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
     homeTotals: Array.from(homeTotals),
     wins: winCounts(awayTotals, homeTotals),
     forecast,
+    distributions:{total:summarizeDistribution(combinedTotals),margin:summarizeDistribution(homeTotals.map((v,i)=>v-awayTotals[i]))},
     away: chosen.away,
     home: chosen.home,
     upside,

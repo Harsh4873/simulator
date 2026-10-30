@@ -1,3 +1,4 @@
+import type { PlayerEvidence, CalibrationArtifact, UnavailableFeature } from './model-evidence.ts';
 import type { CompletedEvent } from './parse-summary.ts';
 
 export type SeasonType = 'preseason' | 'regular' | 'postseason' | 'offseason' | 'play-in';
@@ -78,6 +79,18 @@ export interface RatePlayer {
   tov_per_min?: number;
   orb_share?: number;
   minutes_source?: string;
+  model_version?: string;
+  as_of?: string;
+  calibration?: CalibrationArtifact | null;
+  active_season?: number;
+  role_prior_games?: number;
+  points_scale?: number;
+  evidence?: PlayerEvidence;
+  injury_reported_at?: string | null;
+  minutes_restriction?: number | null;
+  starter_rate?: number | null;
+  participation_coverage?: {known:number;unknown:number;source:"explicit-DNP"|"scenario-prior"};
+  availability_calibration_n?:number;
 }
 
 export interface RateGame {
@@ -97,6 +110,9 @@ export interface RateCard {
   source_cutoff?: string;
   input_hash?: string;
   generator_sha?: string;
+  model_hash?: string;
+  calibration?: CalibrationArtifact | null;
+  unavailable_features?: UnavailableFeature[];
   columns: ColumnKey[];
   games: RateGame[];
 }
@@ -123,9 +139,11 @@ export interface ShootingCache {
   fetched_event_ids: string[];
   rows: ShootingRow[];
   events?: CompletedEvent[];
+  retries?: Record<string, import("./event-cache.ts").RetryRecord>;
 }
 
 export interface OutcomeRow {
+  event_date?: string;
   season: number;
   athlete_id: string;
   team_id: string;
@@ -154,4 +172,5 @@ export interface MatchupContext {
   home_log_advantage: number;
   neutral: boolean;
   training_games: number;
+  rest_coefficient?: number;
 }

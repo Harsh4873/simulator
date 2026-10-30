@@ -16,6 +16,8 @@ export interface ParsedPlayerGame {
   tov?: number;
   orb?: number;
   drb?: number;
+  starter?: boolean;
+  fouls?: number;
 }
 
 const FG_KEY = 'fieldGoalsMade-fieldGoalsAttempted';
@@ -98,7 +100,7 @@ function parseAthlete(teamId: string, keys: string[], row: unknown): ParsedPlaye
   const expected = 2 * (fgm - tpm) + 3 * tpm + ftm;
   if (Math.abs(expected - points) > 1e-6) return null;
   const extra: Partial<ParsedPlayerGame> = {};
-  for (const [key, column] of [['stl','steals'],['blk','blocks'],['tov','turnovers'],['orb','offensiveRebounds'],['drb','defensiveRebounds']] as const) {
+  for (const [key, column] of [['stl','steals'],['blk','blocks'],['tov','turnovers'],['orb','offensiveRebounds'],['drb','defensiveRebounds'],['fouls','fouls']] as const) {
     if (keys.includes(column)) {
       const v = statNumber(at(column));
       if (v === null) return null;
@@ -108,6 +110,7 @@ function parseAthlete(teamId: string, keys: string[], row: unknown): ParsedPlaye
   if (extra.orb !== undefined && extra.drb !== undefined && extra.orb + extra.drb !== rebounds) return null;
   return {
     ...extra,
+    ...(typeof row.starter==='boolean'?{starter:row.starter}:{}),
     athlete_id: athleteId,
     team_id: teamId,
     minutes,
@@ -155,6 +158,7 @@ export interface CompletedEvent {
   home_pts: number;
   away_pts: number;
   players: ParsedPlayerGame[];
+  participation?: {athlete_id:string;team_id:string;played:boolean;starter:boolean|null}[];
 }
 
 /** Only complete, reconciled final NBA boxes may enter the event cache. */
@@ -206,5 +210,17 @@ export function parseCompletedSummary(summary: unknown, expectedId: string): Com
     const duration = 48 + (periods - 4) * 5;
     if (Math.abs(rows.reduce((s,p) => s+p.minutes,0) - duration * 5) > rows.length / 2 + 1 || rows.some(p => p.minutes > duration)) throw new Error('Incomplete player minutes');
   }
-  return { event_id: expectedId, start_time: start, season: Number(season.year), season_type: Number(season.type), neutral: comp.neutralSite === true, periods, home_team_id: String(home.id), away_team_id: String(away.id), home_pts: Number(home.score), away_pts: Number(away.score), players };
+  const participation:NonNullable<CompletedEvent['participation']>=[];
+  for(const team of teams){
+    if(!isRecord(team))continue;
+    const teamId=String((isRecord(team.team)?team.team:{}).id??'');
+    for(const row of categoryWithKeys(team)?.athletes??[]){
+      if(!isRecord(row)||!isRecord(row.athlete))continue;
+      const id=String(row.athlete.id??'');
+      const played=players.some(p=>p.athlete_id===id&&p.team_id===teamId);
+      // Only explicit DNPs or validated participants; omission is unknown, never a DNP.
+      if(id&&(played||row.didNotPlay===true))participation.push({athlete_id:id,team_id:teamId,played,starter:typeof row.starter==='boolean'?row.starter:null});
+    }
+  }
+  return { participation, event_id: expectedId, start_time: start, season: Number(season.year), season_type: Number(season.type), neutral: comp.neutralSite === true, periods, home_team_id: String(home.id), away_team_id: String(away.id), home_pts: Number(home.score), away_pts: Number(away.score), players };
 }

@@ -1,5 +1,8 @@
 import './styles.css';
-import { freshnessIssue, validateGeneration } from './validate-card.ts';
+import {lineProbability} from './distributions.ts';
+import {loadGeneration} from './load-generation.ts';
+import type {RefreshHealth} from './generation.ts';
+import { freshnessIssue } from './validate-card.ts';
 import {
   DEFAULT_SIDE_SORTS,
   isColumnKey,
@@ -32,6 +35,7 @@ const panelBody = document.querySelector<HTMLElement>('[data-panel-body]');
 
 let slate: Slate | null = null;
 let card: RateCard | null = null;
+let health:RefreshHealth|null=null;
 let bound = false;
 let running = false;
 let activeWorker: Worker | null = null;
@@ -87,7 +91,7 @@ function showSlate(): void {
     const unbuilt = slate.generated_at === null || slate.games.length === 0;
     desk.dataset.mode = unbuilt ? 'empty' : 'games';
   }
-  slateRoot.innerHTML = renderSlate(slate, card, new Date());
+  slateRoot.innerHTML = renderSlate(slate, card, new Date(),health);
 }
 
 function paintScore(): void {
@@ -131,7 +135,7 @@ function syncPanel(): void {
 async function onSimulate(button: HTMLButtonElement): Promise<void> {
   const eventId = button.dataset.event;
   if (running || !eventId || !slate || !card || !boxRoot) return;
-  if(freshnessIssue(slate,card,new Date())) {showSlate();return;}
+  if(freshnessIssue(slate,card,new Date(),health)) {showSlate();return;}
   const game = slate.games.find((item) => item.event_id === eventId);
   const rates = rateGame(eventId);
   if (!game || !rates) return;
@@ -139,18 +143,20 @@ async function onSimulate(button: HTMLButtonElement): Promise<void> {
   desk?.setAttribute('aria-busy','true');
   button.disabled = true;
   button.textContent = 'Simulating…';
+  const progressStatus=document.createElement('span');progressStatus.setAttribute('role','status');progressStatus.textContent='Simulating…';button.after(progressStatus);
   const cancel=document.createElement('button');cancel.dataset.cancel='';cancel.textContent='Cancel';button.after(cancel);
   await new Promise((resolve) => {
     setTimeout(resolve, 0);
   });
   try {
-    const key=`${eventId}:${card.generated_at}:${card.model_version ?? 'legacy'}`;
+    const key=`${eventId}:${card.input_hash??card.generated_at}:${card.model_hash??card.model_version ?? 'legacy'}`;
     const result = simulationCache.get(key) ?? await new Promise<Simulation>((resolve,reject)=>{
       const worker=new Worker(new URL('./simulation-worker.ts',import.meta.url),{type:'module'});
       activeWorker=worker;
       const finish=()=>{worker.terminate();activeWorker=null;cancelRun=null;};
       cancelRun=()=>{finish();reject(new Error('Simulation cancelled'));};
-      worker.onmessage=(event:MessageEvent<{result?:Simulation;error?:string}>)=>{
+      worker.onmessage=(event:MessageEvent<{result?:Simulation;error?:string;progress?:number}>)=>{
+        if(event.data.progress!==undefined){button.textContent=`Simulating… ${Math.round(event.data.progress*100)}%`;progressStatus.textContent=button.textContent;return;}
         finish();if(event.data.result)resolve(event.data.result);else reject(new Error(event.data.error??'Simulation failed'));
       };
       worker.onerror=()=>{finish();reject(new Error('Simulation worker failed'));};
@@ -172,6 +178,7 @@ async function onSimulate(button: HTMLButtonElement): Promise<void> {
     button.textContent = 'Simulate';
   } finally {
     desk?.setAttribute('aria-busy','false');
+    progressStatus.remove();
     cancel.remove();
     running = false;
     if (button.isConnected) {
@@ -193,10 +200,13 @@ function onDeskClick(event: Event): void {
     return;
   }
   if (target.closest('[data-back]')) {
+    const eventId=view?.game.event_id;
     showSlate();
+    if(eventId)slateRoot?.querySelector<HTMLButtonElement>(`[data-event="${CSS.escape(eventId)}"]`)?.focus();
     return;
   }
   if (target.closest('[data-close]')) {
+    if(panelAthlete)document.querySelector<HTMLButtonElement>(`button[data-athlete="${CSS.escape(panelAthlete)}"]`)?.focus();
     panelAthlete = nextPanelAthlete(panelAthlete, null);
     syncPanel();
     return;
@@ -205,6 +215,7 @@ function onDeskClick(event: Event): void {
   if (tab instanceof HTMLButtonElement) {
     panelTab = tab.dataset.panelTab === 'props' ? 'props' : 'forecast';
     syncPanel();
+    document.getElementById(`${panelTab}-tab`)?.focus();
     return;
   }
   const sortButton = target.closest('button[data-sort]');
@@ -215,6 +226,7 @@ function onDeskClick(event: Event): void {
     sideSorts = { ...sideSorts, [side]: nextBoxSort(sideSorts[side], key) };
     paintScore();
     syncPanel();
+    boxRoot?.querySelector<HTMLButtonElement>(`button[data-sort="${key}"][data-side="${side}"]`)?.focus();
     return;
   }
   const player = target.closest('button[data-athlete]');
@@ -234,7 +246,7 @@ function readPropForm(): void {
   const side = document.querySelector<HTMLInputElement>('[data-prop-side]:checked');
   if (!market || !line || !odds || !opposite) return;
   propForm = {
-    market: market.value === 'stl' || market.value === 'blk' || market.value === 'tov' || market.value === 'reb' || market.value === 'ast' || market.value === 'pra' || market.value === 'tpm' ? market.value : 'pts',
+    market: market.value==='pa'||market.value==='pr'||market.value==='ra'||market.value==='dd'||market.value==='td'||market.value === 'stl' || market.value === 'blk' || market.value === 'tov' || market.value === 'reb' || market.value === 'ast' || market.value === 'pra' || market.value === 'tpm' ? market.value : 'pts',
     side: side?.value === 'under' ? 'under' : 'over',
     line: line.value,
     style: style?.value === 'multiplier' || style?.value === 'percent' ? style.value : 'american',
@@ -256,6 +268,12 @@ function paintPropResults(): void {
 }
 
 function onPropEdit(event: Event): void {
+  if(event.target instanceof HTMLInputElement&&event.target.matches('[data-game-line]')&&view){
+    const kind=event.target.dataset.gameLine,values=kind==='total'?view.result.combinedTotals:view.result.homeTotals.map((x,i)=>x-view!.result.awayTotals[i]);
+    const result=document.querySelector(`[data-line-result="${kind}"]`);
+    if(result){const line=Number(event.target.value);if(!event.target.value||!Number.isFinite(line)){result.textContent='Enter a line.';return;}const p=lineProbability(values,line);result.textContent=`Above ${(p.over*100).toFixed(1)}%; below ${(p.under*100).toFixed(1)}%; push ${(p.push*100).toFixed(1)}%.`;}
+    return;
+  }
   const target = event.target;
   if (!(target instanceof Element) || !target.closest('[data-prop-form]')) return;
   readPropForm();
@@ -323,14 +341,13 @@ function bind(): void {
 async function load(): Promise<void> {
   if (!slateRoot) return;
   try {
-    const [slateResponse, cardResponse] = await Promise.all([
-      fetch(`${DATA_BASE}slate.json`,{cache:'no-store',signal:AbortSignal.timeout(15000)}),
-      fetch(`${DATA_BASE}rate-card.json`,{cache:'no-store',signal:AbortSignal.timeout(15000)}),
-    ]);
-    if (!slateResponse.ok || !cardResponse.ok) throw new Error('fetch failed');
-    slate = (await slateResponse.json()) as Slate;
-    card = (await cardResponse.json()) as RateCard;
-    validateGeneration(slate,card);
+    const loaded=await loadGeneration(async name=>{
+      const response=await fetch(`${DATA_BASE}${name}`,{cache:'no-store',signal:AbortSignal.timeout(15000)});
+      if(response.status===404&&['manifest.json','health.json'].includes(name))return null;
+      if(!response.ok)throw new Error('Data fetch failed');
+      return response.text();
+    },async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join(''));
+    slate=loaded.slate;card=loaded.card;health=loaded.health;
     bind();
     showSlate();
   } catch {
@@ -376,7 +393,7 @@ bindTheme();
 void load();
 
 function recheckFreshness(): void {
-  if(slate && card && freshnessIssue(slate,card,new Date())){activeWorker?.terminate();cancelRun?.();showSlate();}
+  if(slate && card && freshnessIssue(slate,card,new Date(),health)){activeWorker?.terminate();cancelRun?.();showSlate();}
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)recheckFreshness();});
 setInterval(recheckFreshness,60000);

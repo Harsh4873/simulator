@@ -13,7 +13,7 @@ test('summary rows keep both sides of the hyphen and the points identity', () =>
   const rows = parseSummary(fixture);
   assert.equal(rows.length, 1);
   assert.deepEqual(rows[0], {
-    stl: 2, blk: 0, tov: 6, orb: 2, drb: 11,
+    stl: 2, blk: 0, tov: 6, orb: 2, drb: 11, fouls: 1,
     athlete_id: '999',
     team_id: '29',
     minutes: 37,

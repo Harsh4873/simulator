@@ -289,8 +289,8 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   assert.match(html, /flex-grow: 2500/);
   assert.match(html, /flex-grow: 0/);
   assert.match(html, /flex-grow: 7500/);
-  assert.match(html, /class="team-pct away tone" data-bucket="1">64%</);
-  assert.match(html, /class="team-pct home tone" data-bucket="4">12%</);
+  assert.match(html, /class="team-pct away tone" data-bucket="1"[^>]*>64%</);
+  assert.match(html, /class="team-pct home tone" data-bucket="4"[^>]*>12%</);
   const away = html.split('data-footer="away"')[1]?.split('</tr>')[0] ?? '';
   const sums = columnSums(model.away.players);
   for (const key of ['min', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'reb', 'ast'] as const) {
@@ -313,7 +313,7 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   assert.equal(/data-col="(?:fgm|fga|tpa|ftm|fta)"[^>]*data-bucket/.test(regular), false);
   assert.equal(html.includes('undefined'), false);
   assert.equal(html.includes('<a '), false);
-  assert.equal(html.includes('title='), false);
+  assert.ok(html.includes('Mid-CDF; tied mass'));
   assert.match(html, /This box score is the simulated game nearest the median combined score\./);
   assert.equal(html.includes('This box score is the simulated game at the 95th percentile of the combined score.'), false);
   assert.match(html, /The minutes column totals team-minutes: five players on the floor at once\. Regulation is 240 \(5 × 48\)\. Overtime is 265 \(5 × 53\)\. It is not the length of the game\./);

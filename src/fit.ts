@@ -28,6 +28,8 @@ export interface InjuryInput {
   athlete_id?: string;
   name?: string;
   status: string;
+  reported_at?: string | null;
+  minutes_restriction?: number | null;
 }
 
 export interface FitInput {
@@ -35,6 +37,7 @@ export interface FitInput {
   injuries: InjuryInput[];
   outcomes: OutcomeRow[];
   shooting: ShootingRow[];
+  activeSeason?: number;
 }
 
 export interface FitResult {
@@ -66,7 +69,9 @@ export function assignInjury(status: string): {
   minutes_weight: 0 | 1;
   questionable_widen: boolean;
 } {
-  const trimmed = status.trim().toLowerCase();
+  const alias:Record<string,string>={'day to day':'day-to-day','game time decision':'questionable','gtd':'questionable','available':'healthy','active':'healthy','cleared':'healthy','out for the season':'out for season'};
+  const raw=status.trim().toLowerCase();
+  const trimmed=alias[raw]??raw;
   if (!trimmed) {
     return { injury_status: 'healthy', minutes_weight: 1, questionable_widen: false };
   }
@@ -87,9 +92,9 @@ export function hasFreeThrowAttempts(rows: { fta: number }[]): boolean {
   return rows.some((row) => row.fta > 0);
 }
 
-export function seasonWeight(season: number): number {
-  if (season === 2026) return 0.2;
-  if (season === 2027) return SEASON_WEIGHT_2027;
+export function seasonWeight(season: number, activeSeason = 2027): number {
+  if (season === activeSeason-1) return 0.2;
+  if (season === activeSeason) return SEASON_WEIGHT_2027;
   return 0;
 }
 
@@ -219,12 +224,12 @@ export function fitPlayers(input: FitInput): FitResult {
   const shootingGames = new Map<string, number>();
 
   for (const row of input.outcomes) {
-    const weight = seasonWeight(row.season);
+    const weight = seasonWeight(row.season,input.activeSeason??2027);
     if (weight === 0 || !(row.minutes > 0) || !row.athlete_id) continue;
     const group = groupFor(row.athlete_id);
     if (row.stat_key === 'points') {
       add(minutes, row.athlete_id, row.team_id, group, weight * row.minutes, weight);
-      const bucket = row.season === 2027 ? games2027 : games2026;
+      const bucket = row.season === (input.activeSeason??2027) ? games2027 : games2026;
       bucket.set(row.athlete_id, (bucket.get(row.athlete_id) ?? 0) + 1);
     } else if (row.stat_key === 'totalRebounds') {
       add(reb, row.athlete_id, row.team_id, group, weight * row.actual, weight * row.minutes);
@@ -237,7 +242,7 @@ export function fitPlayers(input: FitInput): FitResult {
   }
 
   for (const row of input.shooting) {
-    const weight = seasonWeight(row.season);
+    const weight = seasonWeight(row.season,input.activeSeason??2027);
     if (weight === 0 || !row.athlete_id) continue;
     shootingGames.set(row.athlete_id, (shootingGames.get(row.athlete_id) ?? 0) + row.games);
     const group = groupFor(row.athlete_id);
@@ -275,27 +280,28 @@ export function fitPlayers(input: FitInput): FitResult {
     const gameCount = priorGames2026 + priorGames2027;
     let fgaPerMin = clampPerMinute(rate(fga, K_MINUTES, player.athlete_id, player.team_id, group));
     let ftaPerMin = clampPerMinute(rate(fta, K_MINUTES, player.athlete_id, player.team_id, group));
-    const tpaGivenFga = clampProbability(rate(tpaShare, K_FGA_SHARE, player.athlete_id, player.team_id, group));
+    let tpaGivenFga = clampProbability(rate(tpaShare, K_FGA_SHARE, player.athlete_id, player.team_id, group));
     const fg2Pct = clampProbability(rate(fg2, K_FG2, player.athlete_id, player.team_id, group));
     const tpPct = clampProbability(rate(tp, K_TP, player.athlete_id, player.team_id, group));
     const ftPct = clampProbability(rate(ft, K_FT, player.athlete_id, player.team_id, group));
-    if (shootingCount === 0 && gameCount >= 3) {
-      const observed = pointsLogPerMinute(input.outcomes, player.athlete_id);
-      const prior = priorPointsPerMinute({
-        fga_per_min: fgaPerMin,
-        fta_per_min: ftaPerMin,
-        tpa_given_fga: tpaGivenFga,
-        fg2_pct: fg2Pct,
-        tp_pct: tpPct,
-        ft_pct: ftPct,
-      });
-      if (observed !== null && observed > 0 && prior > 0) {
-        const scale = observed / prior;
-        fgaPerMin = clampPerMinute(fgaPerMin * scale);
-        ftaPerMin = clampPerMinute(ftaPerMin * scale);
-      }
-    }
+    // Continuous count evidence: valid zeros contribute, and one shooting game does not erase it.
+    const logs=input.outcomes.filter(r=>r.athlete_id===player.athlete_id&&r.stat_key==='points'&&r.minutes>0);
+    const logExposure=logs.reduce((n,r)=>n+seasonWeight(r.season,input.activeSeason??2027)*r.minutes,0);
+    const logPoints=logs.reduce((n,r)=>n+seasonWeight(r.season,input.activeSeason??2027)*r.actual,0);
+    // A measured near-zero three-point profile shrinks with its own attempts, not an abrupt zero-game rule.
+    const share=exposureOf(tpaShare.player,player.athlete_id);
+    if(share.e>0){const strength=K_FGA_SHARE/(1+share.e/K_FGA_SHARE);tpaGivenFga=(share.s+strength*tpaGivenFga)/(share.e+strength);}
+    const prior=priorPointsPerMinute({fga_per_min:fgaPerMin,fta_per_min:ftaPerMin,tpa_given_fga:tpaGivenFga,fg2_pct:fg2Pct,tp_pct:tpPct,ft_pct:ftPct});
+    const shootingExposure=exposureOf(fga.player,player.athlete_id).e;
+    const blend=logExposure/(logExposure+shootingExposure+K_MINUTES);
+    const target=logExposure>0?(1-blend)*prior+blend*logPoints/logExposure:prior;
+    const pointsScale=prior>0?target/prior:1;
+    fgaPerMin=clampPerMinute(fgaPerMin*pointsScale);ftaPerMin=clampPerMinute(ftaPerMin*pointsScale);
     const ratePlayer: RatePlayer = {
+      active_season: input.activeSeason??2027,
+      points_scale: pointsScale,
+      injury_reported_at: input.injuries.find(x=>x.athlete_id===player.athlete_id)?.reported_at??null,
+      minutes_restriction: input.injuries.find(x=>x.athlete_id===player.athlete_id)?.minutes_restriction??null,
       athlete_id: player.athlete_id,
       name: player.name,
       team_id: player.team_id,
