@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-30T11:45:06Z",
+  "generated_at": "2026-10-30T14:50:00Z",
   "date": "2026-10-30",
   "timezone": "America/Chicago",
   "games": [
@@ -24,6 +24,7 @@
         "abbreviation": "WSH",
         "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/wsh.png"
       },
+      "neutral_site": false,
       "spread_caption": null
     },
     {
@@ -46,6 +47,7 @@
         "abbreviation": "BOS",
         "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bos.png"
       },
+      "neutral_site": false,
       "spread_caption": null
     },
     {
@@ -68,6 +70,7 @@
         "abbreviation": "BKN",
         "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bkn.png"
       },
+      "neutral_site": false,
       "spread_caption": null
     },
     {
@@ -90,6 +93,7 @@
         "abbreviation": "PHI",
         "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/phi.png"
       },
+      "neutral_site": false,
       "spread_caption": null
     },
     {
@@ -112,6 +116,7 @@
         "abbreviation": "TOR",
         "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/tor.png"
       },
+      "neutral_site": false,
       "spread_caption": null
     },
     {
@@ -134,6 +139,7 @@
         "abbreviation": "MIA",
         "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/mia.png"
       },
+      "neutral_site": false,
       "spread_caption": null
     },
     {
@@ -156,6 +162,7 @@
         "abbreviation": "DAL",
         "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/dal.png"
       },
+      "neutral_site": false,
       "spread_caption": null
     },
     {
@@ -178,6 +185,7 @@
         "abbreviation": "MIN",
         "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/min.png"
       },
+      "neutral_site": false,
       "spread_caption": null
     },
     {
@@ -200,6 +208,7 @@
         "abbreviation": "GS",
         "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/gs.png"
       },
+      "neutral_site": false,
       "spread_caption": null
     },
     {
@@ -222,6 +231,7 @@
         "abbreviation": "PHX",
         "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/phx.png"
       },
+      "neutral_site": false,
       "spread_caption": null
     }
   ]
