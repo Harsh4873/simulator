@@ -18,8 +18,8 @@
     "validate-privacy": "node scripts/validate-privacy.mjs"
   },
   "devDependencies": {
-    "@types/node": "^22.20.4",
-    "linkedom": "0.18.12",
+    "@types/node": "^26.6.5",
+    "linkedom": "0.18.14",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
   }
