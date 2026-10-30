@@ -408,7 +408,7 @@ test('the panel opens, swaps, and closes from the player button', () => {
   const imgAt = open.indexOf('<img');
   const nameAt = open.indexOf('who-name');
   assert.ok(imgAt >= 0 && nameAt >= 0 && imgAt < nameAt);
-  assert.match(open, /<img class="headshot" alt="Regular Player" src="https:\/\/a\.espncdn\.com\/i\/headshots\/nba\/players\/full\/1\.png"/);
+  assert.match(open, /<img referrerpolicy="no-referrer" class="headshot" alt="Regular Player" src="https:\/\/a\.espncdn\.com\/i\/headshots\/nba\/players\/full\/1\.png"/);
 });
 
 test('a missing photo shows a monogram and says the photo is not in the data', () => {
@@ -440,7 +440,7 @@ test('thin sample follows the 2026 and 2027 counts', () => {
   const eight = renderPlayerPanel(game, card, model, '9');
   assert.match(eight, /Prior season \(2026\): 0 games\. This season \(2027\): 8 games\./);
   assert.equal(eight.includes('Thin sample: no games in 2026 and fewer than 8 in 2027.'), false);
-  assert.match(eight, /Questionable\. Minutes stay centered on the shrunk rate, with a wider draw\./);
+  assert.match(eight, /Uncertain availability reduces participation/);
   assert.equal(eight.includes('No absence flag on the card.'), false);
   const out = renderPlayerPanel(game, card, model, '3');
   assert.match(out, /Out of the rotation \(out\)\./);
@@ -463,7 +463,7 @@ test('a player with no shooting sample is told the shot rates are the prior', ()
     model,
     '2',
   );
-  assert.match(flagged, /Shot rates are the team and position prior\./);
+  assert.match(flagged, /Missing shooting:/);
   const unlabeled = renderPlayerPanel(
     game,
     {
@@ -473,7 +473,7 @@ test('a player with no shooting sample is told the shot rates are the prior', ()
     model,
     '2',
   );
-  assert.match(unlabeled, /Shot rates are the team and position prior\./);
+  assert.match(unlabeled, /Missing shooting:/);
 });
 
 test('missing optional fields do not throw', () => {

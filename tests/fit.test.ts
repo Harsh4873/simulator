@@ -64,11 +64,13 @@ test('an empty position skips the position blend', () => {
 });
 
 test('injury weights follow the out and questionable rules', () => {
-  for (const status of ['out', 'Out', 'doubtful', 'injured reserve', 'suspension']) {
+  for (const status of ['out', 'Out', 'injured reserve', 'suspension']) {
     const assigned = assignInjury(status);
     assert.equal(assigned.minutes_weight, 0);
     assert.equal(assigned.questionable_widen, false);
   }
+  assert.equal(assignInjury('doubtful').questionable_widen,true);
+  assert.equal(assignInjury('day-to-day').questionable_widen,true);
   assert.deepEqual(assignInjury('questionable'), {
     injury_status: 'questionable',
     minutes_weight: 1,

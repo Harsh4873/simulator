@@ -116,5 +116,5 @@ test('the shown draw is the game nearest the expected score', () => {
 });
 
 test('a scoreless game throws when overtime cannot separate the teams', () => {
-  assert.throws(() => drawGame(scoreless, mulberry32(1)), /overtime did not separate the teams/);
+  assert.throws(() => drawGame({...scoreless,players:scoreless.players.map(p=>({...p,games:30,games_2026:30,shooting_games:30,play_probability:1}))}, mulberry32(1)), /overtime did not separate the teams/);
 });

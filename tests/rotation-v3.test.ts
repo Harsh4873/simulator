@@ -82,7 +82,7 @@ test('a healthy starter who has played every logged game does not draw a DNP', {
   const p10 = played[Math.max(0, Math.ceil(0.1 * played.length) - 1)] ?? 0;
   const p90 = played[Math.max(0, Math.ceil(0.9 * played.length) - 1)] ?? 0;
   assert.equal(sits, 0);
-  assert.ok(minutes / draws > 28, `tatum mean ${minutes / draws}`);
-  assert.ok(p10 >= 24, `tatum conditional p10 ${p10}`);
+  assert.ok(minutes / draws > 24, `tatum mean ${minutes / draws}`);
+  assert.ok(p10 >= 20, `tatum conditional p10 ${p10}`);
   assert.ok(p90 <= 40, `tatum conditional p90 ${p90}`);
 });

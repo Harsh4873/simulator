@@ -198,13 +198,13 @@ function expectedValue(player: SimulatedPlayer, key: ColumnKey): number | null {
   if (key === 'pts') return expectation.ptsMean;
   if (key === 'reb') return expectation.rebMean;
   if (key === 'ast') return expectation.astMean;
-  return null;
+  return expectation.counts?.[key as keyof NonNullable<typeof expectation.counts>] ?? null;
 }
 
 function expectedCell(player: SimulatedPlayer, key: ColumnKey): string {
   const value = expectedValue(player, key);
   if (value === null) return `<td data-col="${key}">—</td>`;
-  const shown = Math.round(value);
+  const shown = value.toFixed(1);
   if (key === 'min' && player.expectation) {
     return `<td data-col="min"><span class="stat">${shown}</span><span class="pct">${player.expectation.minP10}–${player.expectation.minP90}</span></td>`;
   }
@@ -495,7 +495,7 @@ function whySentences(row: CardRow | null, scenario: BoxScenario): string[] {
     sentences.push(`Shooting sample: ${shooting} games.`);
   }
   if (shooting === 0 || missing === true) {
-    sentences.push('Shot rates are the team and position prior.');
+    sentences.push('Missing shooting: shot mix and accuracy use team/position priors. When at least three counting games exist, attempts are rescaled to the observed points rate.');
   }
   if (games2026 === 0 && games2027 !== undefined && games2027 < 8) {
     sentences.push('Thin sample: no games in 2026 and fewer than 8 in 2027.');
@@ -509,9 +509,13 @@ function whySentences(row: CardRow | null, scenario: BoxScenario): string[] {
     );
   }
   if (questionable === true) {
-    sentences.push('Questionable. Minutes stay centered on the shrunk rate, with a wider draw.');
+    sentences.push('Uncertain availability reduces participation and widens minutes conditional on playing. These status probabilities are uncalibrated scenario priors.');
   }
   if (weight === 1 && questionable === false) sentences.push('No absence flag on the card.');
+  const participation=readNumber(row,'play_probability');
+  if(participation!==undefined)sentences.push(`Input P(play): ${(participation*100).toFixed(1)}%. Joint draws are conditioned on a feasible rotation; the simulated play share can differ.`);
+  const role=readString(row,'minutes_source');
+  if(role)sentences.push(role);
   if (status === undefined) sentences.push('Injury status is not in the data.');
   if (scenario === 'upside') {
     sentences.push('This line is from the upside scenario: the 95th percentile of the combined score. Not the forecast.');
@@ -543,7 +547,7 @@ function samplingList(row: CardRow | null, score: Simulation, shock: number | un
   }
   if (typeof shock === 'number' && Number.isFinite(shock)) {
     items.push(
-      `<li>${escapeHtml(`Team volume shock this draw: ${shock.toFixed(2)}. It scales attempts, rebounds, and assists. It does not change make rates.`)}</li>`,
+      `<li>${escapeHtml(`Team volume shock this draw: ${shock.toFixed(2)}. Legacy volume multiplier; possession-model cards instead use shared pace and opponent-adjusted efficiency.`)}</li>`,
     );
   } else {
     items.push('<li>Team volume shock is not in the data.</li>');
@@ -552,6 +556,12 @@ function samplingList(row: CardRow | null, score: Simulation, shock: number | un
     items.push(`<li>${escapeHtml(`This draw used ${teamMinutes} team-minutes (5 × ${playerMinutes}).`)}</li>`);
   }
   return `<ul class="rates">${items.join('')}</ul>`;
+}
+
+function expectedLine(line: SimulatedPlayer): string {
+  const e=line.expectation!;
+  const fields=[['MIN',e.minMean],['FGM',e.counts?.fgm],['FGA',e.counts?.fga],['3PM',e.counts?.tpm],['FTM',e.counts?.ftm],['FTA',e.counts?.fta],['PTS',e.ptsMean],['REB',e.rebMean],['AST',e.astMean],['STL',e.counts?.stl],['BLK',e.counts?.blk]] as const;
+  return `<dl class="line">${fields.map(([k,v])=>`<dt>${k}</dt><dd>${v===undefined?'—':v.toFixed(1)}</dd>`).join('')}</dl><p>All-draw averages, including simulated DNPs. Plays in ${(e.playRate*100).toFixed(1)}% of draws. Prop probabilities below exclude DNPs and pushes.</p>`;
 }
 
 function drawnLine(line: SimulatedPlayer): string {
@@ -581,7 +591,7 @@ function photoMarkup(name: string, url: string | null): string {
   if (!url) {
     return `<div class="photo"><span class="mono">${letter}</span></div><p class="photo-note">Photo is not in the data.</p>`;
   }
-  return `<div class="photo"><img class="headshot" alt="${escapeHtml(name)}" src="${escapeHtml(url)}" width="56" height="56"><span class="mono" hidden>${letter}</span></div><p class="photo-note" hidden>Photo is not in the data.</p>`;
+  return `<div class="photo"><img referrerpolicy="no-referrer" class="headshot" alt="${escapeHtml(name)}" src="${escapeHtml(url)}" width="56" height="56"><span class="mono" hidden>${letter}</span></div><p class="photo-note" hidden>Photo is not in the data.</p>`;
 }
 
 function whoBlock(game: SlateGame, line: SimulatedPlayer, row: CardRow | null): string {
@@ -634,7 +644,7 @@ const MARKET_LABEL: Record<PropMarket, string> = {
   reb: 'rebounds',
   ast: 'assists',
   pra: 'points + rebounds + assists',
-  tpm: 'threes',
+  tpm: 'threes', stl: 'steals', blk: 'blocks', tov: 'turnovers',
 };
 
 function signedPoints(value: number): string {
@@ -654,9 +664,12 @@ export function renderPropResults(
     return '<p class="prop-note">Enter a line and a price: American -110, multiplier 1.91, or percent 52.4. The book is not used in the simulation.</p>';
   }
   const line = Number(form.line);
+  if(!Number.isFinite(line)||line<0||!Number.isInteger(line*2))return '<p class="prop-note">Enter a nonnegative whole or half-point line.</p>';
+  if((form.market==='stl'||form.market==='blk'||form.market==='tov')&&!sample[form.market])return '<p class="prop-note">This stat is missing from the older card.</p>';
   const price = parseBookPrice(form.odds, form.style);
   if (!price) return `<p class="prop-note">${escapeHtml(priceError(form.odds, form.style))}</p>`;
   const opposite = form.opposite.trim() === '' ? null : parseBookPrice(form.opposite, form.style);
+  if(form.opposite.trim()!==''&&!opposite)return '<p class="prop-note">The opposite-side price is invalid.</p>';
   const quote = quoteProp(sample as PlayerSample, form.market, form.side, line, price, opposite);
   if (!quote || quote.breakEven === null || quote.expectedReturn === null) {
     return `<p class="prop-note">${escapeHtml(priceError(form.odds, form.style))}</p>`;
@@ -710,6 +723,7 @@ function propFormMarkup(form: PropFormState): string {
     { value: 'ast', label: 'Assists' },
     { value: 'pra', label: 'Points + rebounds + assists' },
     { value: 'tpm', label: 'Three-pointers made' },
+    { value: 'stl', label: 'Steals' }, { value: 'blk', label: 'Blocks' }, { value: 'tov', label: 'Turnovers' },
   ];
   const options = markets
     .map((market) => `<option value="${market.value}"${form.market === market.value ? ' selected' : ''}>${market.label}</option>`)
@@ -760,18 +774,18 @@ export function renderPlayerPanel(
   return `<button type="button" data-close>Close</button>
     ${whoBlock(game, line, row)}
     <div class="panel-tabs" role="tablist">
-      <button type="button" role="tab" data-panel-tab="forecast" aria-selected="${tab === 'forecast' ? 'true' : 'false'}">Player Forecast</button>
-      <button type="button" role="tab" data-panel-tab="props" aria-selected="${tab === 'props' ? 'true' : 'false'}">Prop Analyzer</button>
+      <button type="button" role="tab" id="forecast-tab" aria-controls="forecast-panel" tabindex="${tab==='forecast'?0:-1}" data-panel-tab="forecast" aria-selected="${tab === 'forecast' ? 'true' : 'false'}">Player Forecast</button>
+      <button type="button" role="tab" id="props-tab" aria-controls="props-panel" tabindex="${tab==='props'?0:-1}" data-panel-tab="props" aria-selected="${tab === 'props' ? 'true' : 'false'}">Prop Analyzer</button>
     </div>
-    <div data-panel-view="forecast"${forecastHidden}>
-      <h3>Expected line</h3>
-      ${drawnLine(line)}
+    <div role="tabpanel" id="forecast-panel" aria-labelledby="forecast-tab" data-panel-view="forecast"${forecastHidden}>
+      <h3>${scenario !== 'upside' && line.expectation ? 'Expected line' : 'One simulated draw'}</h3>
+      ${scenario !== 'upside' && line.expectation ? expectedLine(line) : drawnLine(line)}
       <h3>Why</h3>
       <div class="why">${sentences}</div>
       <h3>Shrunk rates on the card</h3>
       ${samplingList(row, shown, shockFor(shown, line.team_id))}
     </div>
-    <div data-panel-view="props"${propsHidden}>
+    <div role="tabpanel" id="props-panel" aria-labelledby="props-tab" data-panel-view="props"${propsHidden}>
       <h3>Prop Analyzer</h3>
       <p class="prop-note">The sportsbook is compared after the 10,000 games. It does not change them.</p>
       ${propFormMarkup(form)}

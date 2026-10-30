@@ -17,7 +17,7 @@ import {
   type InjuryInput,
   type RosterPlayer,
 } from './fit.ts';
-import { binomial, gamma, gammaMean1, iterationSeed, mulberry32, normal, poisson, type Rng } from './rng.ts';
+import { binomial, gamma, iterationSeed, mulberry32, normal, type Rng } from './rng.ts';
 import {
   DIRICHLET_KAPPA,
   PHI_AST,
@@ -522,4 +522,17 @@ export function legacyFitPlayers(input: FitInput): FitResult {
   }
 
   return { players, publish };
+}
+
+// Preserve the historical audit's random stream, including its obsolete numerical limits.
+function gammaMean1(shape: number,rng:Rng):number {
+  let sum=0;
+  for(let i=0;i<Math.floor(shape);i++){let u=rng();while(u<=0)u=rng();sum+=-Math.log(u)/shape;}
+  return sum;
+}
+function poisson(mean:number,rng:Rng):number {
+  if(!Number.isFinite(mean)||mean<=0)return 0;
+  const limit=Math.exp(-Math.min(mean,80));let count=0,product=1;
+  do{count++;product*=rng();}while(product>limit);
+  return count-1;
 }

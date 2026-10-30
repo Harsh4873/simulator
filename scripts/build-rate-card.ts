@@ -1,17 +1,21 @@
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { chicagoDate } from '../src/date.ts';
 import { fitPlayers, hasFreeThrowAttempts, type InjuryInput, type RosterPlayer } from '../src/fit.ts';
-import { parseSummary } from '../src/parse-summary.ts';
+import { fitMatchup, fitCurrentRoles, eligibleEvents } from '../src/team-model.ts';
+import { createHash } from 'node:crypto';
+import { validateGeneration } from '../src/validate-card.ts';
+import { parseCompletedSummary, parseSummary, type CompletedEvent } from '../src/parse-summary.ts';
 import type { OutcomeRow, RateCard, SeasonType, ShootingCache, ShootingRow, Slate, SlateGame, TeamSide } from '../src/types.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SLATE_PATH = join(ROOT, 'public/data/slate.json');
 const RATE_CARD_PATH = join(ROOT, 'public/data/rate-card.json');
 const CACHE_PATH = join(ROOT, 'data/shooting-cache.json');
-const SUMMARY_CAP = 400;
+// Development replay can reuse already validated events while refreshing current feeds.
+const SUMMARY_CAP = process.argv.includes('--cached-summaries') ? 0 : 400;
 const SUMMARY_CONCURRENCY = 8;
 const SUMMARY_TIMEOUT_MS = 20_000;
 const JSON_TIMEOUT_MS = 20_000;
@@ -24,7 +28,7 @@ const SEASON_TYPES: Record<number, SeasonType> = {
   4: 'offseason',
   5: 'play-in',
 };
-const KEPT_STATS = new Set(['points', 'totalRebounds', 'assists', 'three_pointers_made']);
+const KEPT_STATS = new Set(['points', 'totalRebounds', 'assists', 'three_pointers_made', 'steals', 'blocks', 'turnovers']);
 const COLUMNS = ['min', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'pts', 'reb', 'ast'] as const;
 
 const SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
@@ -41,9 +45,6 @@ function summaryUrl(eventId: string): string {
   return `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/summary?event=${eventId}`;
 }
 
-function modelCacheUrl(date: string): string {
-  return `https://raw.githubusercontent.com/Harsh4873/pickledger/main/data/model_cache/${date}.json`;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -223,13 +224,14 @@ function teamSide(competitor: Record<string, unknown>): TeamSide | null {
 
 export function gamesFromScoreboard(payload: unknown, date: string, picks: unknown[]): SlateGame[] {
   const root = isRecord(payload) ? payload : {};
-  const events = Array.isArray(root.events) ? root.events : [];
+  if (!Array.isArray(root.events)) throw new Error('Invalid scoreboard');
+  const events = root.events;
   const seasonFallback = fallbackSeason(root, date);
   const games: SlateGame[] = [];
   for (const event of events) {
-    if (!isRecord(event)) continue;
+    if (!isRecord(event)) throw new Error('Invalid scoreboard event');
     const eventId = String(event.id ?? '').trim();
-    if (!eventId) continue;
+    if (!eventId) throw new Error('Missing scoreboard event id');
     const competition = firstCompetition(event);
     const competitors = Array.isArray(competition.competitors) ? competition.competitors : [];
     let away: TeamSide | null = null;
@@ -240,7 +242,7 @@ export function gamesFromScoreboard(payload: unknown, date: string, picks: unkno
       if (side === 'away') away = teamSide(competitor);
       if (side === 'home') home = teamSide(competitor);
     }
-    if (!away || !home) continue;
+    if (!away || !home || away.team_id === home.team_id) throw new Error('Incomplete scoreboard matchup');
     const status = eventStatus(event);
     games.push({
       event_id: eventId,
@@ -252,6 +254,7 @@ export function gamesFromScoreboard(payload: unknown, date: string, picks: unkno
       completed: status.completed,
       away,
       home,
+      neutral_site: competition.neutralSite === true,
       spread_caption: spreadCaption(picks, away.name, home.name),
     });
   }
@@ -292,17 +295,22 @@ export function parseRoster(teamId: string, payload: unknown): RosterPlayer[] {
 
 export function parseInjuries(payload: unknown): InjuryInput[] {
   const root = isRecord(payload) ? payload : {};
-  const groups = Array.isArray(root.injuries) ? root.injuries : [];
+  if (!Array.isArray(root.injuries)) throw new Error('Invalid injury report');
+  const groups = root.injuries;
   const injuries: InjuryInput[] = [];
   for (const group of groups) {
-    if (!isRecord(group) || !Array.isArray(group.injuries)) continue;
+    if (!isRecord(group) || !Array.isArray(group.injuries)) throw new Error('Invalid injury group');
     for (const item of group.injuries) {
-      if (!isRecord(item)) continue;
+      if (!isRecord(item)) throw new Error('Invalid injury item');
       const athlete = isRecord(item.athlete) ? item.athlete : {};
-      const athleteId = String(athlete.id ?? '').trim();
+      const links=Array.isArray(athlete.links)?athlete.links:[];
+      const linkedIds=links.filter(isRecord).flatMap(link=>{const match=String(link.href??'').match(/^https:\/\/(?:www\.)?espn\.com\/nba\/player\/(?:[^?]*\/)?_\/id\/(\d+)(?:\/|$)/);return match?[match[1]]:[];});
+      const uniqueIds=[...new Set(linkedIds)];
+      if(uniqueIds.length>1)throw new Error('Conflicting injury identity');
+      const athleteId = String(athlete.id ?? uniqueIds[0] ?? '').trim();
       const name = String(athlete.displayName || athlete.fullName || '').trim();
-      if (!athleteId && !name) continue;
-      injuries.push({ athlete_id: athleteId, name, status: String(item.status ?? '') });
+      if ((!athleteId && !name) || typeof item.status !== 'string' || !item.status.trim()) throw new Error('Missing injury identity or designation');
+      injuries.push({ athlete_id: athleteId, name, status: String((isRecord(item.type) && item.type.description) || item.status || 'unknown') });
     }
   }
   return injuries;
@@ -327,7 +335,8 @@ export function teamIdsFromIndex(payload: unknown): string[] {
 }
 
 export function parseOutcomeLines(text: string): OutcomeRow[] {
-  const rows: OutcomeRow[] = [];
+  const rows = new Map<string, OutcomeRow>();
+  const conflicts = new Set<string>();
   for (const line of text.split('\n')) {
     if (!line.trim()) continue;
     let value: unknown;
@@ -347,17 +356,23 @@ export function parseOutcomeLines(text: string): OutcomeRow[] {
     if (!athleteId || !eventId) continue;
     const actual = Number(value.actual);
     const minutes = Number(value.minutes);
-    rows.push({
+    if (value.actual === null || value.actual === undefined || value.actual === '' || value.minutes === null || value.minutes === undefined || value.minutes === '' || !Number.isInteger(actual) || actual < 0 || !Number.isFinite(minutes) || minutes < 0 || minutes > 90 || !String(value.team_id ?? '').trim()) continue;
+    if (value.status === 'pending' || value.result === 'pending') continue;
+    const key = `${season}:${eventId}:${athleteId}:${statKey}`;
+    const row: OutcomeRow = {
       season,
       athlete_id: athleteId,
       team_id: String(value.team_id ?? '').trim(),
       event_id: eventId,
       stat_key: statKey,
-      actual: Number.isFinite(actual) ? actual : 0,
-      minutes: Number.isFinite(minutes) ? minutes : 0,
-    });
+      actual, minutes,
+    };
+    const previous = rows.get(key);
+    if (previous && JSON.stringify(previous) !== JSON.stringify(row)) conflicts.add(key);
+    rows.set(key, row);
   }
-  return rows;
+  for (const key of conflicts) rows.delete(key);
+  return [...rows.values()];
 }
 
 function teamsByEvent(rows: OutcomeRow[]): Map<string, string[]> {
@@ -408,6 +423,7 @@ function loadCache(): ShootingCache {
     schema_version: 1,
     fetched_event_ids: Array.isArray(parsed.fetched_event_ids) ? parsed.fetched_event_ids.map((id) => String(id)) : [],
     rows: Array.isArray(parsed.rows) ? parsed.rows : [],
+    events: Array.isArray(parsed.events) ? parsed.events : [],
   };
 }
 
@@ -451,6 +467,11 @@ function mergeShooting(cache: ShootingCache, season: number, games: ReturnType<t
   cache.rows = [...index.values()];
 }
 
+export function eventOutcomes(events: CompletedEvent[]): OutcomeRow[] {
+  return events.flatMap(e => e.players.flatMap(p => ([['points',p.pts],['totalRebounds',p.reb],['assists',p.ast],['steals',p.stl],['blocks',p.blk],['turnovers',p.tov]] as const)
+    .filter(([,v]) => v !== undefined).map(([stat_key,actual]) => ({season:e.season,event_id:e.event_id,team_id:p.team_id,athlete_id:p.athlete_id,minutes:p.minutes,stat_key,actual:actual!}))));
+}
+
 function finishCache(cache: ShootingCache): void {
   cache.fetched_event_ids = [...new Set(cache.fetched_event_ids)].sort(compareText);
   cache.rows.sort(
@@ -458,13 +479,22 @@ function finishCache(cache: ShootingCache): void {
   );
 }
 
+export async function fetchWithRetry(url: string | URL, timeoutMs: number): Promise<Response> {
+  for(let attempt=0;attempt<3;attempt++) {
+    try {
+      const response=await fetch(url,{headers:{accept:'application/json'},signal:AbortSignal.timeout(timeoutMs)});
+      if(response.ok)return response;
+      if(![408,429,500,502,503,504].includes(response.status)||attempt===2)throw new Error(`HTTP ${response.status}`);
+      await response.body?.cancel();
+    }catch(error){
+      if(attempt===2 || (error instanceof Error && /^HTTP /.test(error.message)))throw error;
+    }
+    await new Promise(resolve=>setTimeout(resolve,250*2**attempt));
+  }
+  throw new Error('Fetch retries exhausted');
+}
 async function fetchJson(url: string | URL, timeoutMs: number): Promise<unknown> {
-  const response = await fetch(url, {
-    headers: { accept: 'application/json' },
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  if (!response.ok) throw new Error(`${response.status} ${url.toString()}`);
-  return response.json() as Promise<unknown>;
+  return (await fetchWithRetry(url,timeoutMs)).json() as Promise<unknown>;
 }
 
 async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
@@ -483,7 +513,7 @@ async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Prom
   return results;
 }
 
-async function buildRateCard(): Promise<void> {
+export async function buildRateCard(): Promise<void> {
   const now = new Date();
   const date = chicagoDate(now);
   const generatedAt = stamp(now);
@@ -497,20 +527,15 @@ async function buildRateCard(): Promise<void> {
     throw new Error(`scoreboard failed: ${message(error)}`);
   }
 
-  const [teamIndex, injuryPayload, spreadPayload, gzipText] = await Promise.all([
+  const [teamIndex, injuryPayload, gzipText] = await Promise.all([
     fetchJson(TEAMS, JSON_TIMEOUT_MS).catch((error: unknown) => {
       console.error(`team index failed: ${message(error)}`);
-      return null;
+      throw error;
     }),
     fetchJson(INJURIES, JSON_TIMEOUT_MS).catch((error: unknown) => {
-      console.error(`injuries failed: ${message(error)}`);
-      return null;
+      throw new Error(`injuries failed: ${message(error)}`);
     }),
-    fetchJson(modelCacheUrl(date), JSON_TIMEOUT_MS).catch((error: unknown) => {
-      console.error(`spread cache failed: ${message(error)}`);
-      return null;
-    }),
-    fetch(OUTCOME_GZIP, { signal: AbortSignal.timeout(GZIP_TIMEOUT_MS) })
+    fetchWithRetry(OUTCOME_GZIP,GZIP_TIMEOUT_MS)
       .then(async (response) => {
         if (!response.ok) throw new Error(`${response.status} ${OUTCOME_GZIP}`);
         return gunzipSync(Buffer.from(await response.arrayBuffer())).toString('utf8');
@@ -521,7 +546,7 @@ async function buildRateCard(): Promise<void> {
       }),
   ]);
 
-  const picks = spreadPayload ? nbaPicks(spreadPayload) : [];
+  const picks: unknown[] = [];
   const games = gamesFromScoreboard(scoreboard, date, picks);
   const slate: Slate = {
     schema_version: 1,
@@ -539,27 +564,34 @@ async function buildRateCard(): Promise<void> {
       return parseRoster(teamId, await fetchJson(rosterUrl(teamId), JSON_TIMEOUT_MS));
     } catch (error) {
       console.error(`roster ${teamId} failed: ${message(error)}`);
-      return [];
+      throw error;
     }
   });
   const roster = rosterGroups.flat();
-  const injuries = injuryPayload ? parseInjuries(injuryPayload) : [];
+  const injuries = parseInjuries(injuryPayload);
   const outcomes = gzipText === null ? null : parseOutcomeLines(gzipText);
+  if (!outcomes?.length) throw new Error('Required outcome history is empty');
+  for (const team of slateTeamIds) if (!roster.some(p => p.team_id === team)) throw new Error(`Missing roster ${team}`);
   const cache = loadCache();
   const previousCache = serialize(cache);
   let summariesFetched = 0;
   let summariesFailed = 0;
 
   if (outcomes) {
-    const fetched = new Set(cache.fetched_event_ids);
+    const fetched = new Set((cache.events ?? []).map(e => e.event_id));
     const seasons = eventSeasons(outcomes);
-    const pending = orderPendingEventIds(
+    const recent = cache.events!.slice(-20).map(e=>e.event_id).filter(id=>seasons.has(id));
+    const pending = [...recent, ...orderPendingEventIds(
       [...seasons.keys()].filter((eventId) => !fetched.has(eventId)),
       { slateTeamIds, eventTeamIds: teamsByEvent(outcomes) },
-    ).slice(0, SUMMARY_CAP);
+    )].slice(0, SUMMARY_CAP);
     await mapLimit(pending, SUMMARY_CONCURRENCY, async (eventId) => {
       try {
-        const rows = parseSummary(await fetchJson(summaryUrl(eventId), SUMMARY_TIMEOUT_MS));
+        const event = parseCompletedSummary(await fetchJson(summaryUrl(eventId), SUMMARY_TIMEOUT_MS), eventId);
+        if (Date.parse(event.start_time) >= now.getTime()) throw new Error('Future summary');
+        cache.events = cache.events!.filter(e=>e.event_id!==eventId);
+        cache.events.push(event);
+        const rows = event.players;
         fetched.add(eventId);
         summariesFetched += 1;
         const season = seasons.get(eventId);
@@ -572,14 +604,19 @@ async function buildRateCard(): Promise<void> {
     cache.fetched_event_ids = [...fetched];
   }
 
+  cache.events!.sort((a,b) => compareText(a.start_time,b.start_time) || compareText(a.event_id,b.event_id));
+  // Legacy aggregates lack event lineage; rebuild solely from validated regular-season boxes.
+  cache.rows = [];
+  const trainingEvents = eligibleEvents(cache.events!,generatedAt);
+  for (const event of trainingEvents) mergeShooting(cache,event.season,event.players);
   finishCache(cache);
-  const nextCache = serialize(cache);
-  writeFileSync(SLATE_PATH, serialize(slate));
+  const nextCache = `${JSON.stringify(cache,null,2)}\n`;
   if (nextCache !== previousCache) writeFileSync(CACHE_PATH, nextCache);
 
   let rateCardPublished = false;
   if (outcomes && hasFreeThrowAttempts(cache.rows)) {
-    const fitted = fitPlayers({ roster, injuries, outcomes, shooting: cache.rows });
+    const fitted = fitPlayers({ roster, injuries, outcomes: eventOutcomes(trainingEvents), shooting: cache.rows });
+    fitCurrentRoles(fitted.players, trainingEvents, games[0]?.season ?? 2027);
     const covered = games.length === 0 || fitted.players.some((player) => slateTeamIds.includes(player.team_id));
     if (fitted.publish && covered) {
       const rateCard: RateCard = {
@@ -587,6 +624,10 @@ async function buildRateCard(): Promise<void> {
         generated_at: generatedAt,
         date,
         iterations: 10000,
+        model_version: 'possessions-v1',
+        source_cutoff: generatedAt,
+        generator_sha: process.env.GENERATOR_SHA ?? process.env.GITHUB_SHA ?? 'local-uncommitted',
+        input_hash: createHash('sha256').update(serialize({roster,injuries,events:trainingEvents})).digest('hex'),
         columns: [...COLUMNS],
         games: games.flatMap((game) => {
           const awayPlayers = fitted.players
@@ -603,16 +644,28 @@ async function buildRateCard(): Promise<void> {
               away_team_id: game.away.team_id,
               home_team_id: game.home.team_id,
               players,
+              context: fitMatchup(trainingEvents,game,generatedAt),
             },
           ];
         }),
       };
       mkdirSync(dirname(RATE_CARD_PATH), { recursive: true });
-      writeFileSync(RATE_CARD_PATH, serialize(rateCard));
+      validateGeneration(slate, rateCard);
+      writeFileSync(`${SLATE_PATH}.tmp`, serialize(slate));
+      writeFileSync(`${RATE_CARD_PATH}.tmp`, serialize(rateCard));
+      renameSync(`${RATE_CARD_PATH}.tmp`, RATE_CARD_PATH);
+      renameSync(`${SLATE_PATH}.tmp`, SLATE_PATH);
+      const upcoming = new Set(games.filter(g => Date.parse(g.start_time)>now.getTime() && g.status_state==='pre').map(g=>g.event_id));
+      if(upcoming.size){
+        const archive=join(ROOT,'data/forecast-archive',date);
+        mkdirSync(archive,{recursive:true});
+        writeFileSync(join(archive,`${generatedAt.replaceAll(':','-')}.json`),serialize({slate:{...slate,games:slate.games.filter(g=>upcoming.has(g.event_id))},card:{...rateCard,games:rateCard.games.filter(g=>upcoming.has(g.event_id))}}));
+      }
       rateCardPublished = true;
     }
   }
 
+  if (!rateCardPublished) throw new Error('Rate card publication refused: incomplete required coverage');
   process.stdout.write(
     `${JSON.stringify({
       date,

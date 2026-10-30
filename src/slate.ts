@@ -1,3 +1,4 @@
+import { freshnessIssue, validateGame } from './validate-card.ts';
 import { formatTip } from './date.ts';
 import { teamLogoUrl } from './display.ts';
 import type { RateCard, Slate, SlateGame, TeamSide } from './types.ts';
@@ -42,7 +43,7 @@ export function teamLogoMarkup(side: TeamSide): string {
   const url = teamLogoUrl(side);
   const mono = `<span class="mono"${url ? ' hidden' : ''}>${escapeHtml(sideAbbr(side))}</span>`;
   const image = url
-    ? `<img alt="${escapeHtml(sideLabel(side))}" src="${escapeHtml(url)}" width="56" height="56">`
+    ? `<img referrerpolicy="no-referrer" alt="${escapeHtml(sideLabel(side))}" src="${escapeHtml(url)}" width="56" height="56">`
     : '';
   return `<span class="logo">${image}${mono}</span>`;
 }
@@ -52,7 +53,9 @@ function matchupSide(side: TeamSide): string {
 }
 
 function renderCard(game: SlateGame, card: RateCard, now: Date, capturedAt: string | null): string {
-  const ready = card.games.some((item) => item.event_id === game.event_id);
+  const rate = card.games.find((item) => item.event_id === game.event_id);
+  let ready = false;
+  try { if(rate){validateGame(rate);ready=true;} } catch { ready=false; }
   const season = game.season_type ? `<p class="tag">${escapeHtml(game.season_type)}</p>` : '';
   const spread = game.spread_caption ? `<p class="spread">${escapeHtml(game.spread_caption)}</p>` : '';
   const label = ready ? 'Simulate' : 'Shooting rates are not ready';
@@ -70,8 +73,10 @@ export function renderSlate(slate: Slate, card: RateCard, now: Date): string {
   if (slate.generated_at === null) {
     return '<p class="state">Today\'s slate has not been built yet.</p>';
   }
+  const issue = freshnessIssue(slate,card,now);
+  if(issue) return `<p class="state" role="alert">${escapeHtml(issue)}. Captured ${escapeHtml(card.generated_at ?? 'unknown')}. <button data-retry>Retry</button></p>`;
   if (slate.games.length === 0) {
     return `<p class="state">No NBA games on ${escapeHtml(slate.date ?? '')}.</p>`;
   }
-  return `<div class="slate">${slate.games.map((game) => renderCard(game, card, now, slate.generated_at)).join('')}</div>`;
+  return `<p class="status">Captured ${escapeHtml(card.generated_at ?? 'unknown')}</p><div class="slate">${slate.games.map((game) => renderCard(game, card, now, slate.generated_at)).join('')}</div>`;
 }

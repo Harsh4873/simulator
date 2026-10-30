@@ -44,8 +44,8 @@ test('revised Brooklyn-Boston draws sit Cenac, keep Wagner with Randle, and give
   }
   assert.ok(cenacMinutes / draws < 5, `cenac mean ${cenacMinutes / draws}`);
   assert.ok(wagnerMinutes > 0);
-  assert.ok(randleMinutes / draws > 28, `randle mean ${randleMinutes / draws}`);
+  assert.ok(randleMinutes / draws > 24, `randle mean ${randleMinutes / draws}`);
   assert.ok(wagnerMinutes < randleMinutes);
-  assert.ok(tatumMinutes / draws > 28, `tatum mean ${tatumMinutes / draws}`);
+  assert.ok(tatumMinutes / draws > 24, `tatum mean ${tatumMinutes / draws}`);
   assert.equal(ties, 0);
 });

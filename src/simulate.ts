@@ -1,3 +1,4 @@
+import { drawPossessions } from './possessions.ts';
 import { shownPercent, typicalityBucket, winCounts, type TypicalityBucket, type WinCounts } from './display.ts';
 import type { RateGame, RatePlayer } from './types.ts';
 import { binomial, gammaMean1, iterationSeed, mulberry32, normal, poisson, type Rng } from './rng.ts';
@@ -6,7 +7,6 @@ export const ITERATIONS = 10000;
 export const REGULATION_MINUTES = 240;
 export const OT_PERIOD_MINUTES = 25;
 export const DIRICHLET_KAPPA = 80;
-export const MINUTES_CONCENTRATION = 320;
 export const STARTER_MINUTE_SD = 2;
 export const ROTATION_MINUTE_SD = 4;
 export const BENCH_MINUTE_SD = 6;
@@ -54,6 +54,11 @@ export interface DrawnPlayer {
   pts: number;
   reb: number;
   ast: number;
+  stl?: number;
+  blk?: number;
+  tov?: number;
+  orb?: number;
+  drb?: number;
 }
 
 export interface Draw {
@@ -70,6 +75,8 @@ export interface RevisedDraw extends Draw {
   regulationAwayPts: number;
   regulationHomePts: number;
   missingShootingAthleteIds: string[];
+  periodMinutes?: { away: number[]; home: number[] }[];
+  possessions?: number[];
 }
 
 export interface MarginalRead {
@@ -85,6 +92,7 @@ export interface PlayerExpectation {
   rebMean: number;
   astMean: number;
   praMean: number;
+  counts?: Partial<Record<'fgm'|'fga'|'tpm'|'tpa'|'ftm'|'fta'|'stl'|'blk'|'tov',number>>;
   minP10: number;
   minP90: number;
   ptsP10: number;
@@ -166,14 +174,13 @@ export function isUnobservedProfile(player: {
 
 type AppearancePlayer = Pick<
   RatePlayer,
-  'minutes_weight' | 'games_2026' | 'games_2027' | 'minutes_mean' | 'questionable_widen'
+  'minutes_weight' | 'games_2026' | 'games_2027' | 'minutes_mean' | 'questionable_widen' | 'play_probability'
 >;
 
-export function teamGamesPlayed(roster: readonly Pick<RatePlayer, 'minutes_weight' | 'games_2027'>[]): number {
+export function teamGamesPlayed(roster: readonly Pick<RatePlayer, 'minutes_weight' | 'games_2027' | 'team_games'>[]): number {
   let max = 0;
   for (const player of roster) {
-    if (player.minutes_weight === 0) continue;
-    if (player.games_2027 > max) max = player.games_2027;
+    max = Math.max(max, player.team_games ?? player.games_2027);
   }
   return max;
 }
@@ -186,6 +193,7 @@ export function isConfirmedStarter(player: AppearancePlayer, teamGames: number):
 
 export function playProbability(player: AppearancePlayer, teamGames: number): number {
   if (player.minutes_weight === 0) return 0;
+  if (player.play_probability !== undefined) return player.play_probability;
   if (isConfirmedStarter(player, teamGames)) return 1;
   const games = Math.max(teamGames, player.games_2027);
   let priorMean = 0.12;
@@ -371,107 +379,34 @@ function restedLine(player: RatePlayer): DrawnPlayer {
   };
 }
 
-function minuteNoise(baseline: number): number {
-  if (baseline >= 24) return STARTER_MINUTE_SD;
-  if (baseline >= 12) return ROTATION_MINUTE_SD;
-  return BENCH_MINUTE_SD;
-}
-
-function roleBaselines(baselines: number[], budget: number): number[] {
-  const anchor = baselines.map((value) => value >= 24);
-  let anchorSum = 0;
-  for (let index = 0; index < baselines.length; index += 1) {
-    if (anchor[index]) anchorSum += baselines[index];
-  }
-  if (anchorSum >= budget) {
-    return baselines.map((value, index) => (anchor[index] ? (value * budget) / anchorSum : 0));
-  }
-  let restSum = 0;
-  for (let index = 0; index < baselines.length; index += 1) {
-    if (!anchor[index]) restSum += baselines[index];
-  }
-  const restBudget = budget - anchorSum;
-  return baselines.map((value, index) => {
-    if (anchor[index]) return value;
-    if (!(restSum > 0)) return 0;
-    return (value * restBudget) / restSum;
-  });
-}
-
 function rawMinutes(players: RatePlayer[], budget: number, rng: Rng): number[] {
   if (players.length === 0 || !(budget > 0)) throw new Error('minute cap cannot fill the team budget');
-  const targets = players.map((player) => conditionalMinutes(player));
-  const baseline = roleBaselines(targets, budget);
-  const noisy = baseline.map((value, index) => {
-    let next = Math.max(0, value + normal(rng) * minuteNoise(value));
-    if (players[index].questionable_widen) {
-      next *= Math.exp(normal(rng) * QUESTIONABLE_SIGMA - (QUESTIONABLE_SIGMA ** 2) / 2);
-    }
-    return next;
+  const targets = players.map(p => conditionalMinutes(p));
+  const total = targets.reduce((a,b)=>a+b,0);
+  return players.map((p,i) => {
+    const baseline = total>0 ? targets[i]*budget/total : budget/players.length;
+    // Smooth exposure noise; no 24-minute branch or athlete-ordered residual dumping.
+    const sd = (2 + 4*Math.exp(-baseline/12))*Math.sqrt(budget/240);
+    let value = Math.max(0,baseline + normal(rng)*sd);
+    if(p.questionable_widen)value*=Math.exp(normal(rng)*QUESTIONABLE_SIGMA-QUESTIONABLE_SIGMA**2/2);
+    return value;
   });
-  let gap = budget - noisy.reduce((sum, value) => sum + value, 0);
-  const order = noisy
-    .map((_value, index) => ({ index, value: baseline[index] }))
-    .sort((a, b) => a.value - b.value || (players[a.index].athlete_id < players[b.index].athlete_id ? -1 : 1));
-  for (const item of order) {
-    if (Math.abs(gap) < 1e-6) break;
-    if (baseline[item.index] >= 24) continue;
-    if (gap > 0) {
-      noisy[item.index] += gap;
-      gap = 0;
-    } else {
-      const cut = Math.min(noisy[item.index], -gap);
-      noisy[item.index] -= cut;
-      gap += cut;
-    }
-  }
-  if (Math.abs(gap) > 1e-6) {
-    const total = noisy.reduce((sum, value) => sum + value, 0);
-    if (total > 0) {
-      for (let index = 0; index < noisy.length; index += 1) noisy[index] = (noisy[index] * budget) / total;
-    }
-  }
-  return noisy;
 }
 
 function cappedMinutes(rows: { athlete_id: string; raw: number; cap: number }[], budget: number): number[] {
-  const capSum = rows.reduce((sum, row) => sum + row.cap, 0);
-  if (capSum < budget) throw new Error('minute cap cannot fill the team budget');
-  const minutes = largestRemainder(
-    rows.map((row) => ({ athlete_id: row.athlete_id, raw: row.raw })),
-    budget,
-  );
-  let excess = 0;
-  for (let i = 0; i < rows.length; i += 1) {
-    if (minutes[i] > rows[i].cap) {
-      excess += minutes[i] - rows[i].cap;
-      minutes[i] = rows[i].cap;
-    }
+  if(rows.reduce((n,r)=>n+r.cap,0)<budget)throw new Error('minute cap cannot fill the team budget');
+  const values=rows.map(()=>0);
+  let left=budget;
+  let open=rows.map((_,i)=>i);
+  while(open.length && left>1e-9) {
+    const weight=open.reduce((n,i)=>n+Math.max(0,rows[i].raw),0);
+    const proposal=open.map(i=>weight>0?left*Math.max(0,rows[i].raw)/weight:left/open.length);
+    const capped=open.filter((i,j)=>proposal[j]>=rows[i].cap);
+    if(!capped.length){open.forEach((i,j)=>{values[i]=proposal[j];});break;}
+    for(const i of capped){values[i]=rows[i].cap;left-=rows[i].cap;}
+    open=open.filter(i=>!capped.includes(i));
   }
-  if (excess === 0) return minutes;
-  const order = rows.map((row, index) => ({
-    index,
-    athlete_id: row.athlete_id,
-    fraction: Math.max(0, row.raw) - Math.floor(Math.max(0, row.raw)),
-  }));
-  order.sort((a, b) => {
-    if (a.fraction !== b.fraction) return b.fraction - a.fraction;
-    return byAthleteId(a, b);
-  });
-  let cursor = 0;
-  let guard = 0;
-  const guardLimit = order.length * (excess + rows.length + 1);
-  while (excess > 0) {
-    if (guard > guardLimit) throw new Error('minute cap cannot fill the team budget');
-    const target = order[cursor % order.length];
-    if (minutes[target.index] < rows[target.index].cap) {
-      minutes[target.index] += 1;
-      excess -= 1;
-    }
-    cursor += 1;
-    guard += 1;
-  }
-  return minutes;
+  return largestRemainder(rows.map((r,i)=>({athlete_id:r.athlete_id,raw:values[i]})),budget);
 }
 
 interface CountingStats {
@@ -530,7 +465,7 @@ function allocate(players: RatePlayer[], caps: number[], budget: number, rng: Rn
   );
 }
 
-function drawSquad(roster: RatePlayer[], playingIds: Set<string>, rng: Rng): SquadState {
+function drawSquad(roster: RatePlayer[], playingIds: Set<string>, rng: Rng, possessionMode = false): SquadState {
   const z = normal(rng);
   // Mean-1 lognormal shock shared by the team's volume rates.
   const shock = Math.exp(TEAM_SHOCK_SIGMA * z - (TEAM_SHOCK_SIGMA ** 2) / 2);
@@ -540,7 +475,7 @@ function drawSquad(roster: RatePlayer[], playingIds: Set<string>, rng: Rng): Squ
   const lines: DrawnPlayer[] = [];
   for (let i = 0; i < playing.length; i += 1) {
     const player = playing[i];
-    const stats = drawStats(player, minutes[i] ?? 0, shock, rng);
+    const stats = possessionMode ? {fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,pts:0,reb:0,ast:0,stl:0,blk:0,tov:0,orb:0,drb:0} : drawStats(player, minutes[i] ?? 0, shock, rng);
     lines.push({
       ...restedLine(player),
       minutes_weight: 1,
@@ -554,20 +489,21 @@ function drawSquad(roster: RatePlayer[], playingIds: Set<string>, rng: Rng): Squ
   return { lines, volumeShock: shock };
 }
 
-function extendSquad(state: SquadState, roster: RatePlayer[], playingIds: Set<string>, periods: number, rng: Rng): void {
+function extendSquad(state: SquadState, roster: RatePlayer[], playingIds: Set<string>, _periods: number, rng: Rng, possessionMode = false): void {
   const playing = playingRoster(roster, playingIds);
   const byId = new Map(state.lines.map((line) => [line.athlete_id, line]));
   const caps = playing.map((player) => {
     const current = byId.get(player.athlete_id)?.min ?? 0;
-    if (minuteCap(player) === UNOBSERVED_MINUTE_CAP) return Math.max(0, UNOBSERVED_MINUTE_CAP - current);
-    return Math.max(0, PLAYER_CAP_REGULATION + PLAYER_CAP_PER_OT * periods - current);
+    if (minuteCap(player) === UNOBSERVED_MINUTE_CAP) return Math.min(5, Math.max(0, UNOBSERVED_MINUTE_CAP - current));
+    return PLAYER_CAP_PER_OT;
   });
   const extra = allocate(playing, caps, OT_PERIOD_MINUTES, rng);
   for (let i = 0; i < playing.length; i += 1) {
     const line = byId.get(playing[i].athlete_id);
     if (!line) throw new Error('minute cap cannot fill the team budget');
     const minutes = extra[i] ?? 0;
-    addStats(line, drawStats(playing[i], minutes, state.volumeShock, rng), minutes);
+    if (possessionMode) line.min += minutes;
+    else addStats(line, drawStats(playing[i], minutes, state.volumeShock, rng), minutes);
   }
 }
 
@@ -624,43 +560,39 @@ function minuteCap(player: Pick<RatePlayer, 'games_2026' | 'games_2027' | 'minut
   return PLAYER_CAP_REGULATION;
 }
 
-function ensureBudget(roster: RatePlayer[], playing: Set<string>, budget: number): void {
-  const capSum = () =>
-    roster.filter((player) => playing.has(player.athlete_id)).reduce((sum, player) => sum + minuteCap(player), 0);
-  if (capSum() >= budget) return;
-  const extras = roster
-    .filter((player) => player.minutes_weight !== 0 && !playing.has(player.athlete_id))
-    .sort((a, b) => conditionalMinutes(b) - conditionalMinutes(a) || (a.athlete_id < b.athlete_id ? -1 : 1));
-  for (const player of extras) {
-    playing.add(player.athlete_id);
-    if (capSum() >= budget) return;
-  }
-}
-
 function participation(away: RatePlayer[], home: RatePlayer[], rng: Rng): Set<string> {
-  const playing = new Set<string>();
-  const awayIds = new Set(away.map((player) => player.athlete_id));
-  const awayGames = teamGamesPlayed(away);
-  const homeGames = teamGamesPlayed(home);
-  const ordered = [...away, ...home].sort(byAthleteId);
-  for (const player of ordered) {
-    const probability = playProbability(player, awayIds.has(player.athlete_id) ? awayGames : homeGames);
-    if (probability > 0 && rng() < probability) playing.add(player.athlete_id);
+  const awayIds = new Set(away.map(p=>p.athlete_id));
+  const awayGames=teamGamesPlayed(away),homeGames=teamGamesPlayed(home);
+  const ordered=[...away,...home].sort(byAthleteId);
+  const probabilities=ordered.map(p=>playProbability(p,awayIds.has(p.athlete_id)?awayGames:homeGames));
+  for(const team of [away,home]) {
+    if(team.filter(p=>minuteCap(p)===48 && playProbability(p,teamGamesPlayed(team))>0).length<5)throw new Error('Insufficient eligible rotation for regulation and overtime');
   }
-  ensureBudget(away, playing, REGULATION_MINUTES);
-  ensureBudget(home, playing, REGULATION_MINUTES);
-  return playing;
+  // Joint availability is conditioned on a feasible game; never force a zero-probability player in.
+  for(let attempt=0;attempt<1000;attempt++) {
+    const playing=new Set<string>();
+    ordered.forEach((p,i)=>{if(probabilities[i]>0 && rng()<probabilities[i])playing.add(p.athlete_id);});
+    if([away,home].every(team=>team.filter(p=>playing.has(p.athlete_id)&&minuteCap(p)===48).length>=5))return playing;
+  }
+  throw new Error('Availability scenarios could not form a feasible rotation');
 }
 
 export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
   const awayRoster = game.players.filter((player) => player.team_id === game.away_team_id);
   const homeRoster = game.players.filter((player) => player.team_id === game.home_team_id);
   const playingIds = participation(awayRoster, homeRoster, rng);
-  const away = drawSquad(awayRoster, playingIds, rng);
-  const home = drawSquad(homeRoster, playingIds, rng);
+  const away = drawSquad(awayRoster, playingIds, rng, !!game.context);
+  const home = drawSquad(homeRoster, playingIds, rng, !!game.context);
   const regulationMinutes = new Map<string, number>();
   for (const line of [...away.lines, ...home.lines]) {
     regulationMinutes.set(`${line.team_id}:${line.athlete_id}`, line.min);
+  }
+  const periodMinutes = [{away:away.lines.map(p=>p.min),home:home.lines.map(p=>p.min)}];
+  const possessions: number[] = [];
+  const pace = game.context ? Math.max(1,(game.context.away.pace+game.context.home.pace)/2 + normal(rng)*game.context.pace_sd) : 0;
+  if(game.context) {
+    possessions.push(Math.round(pace));
+    drawPossessions(away.lines,home.lines,game.players,periodMinutes[0].away,periodMinutes[0].home,game.context,possessions[0],rng);
   }
   let awayPts = teamPoints(away.lines);
   let homePts = teamPoints(home.lines);
@@ -670,8 +602,15 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
   while (awayPts === homePts) {
     if (overtimePeriods >= MAX_OT_PERIODS) throw new Error('overtime did not separate the teams');
     overtimePeriods += 1;
-    extendSquad(away, awayRoster, playingIds, overtimePeriods, rng);
-    extendSquad(home, homeRoster, playingIds, overtimePeriods, rng);
+    const a = away.lines.map(p=>p.min), h = home.lines.map(p=>p.min);
+    extendSquad(away, awayRoster, playingIds, overtimePeriods, rng, !!game.context);
+    extendSquad(home, homeRoster, playingIds, overtimePeriods, rng, !!game.context);
+    const minutes = {away:away.lines.map((p,i)=>p.min-a[i]),home:home.lines.map((p,i)=>p.min-h[i])};
+    periodMinutes.push(minutes);
+    if(game.context){
+      const count=Math.max(1,Math.round(pace*5/48));possessions.push(count);
+      drawPossessions(away.lines,home.lines,game.players,minutes.away,minutes.home,game.context,count,rng);
+    }
     awayPts = teamPoints(away.lines);
     homePts = teamPoints(home.lines);
   }
@@ -680,6 +619,7 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
     .map((player) => player.athlete_id)
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const draw: RevisedDraw = {
+    periodMinutes, possessions,
     overtime: overtimePeriods > 0,
     overtimePeriods,
     budget: REGULATION_MINUTES + OT_PERIOD_MINUTES * overtimePeriods,
@@ -707,6 +647,14 @@ function bandFrom(values: ArrayLike<number>): PointsBand {
 }
 
 interface ToneSeries {
+  fgm?: Uint16Array;
+  fga?: Uint16Array;
+  tpa?: Uint16Array;
+  ftm?: Uint16Array;
+  fta?: Uint16Array;
+  stl?: Uint16Array;
+  blk?: Uint16Array;
+  tov?: Uint16Array;
   min: Uint16Array;
   tpm: Uint16Array;
   pts: Uint16Array;
@@ -714,8 +662,9 @@ interface ToneSeries {
   ast: Uint16Array;
 }
 
-function blankSeries(iterations: number): ToneSeries {
+function blankSeries(iterations: number, defensiveStats: boolean): ToneSeries {
   return {
+    ...Object.fromEntries(['fgm','fga','tpa','ftm','fta',...(defensiveStats?['stl','blk','tov']:[])].map(k=>[k,new Uint16Array(iterations)])),
     min: new Uint16Array(iterations),
     tpm: new Uint16Array(iterations),
     pts: new Uint16Array(iterations),
@@ -757,6 +706,7 @@ function expectationFrom(series: ToneSeries | undefined): PlayerExpectation {
   const minuteBand = bandFrom(minutes);
   const pointBand = bandFrom(points);
   return {
+    counts: Object.fromEntries((['fgm','fga','tpm','tpa','ftm','fta','stl','blk','tov'] as const).filter(k=>series?.[k]!==undefined).map(k=>[k,mean(Array.from(series?.[k]??[]))])),
     playRate: played / count,
     minMean,
     ptsMean,
@@ -825,7 +775,7 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
   const awayTotals = new Float64Array(iterations);
   const homeTotals = new Float64Array(iterations);
   const series = new Map<string, ToneSeries>();
-  for (const player of game.players) series.set(player.athlete_id, blankSeries(iterations));
+  for (const player of game.players) series.set(player.athlete_id, blankSeries(iterations, !!game.context && player.stl_per_min !== undefined && player.blk_per_min !== undefined && player.tov_per_min !== undefined));
   const combinedTotals = new Array<number>(iterations);
 
   for (let index = 0; index < iterations; index += 1) {
@@ -838,6 +788,7 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
     for (const line of [...draw.away, ...draw.home]) {
       const bucket = series.get(line.athlete_id);
       if (!bucket) continue;
+      for(const key of ['fgm','fga','tpa','ftm','fta','stl','blk','tov'] as const) if(bucket[key]) bucket[key]![index] = line[key] ?? 0;
       bucket.min[index] = line.min;
       bucket.tpm[index] = line.tpm;
       bucket.pts[index] = line.pts;

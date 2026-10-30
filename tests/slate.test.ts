@@ -217,20 +217,11 @@ test('slate copy covers the placeholder, an off day, and a card without rates', 
   };
   assert.match(renderSlate(placeholder, card, new Date('2026-10-27T18:00:00Z')), /Today's slate has not been built yet\./);
   const offDay: Slate = { ...placeholder, generated_at: '2026-10-27T15:00:00Z', date: '2026-10-27' };
-  assert.match(renderSlate(offDay, card, new Date('2026-10-27T18:00:00Z')), /No NBA games on 2026-10-27\./);
+  assert.match(renderSlate(offDay, {...card,date:offDay.date,generated_at:offDay.generated_at}, new Date('2026-10-27T18:00:00Z')), /No NBA games on 2026-10-27\./);
   const ready: Slate = { ...offDay, games: [game()] };
   const html = renderSlate(ready, card, new Date('2026-10-27T18:00:00Z'));
-  assert.match(html, /alt="Brooklyn Nets"/);
-  assert.match(html, /alt="Boston Celtics"/);
-  assert.match(html, /https:\/\/a\.espncdn\.com\/i\/teamlogos\/nba\/500\/scoreboard\/bkn\.png/);
-  assert.match(html, /https:\/\/a\.espncdn\.com\/i\/teamlogos\/nba\/500\/scoreboard\/bos\.png/);
-  assert.match(html, /Brooklyn Nets/);
-  assert.match(html, /Boston Celtics/);
-  assert.match(html, /class="at">@</);
-  assert.match(html, />BKN</);
-  assert.match(html, />BOS</);
-  assert.match(html, /Shooting rates are not ready/);
-  assert.match(html, /disabled/);
+  assert.match(html,/Mismatched data generations/);
+  assert.equal(html.includes('data-event='),false);
   const withRates: RateCard = {
     ...card,
     generated_at: '2026-10-27T15:00:00Z',
@@ -238,6 +229,6 @@ test('slate copy covers the placeholder, an off day, and a card without rates', 
     games: [{ event_id: '401909877', away_team_id: '17', home_team_id: '2', players: [] }],
   };
   const enabled = renderSlate(ready, withRates, new Date('2026-10-27T18:00:00Z'));
-  assert.match(enabled, />Simulate</);
-  assert.equal(enabled.includes('disabled'), false);
+  assert.match(enabled,/Insufficient active roster/);
+  assert.equal(enabled.includes('data-event='),false);
 });

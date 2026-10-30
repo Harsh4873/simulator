@@ -1,6 +1,6 @@
 import type { OutcomeRow, PositionGroup, RatePlayer, ShootingRow } from './types.ts';
 
-export const SEASON_WEIGHT_2027 = 0.35;
+export const SEASON_WEIGHT_2027 = 1;
 export const K_GAMES = 10;
 export const K_MINUTES = 200;
 export const K_FGA_SHARE = 80;
@@ -9,7 +9,7 @@ export const K_TP = 40;
 export const K_FT = 30;
 export const POSITION_TEAM_WEIGHT = 0.75;
 
-const OUT_STATUSES = new Set(['out', 'doubtful', 'injured reserve', 'suspension']);
+const OUT_STATUSES = new Set(['out', 'injured reserve', 'suspension', 'suspended', 'inactive', 'out for season']);
 
 export interface Exposure {
   s: number;
@@ -73,8 +73,8 @@ export function assignInjury(status: string): {
   if (OUT_STATUSES.has(trimmed)) {
     return { injury_status: trimmed, minutes_weight: 0, questionable_widen: false };
   }
-  if (trimmed === 'questionable') {
-    return { injury_status: 'questionable', minutes_weight: 1, questionable_widen: true };
+  if (['questionable', 'day-to-day', 'gtd', 'doubtful', 'unknown'].includes(trimmed)) {
+    return { injury_status: trimmed, minutes_weight: 1, questionable_widen: true };
   }
   return { injury_status: trimmed, minutes_weight: 1, questionable_widen: false };
 }
@@ -88,7 +88,7 @@ export function hasFreeThrowAttempts(rows: { fta: number }[]): boolean {
 }
 
 export function seasonWeight(season: number): number {
-  if (season === 2026) return 1;
+  if (season === 2026) return 0.2;
   if (season === 2027) return SEASON_WEIGHT_2027;
   return 0;
 }
@@ -146,7 +146,7 @@ function resolveInjury(player: RosterPlayer, injuries: InjuryInput[]): string {
   if (byId) return byId.status;
   const key = normalizeName(player.name);
   if (!key) return '';
-  const byName = injuries.find((item) => item.name && normalizeName(item.name) === key);
+  const byName = injuries.find((item) => !item.athlete_id && item.name && normalizeName(item.name) === key);
   return byName?.status ?? '';
 }
 
@@ -211,6 +211,9 @@ export function fitPlayers(input: FitInput): FitResult {
   const ft = emptyPool();
   const reb = emptyPool();
   const ast = emptyPool();
+  const stl = emptyPool();
+  const blk = emptyPool();
+  const tov = emptyPool();
   const games2026 = new Map<string, number>();
   const games2027 = new Map<string, number>();
   const shootingGames = new Map<string, number>();
@@ -225,6 +228,9 @@ export function fitPlayers(input: FitInput): FitResult {
       bucket.set(row.athlete_id, (bucket.get(row.athlete_id) ?? 0) + 1);
     } else if (row.stat_key === 'totalRebounds') {
       add(reb, row.athlete_id, row.team_id, group, weight * row.actual, weight * row.minutes);
+    } else if (['steals','blocks','turnovers'].includes(row.stat_key)) {
+      const pool = row.stat_key === 'steals' ? stl : row.stat_key === 'blocks' ? blk : tov;
+      add(pool,row.athlete_id,row.team_id,group,weight*row.actual,weight*row.minutes);
     } else if (row.stat_key === 'assists') {
       add(ast, row.athlete_id, row.team_id, group, weight * row.actual, weight * row.minutes);
     }
@@ -312,6 +318,9 @@ export function fitPlayers(input: FitInput): FitResult {
       tp_pct: tpPct,
       ft_pct: ftPct,
       reb_per_min: clampPerMinute(rate(reb, K_MINUTES, player.athlete_id, player.team_id, group)),
+      ...(stl.league.e > 0 ? {stl_per_min: clampPerMinute(rate(stl,K_MINUTES,player.athlete_id,player.team_id,group))} : {}),
+      ...(blk.league.e > 0 ? {blk_per_min: clampPerMinute(rate(blk,K_MINUTES,player.athlete_id,player.team_id,group))} : {}),
+      ...(tov.league.e > 0 ? {tov_per_min: clampPerMinute(rate(tov,K_MINUTES,player.athlete_id,player.team_id,group))} : {}),
       ast_per_min: clampPerMinute(rate(ast, K_MINUTES, player.athlete_id, player.team_id, group)),
     };
     if (typeof player.headshot_url === 'string' && player.headshot_url.trim()) {

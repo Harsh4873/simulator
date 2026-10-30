@@ -1,3 +1,5 @@
+import type { CompletedEvent } from './parse-summary.ts';
+
 export type SeasonType = 'preseason' | 'regular' | 'postseason' | 'offseason' | 'play-in';
 
 export type PositionGroup = '' | 'Guard' | 'Forward' | 'Center';
@@ -32,6 +34,7 @@ export interface SlateGame {
   away: TeamSide;
   home: TeamSide;
   spread_caption: string | null;
+  neutral_site?: boolean;
 }
 
 export interface Slate {
@@ -67,6 +70,14 @@ export interface RatePlayer {
   reb_per_min: number;
   ast_per_min: number;
   headshot_url?: string;
+  team_games?: number;
+  current_team_games?: number;
+  play_probability?: number;
+  stl_per_min?: number;
+  blk_per_min?: number;
+  tov_per_min?: number;
+  orb_share?: number;
+  minutes_source?: string;
 }
 
 export interface RateGame {
@@ -74,6 +85,7 @@ export interface RateGame {
   away_team_id: string;
   home_team_id: string;
   players: RatePlayer[];
+  context?: MatchupContext;
 }
 
 export interface RateCard {
@@ -81,6 +93,10 @@ export interface RateCard {
   generated_at: string | null;
   date: string | null;
   iterations: number;
+  model_version?: string;
+  source_cutoff?: string;
+  input_hash?: string;
+  generator_sha?: string;
   columns: ColumnKey[];
   games: RateGame[];
 }
@@ -106,6 +122,7 @@ export interface ShootingCache {
   schema_version: 1;
   fetched_event_ids: string[];
   rows: ShootingRow[];
+  events?: CompletedEvent[];
 }
 
 export interface OutcomeRow {
@@ -116,4 +133,25 @@ export interface OutcomeRow {
   stat_key: string;
   actual: number;
   minutes: number;
+}
+
+export interface TeamProfile {
+  pace: number;
+  offense: number;
+  defense: number;
+  turnover_rate: number;
+  offensive_rebound_rate: number;
+  assist_rate: number;
+  ft_trip_rate: number;
+  games: number;
+  rest_days: number | null;
+}
+export interface MatchupContext {
+  away: TeamProfile;
+  home: TeamProfile;
+  league_efficiency: number;
+  pace_sd: number;
+  home_log_advantage: number;
+  neutral: boolean;
+  training_games: number;
 }

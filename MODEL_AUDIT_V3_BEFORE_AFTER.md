@@ -1,5 +1,8 @@
 # Minutes and margin pass
 
+Historical October 27 snapshot; see [MODEL_SPEC.md](MODEL_SPEC.md) for the current model.
+
+
 Market odds were not an input. October 27 final scores were not used to fit anything. The frozen legacy card and the legacy sampler are unchanged.
 
 ## What changed

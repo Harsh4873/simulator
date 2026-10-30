@@ -1,4 +1,4 @@
-export type PropMarket = 'pts' | 'reb' | 'ast' | 'pra' | 'tpm';
+export type PropMarket = 'pts' | 'reb' | 'ast' | 'pra' | 'tpm' | 'stl' | 'blk' | 'tov';
 export type PropSide = 'over' | 'under';
 
 export interface PlayerSample {
@@ -7,6 +7,9 @@ export interface PlayerSample {
   reb: ArrayLike<number>;
   ast: ArrayLike<number>;
   tpm: ArrayLike<number>;
+  stl?: ArrayLike<number>;
+  blk?: ArrayLike<number>;
+  tov?: ArrayLike<number>;
 }
 
 export interface PropGrade {
@@ -157,6 +160,7 @@ export function fairAmericanOdds(probability: number): number | null {
 }
 
 function valueAt(sample: PlayerSample, index: number, market: PropMarket): number {
+  if (market === 'stl' || market === 'blk' || market === 'tov') return sample[market]?.[index] ?? NaN;
   if (market === 'pts') return sample.pts[index];
   if (market === 'reb') return sample.reb[index];
   if (market === 'ast') return sample.ast[index];
@@ -165,7 +169,10 @@ function valueAt(sample: PlayerSample, index: number, market: PropMarket): numbe
 }
 
 export function gradeProp(sample: PlayerSample, market: PropMarket, side: PropSide, line: number): PropGrade {
+  if(!Number.isFinite(line)||line<0||!Number.isInteger(line*2))throw new Error('Line must be a nonnegative whole or half point');
   const count = sample.min.length;
+  const series=market==='pra'?[sample.pts,sample.reb,sample.ast]:[sample[market]];
+  if(series.some(xs=>!xs||xs.length!==count||Array.from(xs).some(v=>!Number.isFinite(v)||v<0)))throw new Error('Missing or invalid stat samples');
   const grade: PropGrade = { wins: 0, losses: 0, pushes: 0, voids: 0 };
   for (let index = 0; index < count; index += 1) {
     if (!(sample.min[index] > 0)) {
@@ -336,7 +343,8 @@ export function quoteProp(
   odds: number | BookPrice,
   oppositeOdds?: number | BookPrice | null,
 ): PropQuote | null {
-  if (!sample || sample.min.length === 0 || !Number.isFinite(line)) return null;
+  if (!sample || sample.min.length === 0 || !Number.isFinite(line) || line < 0 || !Number.isInteger(line*2)) return null;
+  if ((market === 'stl' || market === 'blk' || market === 'tov') && !sample[market]) return null;
   const grade = gradeProp(sample, market, side, line);
   const decided = grade.wins + grade.losses;
   const modelProbability = decided === 0 ? null : grade.wins / decided;

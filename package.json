@@ -11,7 +11,10 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
-    "rate-card": "node --experimental-strip-types scripts/build-rate-card.ts"
+    "rate-card": "node --experimental-strip-types scripts/build-rate-card.ts",
+    "backtest": "node --experimental-strip-types scripts/backtest.ts",
+    "sanity": "node --experimental-strip-types scripts/sanity.ts",
+    "validate-artifact": "node scripts/validate-artifact.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",

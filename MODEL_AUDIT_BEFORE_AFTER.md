@@ -1,5 +1,8 @@
 # Model audit before and after
 
+Historical October 27 snapshot; see [MODEL_SPEC.md](MODEL_SPEC.md) for the current model.
+
+
 The frozen rate card is `tests/fixtures/rate-card-2026-10-27.json` (`generated_at` 2026-10-27T21:31:55Z). Each row is 1,000 paired draws. Legacy and revised use the same seed, `iterationSeed(fnv1a(event id + ":" + generated_at), index)`.
 
 Market odds were not an input. The sampler does not read a spread, a price, or a side the card should beat. A Nets result above a Celtics result is a legal draw.

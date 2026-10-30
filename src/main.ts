@@ -1,4 +1,5 @@
 import './styles.css';
+import { freshnessIssue, validateGeneration } from './validate-card.ts';
 import {
   DEFAULT_SIDE_SORTS,
   isColumnKey,
@@ -15,7 +16,7 @@ import {
 import { nextPanelAthlete, probabilityColorsOn, themeFromStorage } from './display.ts';
 import { fnv1a } from './rng.ts';
 import { renderSlate } from './slate.ts';
-import { ITERATIONS, simulate, type Simulation } from './simulate.ts';
+import { ITERATIONS, type Simulation } from './simulate.ts';
 import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
 
 const DATA_BASE = '/simulator/data/';
@@ -33,6 +34,9 @@ let slate: Slate | null = null;
 let card: RateCard | null = null;
 let bound = false;
 let running = false;
+let activeWorker: Worker | null = null;
+let cancelRun: (()=>void) | null = null;
+const simulationCache = new Map<string, Simulation>();
 let panelAthlete: string | null = null;
 let view: { game: SlateGame; rates: RateGame; result: Simulation } | null = null;
 let sideSorts: SideSorts = DEFAULT_SIDE_SORTS;
@@ -69,6 +73,7 @@ function applyProbabilityColors(): void {
 
 function showSlate(): void {
   if (!slateRoot || !slate || !card) return;
+  cancelRun?.();
   view = null;
   panelAthlete = null;
   boxRoot?.replaceChildren();
@@ -126,27 +131,48 @@ function syncPanel(): void {
 async function onSimulate(button: HTMLButtonElement): Promise<void> {
   const eventId = button.dataset.event;
   if (running || !eventId || !slate || !card || !boxRoot) return;
+  if(freshnessIssue(slate,card,new Date())) {showSlate();return;}
   const game = slate.games.find((item) => item.event_id === eventId);
   const rates = rateGame(eventId);
   if (!game || !rates) return;
   running = true;
+  desk?.setAttribute('aria-busy','true');
   button.disabled = true;
   button.textContent = 'Simulating…';
+  const cancel=document.createElement('button');cancel.dataset.cancel='';cancel.textContent='Cancel';button.after(cancel);
   await new Promise((resolve) => {
     setTimeout(resolve, 0);
   });
   try {
-    const result = simulate(rates, fnv1a(`${eventId}:${card.generated_at ?? ''}`), ITERATIONS);
+    const key=`${eventId}:${card.generated_at}:${card.model_version ?? 'legacy'}`;
+    const result = simulationCache.get(key) ?? await new Promise<Simulation>((resolve,reject)=>{
+      const worker=new Worker(new URL('./simulation-worker.ts',import.meta.url),{type:'module'});
+      activeWorker=worker;
+      const finish=()=>{worker.terminate();activeWorker=null;cancelRun=null;};
+      cancelRun=()=>{finish();reject(new Error('Simulation cancelled'));};
+      worker.onmessage=(event:MessageEvent<{result?:Simulation;error?:string}>)=>{
+        finish();if(event.data.result)resolve(event.data.result);else reject(new Error(event.data.error??'Simulation failed'));
+      };
+      worker.onerror=()=>{finish();reject(new Error('Simulation worker failed'));};
+      worker.postMessage({game:rates,seed:fnv1a(`${eventId}:${card!.generated_at ?? ''}`),iterations:ITERATIONS});
+    });
+    simulationCache.set(key,result);
+    if(simulationCache.size>12)simulationCache.delete(simulationCache.keys().next().value!);
     upsideOn = false;
     view = { game, rates, result };
     panelAthlete = null;
     panelBody?.replaceChildren();
     paintScore();
     showScore();
-  } catch {
+    boxRoot.querySelector<HTMLButtonElement>('[data-back]')?.focus();
+  } catch (error) {
+    const status=document.createElement('p');status.setAttribute('role','alert');status.textContent=error instanceof Error?error.message:'Simulation failed. Retry.';
+    button.after(status);
     button.disabled = false;
     button.textContent = 'Simulate';
   } finally {
+    desk?.setAttribute('aria-busy','false');
+    cancel.remove();
     running = false;
     if (button.isConnected) {
       button.disabled = false;
@@ -158,6 +184,8 @@ async function onSimulate(button: HTMLButtonElement): Promise<void> {
 function onDeskClick(event: Event): void {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  if(target.closest('[data-retry]')){void load();return;}
+  if(target.closest('[data-cancel]')){cancelRun?.();return;}
   const simulateButton = target.closest('button[data-event]');
   if (simulateButton instanceof HTMLButtonElement) {
     if (simulateButton.disabled) return;
@@ -191,8 +219,10 @@ function onDeskClick(event: Event): void {
   }
   const player = target.closest('button[data-athlete]');
   if (!(player instanceof HTMLButtonElement)) return;
+  propForm = {...DEFAULT_PROP_FORM};
   panelAthlete = nextPanelAthlete(panelAthlete, player.dataset.athlete ?? null);
   syncPanel();
+  if(panelAthlete)document.getElementById(`${panelTab}-tab`)?.focus();
 }
 
 function readPropForm(): void {
@@ -204,7 +234,7 @@ function readPropForm(): void {
   const side = document.querySelector<HTMLInputElement>('[data-prop-side]:checked');
   if (!market || !line || !odds || !opposite) return;
   propForm = {
-    market: market.value === 'reb' || market.value === 'ast' || market.value === 'pra' || market.value === 'tpm' ? market.value : 'pts',
+    market: market.value === 'stl' || market.value === 'blk' || market.value === 'tov' || market.value === 'reb' || market.value === 'ast' || market.value === 'pra' || market.value === 'tpm' ? market.value : 'pts',
     side: side?.value === 'under' ? 'under' : 'over',
     line: line.value,
     style: style?.value === 'multiplier' || style?.value === 'percent' ? style.value : 'american',
@@ -269,7 +299,11 @@ function onImageError(event: Event): void {
 }
 
 function onKey(event: KeyboardEvent): void {
+  if(event.target instanceof Element && event.target.matches('[role=tab]') && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){
+    event.preventDefault();panelTab=event.key==='Home'?'forecast':event.key==='End'?'props':panelTab==='forecast'?'props':'forecast';syncPanel();document.getElementById(`${panelTab}-tab`)?.focus();return;
+  }
   if (event.key !== 'Escape' || panelAthlete === null) return;
+  document.querySelector<HTMLButtonElement>(`button[data-athlete="${CSS.escape(panelAthlete)}"]`)?.focus();
   panelAthlete = nextPanelAthlete(panelAthlete, null);
   syncPanel();
 }
@@ -290,16 +324,18 @@ async function load(): Promise<void> {
   if (!slateRoot) return;
   try {
     const [slateResponse, cardResponse] = await Promise.all([
-      fetch(`${DATA_BASE}slate.json`),
-      fetch(`${DATA_BASE}rate-card.json`),
+      fetch(`${DATA_BASE}slate.json`,{cache:'no-store',signal:AbortSignal.timeout(15000)}),
+      fetch(`${DATA_BASE}rate-card.json`,{cache:'no-store',signal:AbortSignal.timeout(15000)}),
     ]);
     if (!slateResponse.ok || !cardResponse.ok) throw new Error('fetch failed');
     slate = (await slateResponse.json()) as Slate;
     card = (await cardResponse.json()) as RateCard;
+    validateGeneration(slate,card);
     bind();
     showSlate();
   } catch {
-    slateRoot.innerHTML = '<p class="state">Slate could not be loaded.</p>';
+    bind();
+    slateRoot.innerHTML = '<p class="state" role="alert">Slate could not be loaded or validated. <button data-retry>Retry</button></p>';
     if (desk) desk.dataset.mode = 'error';
   }
 }
@@ -338,3 +374,9 @@ function bindTheme(): void {
 applyTheme(themeFromStorage(storedTheme(), window.matchMedia('(prefers-color-scheme: light)').matches));
 bindTheme();
 void load();
+
+function recheckFreshness(): void {
+  if(slate && card && freshnessIssue(slate,card,new Date())){activeWorker?.terminate();cancelRun?.();showSlate();}
+}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)recheckFreshness();});
+setInterval(recheckFreshness,60000);

@@ -1,0 +1,21 @@
+name: Check simulator freshness
+on:
+  schedule:
+    - cron: "47 12,16,20,23 * * *"
+    - cron: "47 1,3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Detect stale data and request recovery
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-freshness.mjs

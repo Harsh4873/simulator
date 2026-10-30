@@ -1,4 +1,5 @@
 name: Deploy Simulator to GitHub Pages
+run-name: ${{ inputs.request_id || github.workflow }}
 
 # Project site. The user site carries the harsh.bet domain, so this repo is
 # served at /simulator/ because the repository is named simulator. No CNAME belongs here.
@@ -8,6 +9,15 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Validated source commit
+        required: false
+        type: string
+      request_id:
+        description: Deployment correlation identifier
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -29,6 +39,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -60,6 +72,7 @@ jobs:
           grep -Fq 'src="/simulator/assets/' dist/index.html
           grep -Fq 'href="/simulator/assets/' dist/index.html
           grep -Fq 'href="https://harsh.bet/simulator/"' dist/index.html
+          npm run validate-artifact
           test ! -e CNAME
           test ! -e dist/CNAME
           touch dist/.nojekyll

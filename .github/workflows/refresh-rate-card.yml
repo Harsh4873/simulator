@@ -1,12 +1,9 @@
 name: Refresh simulator rate card
 on:
   schedule:
-    # GitHub cron is UTC. 11:30 and 18:00 UTC are 6:30am and 1:00pm
-    # America/Chicago while CDT is in effect, and 5:30am and noon after
-    # the clock falls back to CST. Both are before evening tips.
-    # Do not also set a timezone field; that would double-fire.
-    - cron: "30 11 * * *"
-    - cron: "0 18 * * *"
+    # Frequent runs cover missed cron deliveries and evening injury changes (UTC).
+    - cron: "17 11,14,17,20,22,23 * * *"
+    - cron: "17 0,1,2 * * *"
   workflow_dispatch:
 permissions:
   contents: write
@@ -16,72 +13,62 @@ concurrency:
   cancel-in-progress: false
 jobs:
   refresh:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 40
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-
+        with:
+          ref: main
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: npm
-
       - name: Install dependencies
         run: npm ci
-
       - name: Build the rate card
-        run: npm run rate-card
-
-      - name: Commit rate card if changed
-        id: commit-rate-card
+        run: GENERATOR_SHA="$(git rev-parse HEAD)" npm run rate-card
+      - name: Verify before publication
+        run: |
+          npm test
+          npm run typecheck
+          npm run build
+          npm run validate-artifact
+      - name: Commit validated generation
+        id: commit
         shell: bash
         run: |
           set -euo pipefail
-          ACTOR_EMAIL="${GITHUB_ACTOR_ID:-41898282}+${GITHUB_ACTOR}@users.noreply.github.com"
-          git config user.name  "${GITHUB_ACTOR}"
-          git config user.email "${ACTOR_EMAIL}"
-          BRANCH="main"
-          if [ -z "$(git status --porcelain -- public/data/slate.json public/data/rate-card.json data/shooting-cache.json)" ]; then
-            echo "No rate-card change — skipping commit."
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-            exit 0
+          if [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_ACTOR" = 'github-actions[bot]' ]; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          elif [ "$GITHUB_ACTOR" = Harsh4873 ]; then
+            git config user.name Harsh4873
+            git config user.email '43502626+Harsh4873@users.noreply.github.com'
+          else
+            echo 'Unapproved manual refresh actor'
+            exit 1
           fi
-          mkdir -p "$RUNNER_TEMP/simulator-data"
-          cp public/data/slate.json "$RUNNER_TEMP/simulator-data/slate.json"
-          cp public/data/rate-card.json "$RUNNER_TEMP/simulator-data/rate-card.json"
-          cp data/shooting-cache.json "$RUNNER_TEMP/simulator-data/shooting-cache.json"
-          DATE=$(node --input-type=module -e "import { readFileSync } from 'node:fs'; const slate = JSON.parse(readFileSync('public/data/slate.json', 'utf8')); if (!slate.date) process.exit(1); process.stdout.write(String(slate.date));")
-          for attempt in 1 2 3 4 5; do
-            git fetch origin "$BRANCH"
-            git reset --hard "origin/${BRANCH}"
-            cp "$RUNNER_TEMP/simulator-data/slate.json" public/data/slate.json
-            cp "$RUNNER_TEMP/simulator-data/rate-card.json" public/data/rate-card.json
-            cp "$RUNNER_TEMP/simulator-data/shooting-cache.json" data/shooting-cache.json
-            git add -- public/data/slate.json public/data/rate-card.json data/shooting-cache.json
-            if git diff --cached --quiet; then
-              echo "No staged change after rebase — skipping commit."
-              echo "changed=false" >> "$GITHUB_OUTPUT"
-              exit 0
+          git fetch origin main
+          # Never copy an old build onto a newer generator revision. A later run rebuilds.
+          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
+          git add -- public/data/slate.json public/data/rate-card.json data/shooting-cache.json data/forecast-archive
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore(data): refresh validated simulator generation'
+            AUTHOR=$(git show -s --format='%an' HEAD)
+            test "$AUTHOR" = Harsh4873 || test "$AUTHOR" = 'github-actions[bot]'
+            if git log -1 --format=%B | grep -qi 'Co-authored-by:'; then
+              echo 'Unexpected commit trailer'
+              exit 1
             fi
-            git commit -m "chore(data): refresh simulator rate card for ${DATE}"
-            if git push origin "HEAD:${BRANCH}"; then
-              echo "changed=true" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-            echo "Push failed on attempt ${attempt}; retrying."
-            if [ "$attempt" -lt 5 ]; then
-              sleep "$((attempt * 10))"
-            fi
-          done
-          echo "Unable to publish the rate card after retrying."
-          exit 1
-
-      - name: Deploy updated slate
-        # A push made with GITHUB_TOKEN does not emit a push event, so
-        # deploy-pages.yml would not start. workflow_dispatch is allowed.
-        if: steps.commit-rate-card.outputs.changed == 'true'
+            git push origin HEAD:main
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Deploy and verify completion
+        # Also dispatch when no data changed, so a failed previous deployment can recover.
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run deploy-pages.yml --ref main
+          GITHUB_TOKEN: ${{ github.token }}
+          DEPLOY_SHA: ${{ steps.commit.outputs.sha }}
+        run: node scripts/deploy-and-wait.mjs

@@ -38,7 +38,7 @@ export function normal(rng: Rng): number {
 }
 
 export function gamma(shape: number, rng: Rng): number {
-  if (!(shape > 0)) throw new Error('gamma shape must be positive');
+  if (!Number.isFinite(shape) || !(shape > 0)) throw new Error('gamma shape must be positive');
   if (shape < 1) {
     const u = rng();
     return gamma(shape + 1, rng) * u ** (1 / shape);
@@ -57,27 +57,20 @@ export function gamma(shape: number, rng: Rng): number {
 }
 
 export function gammaMean1(shape: number, rng: Rng): number {
-  const draws = Math.floor(shape);
-  let sum = 0;
-  for (let i = 0; i < draws; i += 1) {
-    let u = rng();
-    while (u <= 0) u = rng();
-    sum += -Math.log(u) / shape;
-  }
-  return sum;
+  return gamma(shape,rng)/shape;
 }
 
 export function poisson(mean: number, rng: Rng): number {
-  if (!Number.isFinite(mean) || mean <= 0) return 0;
-  const capped = Math.min(mean, POISSON_MEAN_CAP);
-  const limit = Math.exp(-capped);
-  let count = 0;
-  let product = 1;
-  do {
-    count += 1;
-    product *= rng();
-  } while (product > limit);
-  return count - 1;
+  if(!Number.isFinite(mean)||mean<0)throw new Error('Poisson mean must be finite and nonnegative');
+  // Poisson additivity avoids underflow without silently truncating large means.
+  let count=0,remaining=mean;
+  while(remaining>0){
+    const part=Math.min(remaining,POISSON_MEAN_CAP),limit=Math.exp(-part);
+    let product=1,k=0;
+    do {k++;product*=rng();}while(product>limit);
+    count+=k-1;remaining-=part;
+  }
+  return count;
 }
 
 export function binomial(n: number, p: number, rng: Rng): number {
