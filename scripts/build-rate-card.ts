@@ -1,3 +1,8 @@
+import {sourceVenue} from '../src/schedule-context.ts';
+import {attachPlayCache,savePlayCache} from './play-cache.ts';
+import {availabilityHistory} from '../src/availability-history.ts';
+import type {ForecastArchive} from '../src/forecast-archive.ts';
+import {fitShootingPriors} from '../src/shooting-priors.ts';
 import {marketObservations} from '../src/market-evaluation.ts';
 import { mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -257,6 +262,7 @@ export function gamesFromScoreboard(payload: unknown, date: string, picks: unkno
       away,
       home,
       neutral_site: competition.neutralSite === true,
+      venue:sourceVenue(competition.venue),
       spread_caption: spreadCaption(picks, away.name, home.name),
     });
   }
@@ -540,6 +546,7 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
   if (!outcomes?.length) throw new Error('Required outcome history is empty');
   for (const team of slateTeamIds) if (!roster.some(p => p.team_id === team)) throw new Error(`Missing roster ${team}`);
   const cache = loadCache(CACHE_PATH);
+  attachPlayCache(cache,CACHE_PATH);
   const previousCache = serialize(cache);
   let summariesFetched = 0;
   let summariesFailed = 0;
@@ -551,12 +558,15 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
     const dates=new Map(outcomes.filter(r=>r.event_date).map(r=>[r.event_id,r.event_date!]));
     for(const e of cache.events!)dates.set(e.event_id,e.start_time);
     const backlog=[...seasons.keys()].filter(id=>!fetched.has(id));
-    const pending=pendingEvents([...recent,...backlog],{now:generatedAt,dates,seasons,teams:teamsByEvent(outcomes),slateTeams:slateTeamIds,retries:cache.retries!,limit:Math.min(SUMMARY_CAP,options.summaryCap??SUMMARY_CAP)});
-    console.log(JSON.stringify({authorized_backlog:backlog.length,unknown_backlog_dates:backlog.filter(id=>!dates.has(id)).length,oldest_known_backlog:backlog.map(id=>dates.get(id)).filter(Boolean).sort()[0]??null,summary_requests:pending.length}));
+    const enrichment=cache.events!.filter(e=>seasons.has(e.event_id)&&e.season_type===2&&!e.play_history).map(e=>e.event_id);
+    const pending=pendingEvents([...recent,...backlog,...enrichment],{now:generatedAt,dates,seasons,teams:teamsByEvent(outcomes),slateTeams:slateTeamIds,retries:cache.retries!,limit:Math.min(SUMMARY_CAP,options.summaryCap??SUMMARY_CAP)});
+    console.log(JSON.stringify({authorized_backlog:backlog.length,enrichment_backlog:enrichment.length,unknown_backlog_dates:backlog.filter(id=>!dates.has(id)).length,oldest_known_backlog:backlog.map(id=>dates.get(id)).filter(Boolean).sort()[0]??null,summary_requests:pending.length}));
     await mapLimit(pending, SUMMARY_CONCURRENCY, async (eventId) => {
       try {
         const event = parseCompletedSummary(await fetchJson(summaryUrl(eventId), SUMMARY_TIMEOUT_MS), eventId);
         if (Date.parse(event.start_time) >= now.getTime()) throw new Error('Future summary');
+        const previous=cache.events!.find(e=>e.event_id===eventId);
+        if(previous?.play_history?.status==='complete'&&event.play_history?.status!=='complete'&&previous.home_pts===event.home_pts&&previous.away_pts===event.away_pts)event.play_history=previous.play_history;
         cache.events = upsertEvents(cache.events!,event);
         delete cache.retries![eventId];
 
@@ -579,14 +589,18 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
   const trainingEvents = eligibleEvents(cache.events!,generatedAt);
   cache.rows=aggregateShooting(trainingEvents);
   finishCache(cache);
-  const nextCache = `${JSON.stringify(cache,null,2)}\n`;
+  const nextCache = `${JSON.stringify(savePlayCache(cache,CACHE_PATH),null,2)}\n`;
   if (nextCache !== previousCache) writeFileSync(CACHE_PATH, nextCache);
 
   const activeSeason=games[0]?.season??fallbackSeason(isRecord(scoreboard)?scoreboard:{},date);
   if(activeSeason!==2026&&activeSeason!==2027)throw new Error('Active season outside approved 2026/2027 history window; migrate source policy explicitly');
   const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
   const modelHash=hash(canonical(['src','scripts'].flatMap(dir=>readdirSync(join(ROOT,dir)).filter(f=>/\.(ts|mjs)$/.test(f)).sort().map(f=>[`${dir}/${f}`,readFileSync(join(ROOT,dir,f),'utf8')]))));
-  const inputs={date,games,roster:[...roster].sort((a,b)=>a.athlete_id.localeCompare(b.athlete_id)||a.team_id.localeCompare(b.team_id)),injuries:[...injuries].sort((a,b)=>canonical(a).localeCompare(canonical(b))),events:trainingEvents};
+  let archives:ForecastArchive[]=[];
+  const archiveRoot=join(outputRoot,'data/forecast-archive');
+  try{archives=readdirSync(archiveRoot,{recursive:true}).map(String).filter(f=>f.endsWith('.json')&&!f.split('/').at(-1)!.startsWith('inputs-')).map(f=>JSON.parse(readFileSync(join(archiveRoot,f),'utf8')));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
+  const availability=availabilityHistory(archives,trainingEvents,generatedAt);
+  const inputs={date,games,availability,roster:[...roster].sort((a,b)=>a.athlete_id.localeCompare(b.athlete_id)||a.team_id.localeCompare(b.team_id)),injuries:[...injuries].sort((a,b)=>canonical(a).localeCompare(canonical(b))),events:trainingEvents};
   const inputHash=hash(canonical(inputs));
   let previous:RateCard|null=null;
   try{previous=JSON.parse(readFileSync(RATE_CARD_PATH,'utf8'));}catch{/* First build. */}
@@ -594,8 +608,8 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
   slate.generated_at=generatedAt;
   let rateCardPublished = false;
   if (outcomes && hasFreeThrowAttempts(cache.rows)) {
-    const fitted = fitPlayers({ roster, injuries, outcomes: eventOutcomes(trainingEvents), shooting: cache.rows, activeSeason });
-    fitCurrentRoles(fitted.players, trainingEvents, activeSeason,[],generatedAt);
+    const fitted = fitPlayers({ roster, injuries, outcomes: eventOutcomes(trainingEvents), shooting: cache.rows, skillModel:fitShootingPriors(trainingEvents,activeSeason), activeSeason });
+    fitCurrentRoles(fitted.players, trainingEvents, activeSeason,availability,generatedAt);
     addEvidence(fitted.players,trainingEvents,generatedAt);
     fitted.players.forEach(p=>{p.model_version=MODEL_VERSION;p.as_of=generatedAt;p.calibration=null;});
     const covered = games.length === 0 || fitted.players.some((player) => slateTeamIds.includes(player.team_id));
@@ -633,6 +647,8 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
           ];
         }),
       };
+      rateCard.unavailable_features=rateCard.unavailable_features!.filter(feature=>feature!=='lineup_defense'||!rateCard.games.every(g=>g.context?.lineup_effects?.status==='fitted'));
+      rateCard.coverage=slateTeamIds.map(team=>{const xs=trainingEvents.filter(e=>[e.home_team_id,e.away_team_id].includes(team));return {team_id:team,regular_games:xs.length,current_season_games:xs.filter(e=>e.season===activeSeason).length,play_history_games:xs.filter(e=>e.play_history?.final_reconciled).length,latest_completed_start:xs.at(-1)?.start_time??null,players_without_shooting:fitted.players.filter(p=>p.team_id===team&&p.shooting_games===0).length};});
       mkdirSync(dirname(RATE_CARD_PATH), { recursive: true });
       validateGeneration(slate, rateCard);
       console.log(JSON.stringify({team_coverage:slateTeamIds.map(team=>({team_id:team,regular_games:trainingEvents.filter(e=>[e.home_team_id,e.away_team_id].includes(team)).length,current_season_games:trainingEvents.filter(e=>e.season===activeSeason&&[e.home_team_id,e.away_team_id].includes(team)).length,roster_players:roster.filter(p=>p.team_id===team).length,players_without_shooting:fitted.players.filter(p=>p.team_id===team&&p.shooting_games===0).length,latest_completed_start:trainingEvents.filter(e=>[e.home_team_id,e.away_team_id].includes(team)).at(-1)?.start_time??null}))}));

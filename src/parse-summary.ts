@@ -1,3 +1,4 @@
+import {parsePlayHistory,type PlayHistory} from './play-history.ts';
 export interface ParsedPlayerGame {
   athlete_id: string;
   team_id: string;
@@ -147,6 +148,7 @@ export function parseSummary(summary: unknown): ParsedPlayerGame[] {
 }
 
 export interface CompletedEvent {
+  play_history?:PlayHistory;
   event_id: string;
   start_time: string;
   season: number;
@@ -222,5 +224,7 @@ export function parseCompletedSummary(summary: unknown, expectedId: string): Com
       if(id&&(played||row.didNotPlay===true))participation.push({athlete_id:id,team_id:teamId,played,starter:typeof row.starter==='boolean'?row.starter:null});
     }
   }
-  return { participation, event_id: expectedId, start_time: start, season: Number(season.year), season_type: Number(season.type), neutral: comp.neutralSite === true, periods, home_team_id: String(home.id), away_team_id: String(away.id), home_pts: Number(home.score), away_pts: Number(away.score), players };
+  const event:CompletedEvent={ participation, event_id: expectedId, start_time: start, season: Number(season.year), season_type: Number(season.type), neutral: comp.neutralSite === true, periods, home_team_id: String(home.id), away_team_id: String(away.id), home_pts: Number(home.score), away_pts: Number(away.score), players };
+  event.play_history=parsePlayHistory(summary,event);
+  return event;
 }

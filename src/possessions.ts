@@ -1,3 +1,5 @@
+import {usageWeights} from './usage-effects.ts';
+import {lineupLogEffect} from './lineup-effects.ts';
 import { minuteLineups } from './lineups.ts';
 import type { DrawnPlayer } from './simulate.ts';
 import type { MatchupContext, RatePlayer, TeamProfile } from './types.ts';
@@ -14,15 +16,16 @@ const sum = (xs: number[]) => xs.reduce((a,b)=>a+b,0);
 const bound = (v:number) => Math.max(0,Math.min(1,v));
 
 /** Aggregate possession model: shared pace, competitive rebounds, one assister per make.
- * Synthetic five-player stints realize period minutes; actual substitution history is unknown.
+ * Synthetic five-player stints realize minute targets and observed opening/closing roles.
  */
 export function drawPossessions(
   away: DrawnPlayer[], home: DrawnPlayer[], roster: RatePlayer[], awayMinutes: number[], homeMinutes: number[],
   context: MatchupContext, possessions: number, rng: Rng,
 ): void {
   const periodLength=awayMinutes.reduce((a,b)=>a+b,0)/5;
-  const awayLineups=minuteLineups(awayMinutes,periodLength,rng),homeLineups=minuteLineups(homeMinutes,periodLength,rng);
   const rates = new Map(roster.map(p=>[p.athlete_id,p]));
+  const roles=(players:DrawnPlayer[])=>({opening:players.map(p=>rates.get(p.athlete_id)?.starter_rate??0),closing:players.map(p=>rates.get(p.athlete_id)?.closing_rate??0)});
+  const awayLineups=minuteLineups(awayMinutes,periodLength,rng,roles(away)),homeLineups=minuteLineups(homeMinutes,periodLength,rng,roles(home));
   const attack = (off: DrawnPlayer[], def: DrawnPlayer[], mins: number[], defMins: number[], profile: TeamProfile, opponent: TeamProfile, venue: number, offStints:number[][], defStints:number[][]) => {
     const p = off.map(x=>rates.get(x.athlete_id)!);
     const q = def.map(x=>rates.get(x.athlete_id)!);
@@ -35,13 +38,18 @@ export function drawPossessions(
     let blocks = q.map((x,i)=>defMins[i]*(x.blk_per_min ?? 0));
     let turnovers = p.map((x,i)=>mins[i]*(x.tov_per_min ?? 0));
     const fga=sum(shots), fta=sum(fts);
-    const ftShare = fta/2/Math.max(1,fga+fta/2);
+    const ftModel=context.free_throws?.status==='fitted'?context.free_throws:null;
+    const tripMean=ftModel?2*ftModel.trip_weights[0]+3*ftModel.trip_weights[1]:2;
+    const andOne=ftModel?.and_one_per_make??0,technical=ftModel?.technical_per_possession??0;
+    const expectedMakes=sum(p.map((x,i)=>shots[i]*((1-x.tpa_given_fga)*x.fg2_pct+x.tpa_given_fga*x.tp_pct)));
+    const ordinaryAttempts=Math.max(0,fta-expectedMakes*andOne-possessions*technical);
+    const ftShare = ordinaryAttempts/tripMean/Math.max(1,fga+ordinaryAttempts/tripMean);
     const fgValue = sum(p.map((x,i)=>shots[i]*(2*(1-x.tpa_given_fga)*x.fg2_pct+3*x.tpa_given_fga*x.tp_pct)))/Math.max(1,fga);
     const fgPct = sum(p.map((x,i)=>shots[i]*((1-x.tpa_given_fga)*x.fg2_pct+x.tpa_given_fga*x.tp_pct)))/Math.max(1,fga);
     const ftPct = sum(p.map((x,i)=>fts[i]*x.ft_pct))/Math.max(1,fta);
     const orb = bound(profile.offensive_rebound_rate);
     const tov = bound(profile.turnover_rate);
-    const raw = (1-tov)*((1-ftShare)*fgValue+ftShare*2*ftPct)/Math.max(0.1,1-(1-tov)*(1-ftShare)*(1-fgPct)*orb);
+    const raw = ((1-tov)*((1-ftShare)*(fgValue+fgPct*andOne*ftPct)+ftShare*tripMean*ftPct)+technical*ftPct)/Math.max(0.1,1-(1-tov)*((1-ftShare)*(1-fgPct+fgPct*andOne*(1-ftPct))+ftShare*(1-ftPct))*orb);
     // Equal-strength shrinkage between the available lineup's scoring profile and observed team efficiency.
     // This prior weight requires walk-forward calibration; no market values enter this expression.
     const target = Math.sqrt(Math.max(0.01,raw)*profile.offense)*opponent.defense/context.league_efficiency*Math.exp(venue);
@@ -49,20 +57,23 @@ export function drawPossessions(
     const expected = (scale:number) => {
       const fg = sum(p.map((x,i)=>shots[i]*((1-x.tpa_given_fga)*bound(x.fg2_pct*scale)+x.tpa_given_fga*bound(x.tp_pct*scale))))/Math.max(1,fga);
       const pts = sum(p.map((x,i)=>shots[i]*(2*(1-x.tpa_given_fga)*bound(x.fg2_pct*scale)+3*x.tpa_given_fga*bound(x.tp_pct*scale))))/Math.max(1,fga);
-      return (1-tov)*((1-ftShare)*pts+ftShare*2*ftPct)/(1-(1-tov)*(1-ftShare)*(1-fg)*orb);
+      return ((1-tov)*((1-ftShare)*(pts+fg*andOne*ftPct)+ftShare*tripMean*ftPct)+technical*ftPct)/(1-(1-tov)*((1-ftShare)*(1-fg+fg*andOne*(1-ftPct))+ftShare*(1-ftPct))*orb);
     };
     let lo=0,hi=3;
     for(let j=0;j<20;j++){const mid=(lo+hi)/2;if(expected(mid)<target)lo=mid;else hi=mid;}
     const efficiency=(lo+hi)/2;
     const stealChance=bound(sum(steals)/Math.max(1,possessions*tov));
     const blockChance=bound(sum(blocks)/Math.max(1,possessions*(1-tov)*(1-fgPct)));
-    for(let n=0;n<possessions;n++) {
+    return (n:number) => {
       const minute=Math.min(periodLength-1,Math.floor(n*periodLength/possessions));
       const on=new Set(offStints[minute]),against=new Set(defStints[minute]);
-      shots=p.map((x,i)=>on.has(i)?x.fga_per_min:0);fts=p.map((x,i)=>on.has(i)?x.fta_per_min:0);
+      const active=[...on],activeWeights=usageWeights(context.usage_effects,off[0].team_id,active.map(i=>off[i].athlete_id),active.map(i=>p[i].fga_per_min));
+      shots=p.map(()=>0);active.forEach((i,j)=>shots[i]=activeWeights[j]);fts=p.map((x,i)=>on.has(i)?x.fta_per_min:0);
       creators=p.map((x,i)=>on.has(i)?x.ast_per_min:0);offensiveBoards=p.map((x,i)=>on.has(i)?x.reb_per_min:0);
       turnovers=p.map((x,i)=>on.has(i)?x.tov_per_min??0:0);
       defensiveBoards=q.map((x,i)=>against.has(i)?x.reb_per_min:0);steals=q.map((x,i)=>against.has(i)?x.stl_per_min??0:0);blocks=q.map((x,i)=>against.has(i)?x.blk_per_min??0:0);
+      if(technical>0&&rng()<technical){const who=pick(fts,rng);if(who>=0){off[who].fta++;off[who].ft_technical=(off[who].ft_technical??0)+1;if(rng()<p[who].ft_pct){off[who].ftm++;off[who].pts++;}}}
+      const lineupEffect=lineupLogEffect(context.lineup_effects,off[0].team_id,[...on].map(i=>off[i].athlete_id),'offense')+lineupLogEffect(context.lineup_effects,def[0].team_id,[...against].map(i=>def[i].athlete_id),'defense');
       let live=true;
       let guard=0;
       while(live) {
@@ -80,18 +91,21 @@ export function drawPossessions(
         const line=off[shooter],rate=p[shooter];
         let miss=false;
         if(free) {
-          line.fta+=2;
-          for(let attempt=0;attempt<2;attempt++) {
+          const attempts=ftModel&&rng()<ftModel.trip_weights[1]?3:2;
+          line.ft_possession_trips=(line.ft_possession_trips??0)+1;
+          line.fta+=attempts;
+          for(let attempt=0;attempt<attempts;attempt++) {
             const made=rng()<rate.ft_pct;
             if(made){line.ftm++;line.pts++;}
-            if(attempt===1)miss=!made;
+            if(attempt===attempts-1)miss=!made;
           }
         } else {
           const three=rng()<rate.tpa_given_fga;
           line.fga++;if(three)line.tpa++;
-          const made=rng()<bound((three?rate.tp_pct:rate.fg2_pct)*efficiency);
+          const made=rng()<bound((three?rate.tp_pct:rate.fg2_pct)*efficiency*Math.exp(lineupEffect));
           if(made) {
             line.fgm++;if(three)line.tpm++;line.pts+=three?3:2;
+            if(andOne>0&&rng()<andOne){line.fta++;line.ft_and_one=(line.ft_and_one??0)+1;if(rng()<rate.ft_pct){line.ftm++;line.pts++;}else miss=true;}
             if(rng()<bound(profile.assist_rate)) {
               const helper=pick(creators.map((v,i)=>i===shooter?0:v),rng);
               if(helper>=0)off[helper].ast++;
@@ -114,7 +128,9 @@ export function drawPossessions(
     }
   };
   const rest=context.away.rest_days!==null&&context.home.rest_days!==null?(context.rest_coefficient??0)*(Math.log1p(context.home.rest_days)-Math.log1p(context.away.rest_days)):0;
-  const venue=(context.neutral?0:context.home_log_advantage)+rest;
-  attack(away,home,awayMinutes,homeMinutes,context.away,context.home,-venue,awayLineups,homeLineups);
-  attack(home,away,homeMinutes,awayMinutes,context.home,context.away,venue,homeLineups,awayLineups);
+  const delta=(key:'previous_minutes'|'travel_km'|'timezone_change_hours')=>{const a=context.away.schedule?.[key],h=context.home.schedule?.[key];return a!=null&&h!=null?h-a:0;};
+  const venue=(context.neutral?0:context.home_log_advantage)+rest+(context.workload_coefficient??0)*delta('previous_minutes')/5+(context.travel_coefficient??0)*delta('travel_km')/1000+(context.timezone_coefficient??0)*delta('timezone_change_hours');
+  const a=attack(away,home,awayMinutes,homeMinutes,context.away,context.home,-venue,awayLineups,homeLineups);
+  const h=attack(home,away,homeMinutes,awayMinutes,context.home,context.away,venue,homeLineups,awayLineups);
+  for(let n=0;n<possessions;n++){a(n);h(n);}
 }

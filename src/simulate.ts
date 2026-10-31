@@ -4,7 +4,7 @@ import { validateGame } from './validate-card.ts';
 import { drawPossessions } from './possessions.ts';
 import { typicalityBucket, winCounts, type TypicalityBucket, type WinCounts } from './display.ts';
 import type { RateGame, RatePlayer } from './types.ts';
-import { binomial, gammaMean1, iterationSeed, mulberry32, normal, poisson, type Rng } from './rng.ts';
+import { binomial, gamma, gammaMean1, iterationSeed, mulberry32, normal, poisson, type Rng } from './rng.ts';
 
 export const ITERATIONS = 10000;
 export const REGULATION_MINUTES = 240;
@@ -63,6 +63,9 @@ export interface DrawnPlayer {
   tov?: number;
   orb?: number;
   drb?: number;
+  ft_possession_trips?:number;
+  ft_and_one?:number;
+  ft_technical?:number;
 }
 
 export interface Draw {
@@ -394,7 +397,7 @@ function rawMinutes(players: RatePlayer[], budget: number, rng: Rng): number[] {
   return players.map((p,i) => {
     const baseline = total>0 ? targets[i]*budget/total : budget/players.length;
     // Smooth exposure noise; no 24-minute branch or athlete-ordered residual dumping.
-    const sd = (2 + 4*Math.exp(-baseline/12))*Math.sqrt(budget/240);
+    const sd = (p.minutes_residual_sd??(2 + 4*Math.exp(-baseline/12)))*Math.sqrt(budget/240);
     let value = Math.max(0,baseline + normal(rng)*sd);
     if(p.questionable_widen)value*=Math.exp(normal(rng)*QUESTIONABLE_SIGMA-QUESTIONABLE_SIGMA**2/2);
     return value;
@@ -582,6 +585,12 @@ function participation(away: RatePlayer[], home: RatePlayer[], rng: Rng): Set<st
 }
 
 export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
+  if(game.context)game={...game,players:game.players.map(player=>{
+    if(!player.shooting_posterior)return player;
+    const draw={...player};
+    for(const [key,field] of [['share','tpa_given_fga'],['fg2','fg2_pct'],['tp','tp_pct'],['ft','ft_pct']] as const){const counts=player.shooting_posterior[key];if(counts&&counts.every(x=>Number.isFinite(x)&&x>0)){const a=gamma(counts[0],rng),b=gamma(counts[1],rng);draw[field]=a/(a+b);}}
+    return draw;
+  })};
   const awayRoster = game.players.filter((player) => player.team_id === game.away_team_id);
   const homeRoster = game.players.filter((player) => player.team_id === game.home_team_id);
   const playingIds = participation(awayRoster, homeRoster, rng);

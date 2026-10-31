@@ -65,7 +65,7 @@ jobs:
           git fetch origin main
           # Never copy an old build onto a newer generator revision. A later run rebuilds.
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-          git add -- public/data/slate.json public/data/rate-card.json public/data/manifest.json data/shooting-cache.json data/forecast-archive data/market-archive
+          git add -- public/data/slate.json public/data/rate-card.json public/data/manifest.json data/shooting-cache.json data/play-history.json.gz data/forecast-archive data/market-archive
           if ! git diff --cached --quiet; then
             git commit -m 'chore(data): refresh validated simulator generation'
             AUTHOR=$(git show -s --format='%an' HEAD)

@@ -1,6 +1,6 @@
 import type {RateCard,Slate} from './types.ts';
 import {validateGeneration} from './validate-card.ts';
-export interface ForecastArchive {slate:Slate;card:RateCard;source_lineage?:{input_hash:string;model_hash:string;maximum_event_start:string|null;training_event_ids:string[]}}
+export interface ForecastArchive {slate:Slate;card:RateCard;source_lineage?:{input_hash:string;model_hash:string;maximum_event_start:string|null;training_event_ids:string[];roster?:import("./fit.ts").RosterPlayer[];injuries?:import("./fit.ts").InjuryInput[]}}
 export function archivedForecast(archives:ForecastArchive[],eventId:string,tip:string,version:string):ForecastArchive|null{
  const valid=archives.filter(a=>{
   try{validateGeneration(a.slate,a.card);}catch{return false;}

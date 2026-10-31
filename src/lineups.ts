@@ -1,13 +1,21 @@
 import type { Rng } from './rng.ts';
 /** Realize integer minute degrees as five-player one-minute stints. */
-export function minuteLineups(minutes:readonly number[],periodLength:number,rng:Rng):number[][] {
+export function minuteLineups(minutes:readonly number[],periodLength:number,rng:Rng,roles?:{opening:number[];closing:number[]}):number[][] {
   if(!Number.isInteger(periodLength)||periodLength<1||minutes.some(m=>!Number.isInteger(m)||m<0||m>periodLength)||minutes.reduce((a,b)=>a+b,0)!==5*periodLength)throw new Error('Infeasible stint budget');
   const remaining=[...minutes],stints:number[][]=[];
-  for(let minute=0;minute<periodLength;minute++){
+  const roleLineup=(weights:number[],slots:number)=>{
+    const order=remaining.map((m,i)=>({m,i,tie:rng(),role:weights[i]??0})).filter(x=>x.m>0).sort((a,b)=>Number(b.m===slots)-Number(a.m===slots)||b.role-a.role||b.m-a.m||a.tie-b.tie);
+    const chosen=order.slice(0,5).map(x=>x.i);chosen.forEach(i=>remaining[i]--);return chosen;
+  };
+  const closing=roles&&roles.closing.some(x=>x>0)?roleLineup(roles.closing,periodLength):null;
+  const slots=periodLength-(closing?1:0);
+  for(let minute=0;minute<slots;minute++){
+    if(minute===0&&roles&&roles.opening.some(x=>x>0)){stints.push(roleLineup(roles.opening,slots));continue;}
     const order=remaining.map((m,i)=>({m,i,tie:rng()})).filter(x=>x.m>0).sort((a,b)=>b.m-a.m||a.tie-b.tie);
     if(order.length<5)throw new Error('Fewer than five players in a stint');
     const lineup=order.slice(0,5).map(x=>x.i);lineup.forEach(i=>remaining[i]--);stints.push(lineup);
   }
+  if(closing)stints.push(closing);
   if(remaining.some(x=>x!==0))throw new Error('Unallocated stint minutes');return stints;
 }
 export interface GameState { seconds_remaining:number; margin:number; period:number; team_fouls:number|null }

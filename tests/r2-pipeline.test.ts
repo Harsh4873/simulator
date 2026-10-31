@@ -67,6 +67,7 @@ test('archives reject target-event leakage, future cutoff and missing source lin
  const {archivedForecast}=await import('../src/forecast-archive.ts');
  const slate=JSON.parse(readFileSync('public/data/slate.json','utf8')),card=JSON.parse(readFileSync('public/data/rate-card.json','utf8'));
  const game=slate.games[0];
+ card.generated_at=new Date(Date.parse(game.start_time)-3600000).toISOString();slate.generated_at=card.generated_at;
  const archive={slate,card,source_lineage:{input_hash:card.input_hash,model_hash:card.model_hash,maximum_event_start:'2026-10-28T00:00:00Z',training_event_ids:[] as string[]}};
  assert.ok(archivedForecast([archive],game.event_id,game.start_time,card.model_version));
  const leaked=structuredClone(archive);leaked.source_lineage.training_event_ids.push(game.event_id);assert.equal(archivedForecast([leaked],game.event_id,game.start_time,card.model_version),null);

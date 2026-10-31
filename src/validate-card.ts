@@ -41,7 +41,7 @@ export function validateGame(game: RateGame): void {
 export function validateGeneration(slate: Slate, card: RateCard): void {
   if (slate?.schema_version !== 1 || card?.schema_version !== 1 || !Array.isArray(slate.games) || !Array.isArray(card.games)) throw new Error('Invalid data schema');
   if (!slate.generated_at || !Number.isFinite(Date.parse(slate.generated_at)) || slate.generated_at !== card.generated_at || slate.date !== card.date) throw new Error('Mismatched data generations');
-  if(card.model_version&&!['possessions-v1','possessions-v2'].includes(card.model_version))throw new Error('Unsupported model version');
+  if(card.model_version&&!['possessions-v1','possessions-v2','possessions-v3'].includes(card.model_version))throw new Error('Unsupported model version');
   if (slate.timezone !== 'America/Chicago' || card.iterations !== 10000 || !Array.isArray(card.columns)) throw new Error('Invalid simulation contract');
   if (slate.games.length !== card.games.length || new Set(card.games.map(g => g.event_id)).size !== card.games.length || new Set(slate.games.map(g => g.event_id)).size !== slate.games.length) throw new Error('Incomplete slate coverage');
   if(!['min','fgm','fga','tpm','tpa','ftm','fta','pts','reb','ast'].every(k=>card.columns.includes(k as typeof card.columns[number])))throw new Error('Missing display columns');

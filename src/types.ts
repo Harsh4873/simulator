@@ -36,6 +36,7 @@ export interface SlateGame {
   home: TeamSide;
   spread_caption: string | null;
   neutral_site?: boolean;
+  venue?:import('./schedule-context.ts').Venue;
 }
 
 export interface Slate {
@@ -85,10 +86,16 @@ export interface RatePlayer {
   active_season?: number;
   role_prior_games?: number;
   points_scale?: number;
+  shooting_posterior?:Partial<Record<'share'|'fg2'|'tp'|'ft',[number,number]>>;
+  skill_prior?:{source:string;role:string;strengths:Record<string,number>;older_history:string};
   evidence?: PlayerEvidence;
   injury_reported_at?: string | null;
   minutes_restriction?: number | null;
   starter_rate?: number | null;
+  closing_rate?: number | null;
+  minutes_residual_sd?:number|null;
+  participation_model?: import('./participation-model.ts').ParticipationFit & {applied:boolean};
+  role_context?:{window:number;half_life:number|null;team_changed:boolean;return_from_injury:'unknown'|'observed'};
   participation_coverage?: {known:number;unknown:number;source:"explicit-DNP"|"scenario-prior"};
   availability_calibration_n?:number;
 }
@@ -113,6 +120,7 @@ export interface RateCard {
   model_hash?: string;
   calibration?: CalibrationArtifact | null;
   unavailable_features?: UnavailableFeature[];
+  coverage?:{team_id:string;regular_games:number;current_season_games:number;play_history_games:number;latest_completed_start:string|null;players_without_shooting:number}[];
   columns: ColumnKey[];
   games: RateGame[];
 }
@@ -163,6 +171,7 @@ export interface TeamProfile {
   ft_trip_rate: number;
   games: number;
   rest_days: number | null;
+  schedule?:import('./schedule-context.ts').ScheduleContext;
 }
 export interface MatchupContext {
   away: TeamProfile;
@@ -173,4 +182,10 @@ export interface MatchupContext {
   neutral: boolean;
   training_games: number;
   rest_coefficient?: number;
+  workload_coefficient?:number;
+  travel_coefficient?:number|null;
+  timezone_coefficient?:number|null;
+  usage_effects?:import('./usage-effects.ts').UsageEffects;
+  lineup_effects?:import('./lineup-effects.ts').LineupEffects;
+  free_throws?:import('./free-throw-model.ts').FreeThrowModel;
 }

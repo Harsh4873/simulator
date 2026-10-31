@@ -1,3 +1,7 @@
+import {scorePlayerMarket,type SettledPlayerMarket} from '../src/player-market-evaluation.ts';
+import {attachPlayCache} from './play-cache.ts';
+import {fitShootingPriors} from '../src/shooting-priors.ts';
+import {availabilityHistory} from '../src/availability-history.ts';
 import {join} from 'node:path';
 import {archivedForecast,type ForecastArchive} from '../src/forecast-archive.ts';
 import {pairedMarketProbability,type MarketObservation} from '../src/market-evaluation.ts';
@@ -8,11 +12,12 @@ import { fitMatchup, fitCurrentRoles, eligibleEvents, MODEL_VERSION } from '../s
 import { eventOutcomes } from './build-rate-card.ts';
 import { simulate } from '../src/simulate.ts';
 import { fnv1a, mulberry32 } from '../src/rng.ts';
-import { mean, scoreDistribution, scoreProbability, reliability } from '../src/evaluation.ts';
+import { mean, distributionShape, scoreDistribution, scoreProbability, reliability } from '../src/evaluation.ts';
 import type { ShootingCache, ShootingRow, SlateGame } from '../src/types.ts';
 import type { CompletedEvent } from '../src/parse-summary.ts';
 
 const cache:ShootingCache=JSON.parse(readFileSync('data/shooting-cache.json','utf8'));
+attachPlayCache(cache,'data/shooting-cache.json');
 const events=(cache.events??[]).filter(e=>e.season_type===2).sort((a,b)=>Date.parse(a.start_time)-Date.parse(b.start_time));
 const max=Number(process.env.BACKTEST_GAMES??60),iterations=Number(process.env.BACKTEST_ITERATIONS??1000);
 if(!Number.isInteger(max)||max<1||!Number.isInteger(iterations)||iterations<100)throw new Error('Invalid backtest size');
@@ -21,10 +26,11 @@ const activeSeason=Math.max(...events.map(e=>e.season));
 const targets=events.filter(e=>e.season===activeSeason).slice(-max);
 const readArchives=(dir:string):unknown[]=>existsSync(dir)?readdirSync(dir,{recursive:true}).map(String).filter(f=>f.endsWith('.json')&&!f.split('/').at(-1)!.startsWith('inputs-')).map(f=>JSON.parse(readFileSync(join(dir,f),'utf8'))):[];
 const archives=readArchives('data/forecast-archive') as ForecastArchive[];
+const playerMarkets=readArchives('data/player-market-archive').flat() as SettledPlayerMarket[];
 const markets=readArchives('data/market-archive').flat() as MarketObservation[];
 type DistributionScore=ReturnType<typeof scoreDistribution>;
-type PlayerScore=DistributionScore & {athlete_id:string;team_id:string;stat:string};
-type Result={event_id:string;cutoff:string;training_games:number;p:number;y:number;brier:number;logLoss:number;margin:DistributionScore;total:DistributionScore;baseline:{margin:DistributionScore;total:DistributionScore;brier:number;logLoss:number};playerStats:PlayerScore[];unmatched_players:number;archived:boolean;market:{brier:number;logLoss:number;closing_confirmed:false}|null;participation:{p:number;y:number;brier:number;logLoss:number}[];strata:{month:string;historical_availability:string;rest_home:number|null;rest_away:number|null}};
+type PlayerScore=DistributionScore & {athlete_id:string;team_id:string;stat:string;role:string;sample_size:string};
+type Result={home_error:number;away_error:number;shape:ReturnType<typeof distributionShape>;venue_ablation:{home_error:number;away_error:number;brier:number;logLoss:number};settled_player_markets:NonNullable<ReturnType<typeof scorePlayerMarket>>[];rotation:{home:number;away:number;actual_home:number;actual_away:number};event_id:string;cutoff:string;training_games:number;p:number;y:number;brier:number;logLoss:number;margin:DistributionScore;total:DistributionScore;baseline:{margin:DistributionScore;total:DistributionScore;brier:number;logLoss:number};playerStats:PlayerScore[];unmatched_players:number;archived:boolean;market:{brier:number;logLoss:number;closing_confirmed:false}|null;participation:{p:number;y:number;brier:number;logLoss:number}[];strata:{month:string;historical_availability:string;rest_home:number|null;rest_away:number|null}};
 const results:Result[]=[];
 const skipped=[];
 for(const actual of targets){
@@ -38,14 +44,16 @@ for(const actual of targets){
     return [...ids].map(athlete_id=>({athlete_id,team_id:team,name:athlete_id,position:''}));
   });
   if(new Set(rosters.map(p=>p.athlete_id)).size!==rosters.length){skipped.push({event:actual.event_id,reason:'ambiguous historical membership'});continue;}
-  const fitted=fitPlayers({roster:rosters,injuries:[],outcomes:eventOutcomes(history),shooting:shooting(history),activeSeason:actual.season});
-  fitCurrentRoles(fitted.players,history,actual.season,[],actual.start_time);
-  const game:SlateGame={event_id:actual.event_id,date:actual.start_time.slice(0,10),start_time:actual.start_time,season:actual.season,season_type:'regular',status_state:'pre',completed:false,spread_caption:null,neutral_site:actual.neutral,away:{team_id:actual.away_team_id,name:'away',abbreviation:''},home:{team_id:actual.home_team_id,name:'home',abbreviation:''}};
+  const fitted=fitPlayers({roster:rosters,injuries:[],outcomes:eventOutcomes(history),shooting:shooting(history),activeSeason:actual.season,skillModel:fitShootingPriors(history,actual.season)});
+  fitCurrentRoles(fitted.players,history,actual.season,availabilityHistory(archives,history,actual.start_time),actual.start_time);
+  const game:SlateGame={event_id:actual.event_id,date:actual.start_time.slice(0,10),start_time:actual.start_time,season:actual.season,season_type:'regular',status_state:'pre',completed:false,spread_caption:null,neutral_site:actual.neutral,venue:actual.play_history?.venue,away:{team_id:actual.away_team_id,name:'away',abbreviation:''},home:{team_id:actual.home_team_id,name:'home',abbreviation:''}};
   try {
     const context=fitMatchup(history,game,actual.start_time);
     const archive=archivedForecast(archives,actual.event_id,actual.start_time,MODEL_VERSION);
     const rate=archive?.card.games.find(g=>g.event_id===actual.event_id)??{event_id:actual.event_id,away_team_id:actual.away_team_id,home_team_id:actual.home_team_id,players:fitted.players,context};
     const sim=simulate(rate,fnv1a(archive?`${actual.event_id}:${archive.card.generated_at}`:`${actual.event_id}:${MODEL_VERSION}:walk-forward`),iterations);
+    const ablation=simulate({...rate,context:{...rate.context!,home_log_advantage:0}},fnv1a(`${actual.event_id}:${MODEL_VERSION}:walk-forward`),iterations);
+    const settled_player_markets=playerMarkets.filter(m=>m.event_id===actual.event_id).flatMap(m=>{const d=sim.playerDraws.get(m.athlete_id);if(!d||!d[m.stat])return [];const result=scorePlayerMarket(m,{min:d.min,value:d[m.stat]!},new Date().toISOString());return result?[result]:[];});
     const quote=markets.filter(q=>q.event_id===actual.event_id&&Date.parse(q.captured_at)<Date.parse(actual.start_time)).sort((a,b)=>Date.parse(b.captured_at)-Date.parse(a.captured_at))[0]??null;
     const marketP=pairedMarketProbability(quote,actual.event_id,actual.start_time);
     const participation=(actual.participation??[]).flatMap(a=>{const draws=sim.playerDraws.get(a.athlete_id);if(!draws)return [];const p=Array.from(draws.min).filter(m=>m>0).length/iterations;return [{p,y:Number(a.played),...scoreProbability(p,a.played)}];});
@@ -56,10 +64,12 @@ for(const actual of targets){
       const draws=sim.playerDraws.get(a.athlete_id);if(!draws)return [];
       return (['min','pts','reb','ast','stl','blk','tov'] as const).flatMap(stat=>{
         const truth=stat==='min'?a.minutes:a[stat];const series=draws[stat];
-        return truth===undefined||!series?[]:[{athlete_id:a.athlete_id,team_id:a.team_id,stat,...scoreDistribution(Array.from(series),truth)}];
+        const player=rate.players.find(p=>p.athlete_id===a.athlete_id);
+        return truth===undefined||!series?[]:[{role:player?.starter_rate==null?'unknown':player.starter_rate>=.5?'starter':'bench',sample_size:(player?.games??0)<10?'sparse':'established',athlete_id:a.athlete_id,team_id:a.team_id,stat,...scoreDistribution(Array.from(series),truth)}];
       });
     });
-    results.push({archived:!!archive,market:marketP===null?null:{...scoreProbability(marketP,margin>0),closing_confirmed:false},participation,strata:{month:actual.start_time.slice(0,7),historical_availability:archive?'archived':'unknown',rest_home:context.home.rest_days,rest_away:context.away.rest_days},event_id:actual.event_id,cutoff:actual.start_time,training_games:history.length,p,y:Number(margin>0),...scoreProbability(p,margin>0),margin:scoreDistribution(sim.homeTotals.map((x,i)=>x-sim.awayTotals[i]),margin),total:scoreDistribution(sim.combinedTotals,total),baseline:{margin:scoreDistribution(baselineMargins,margin),total:scoreDistribution(baselineTotals,total),...scoreProbability(history.filter(e=>e.home_pts>e.away_pts).length/history.length,margin>0)},playerStats,unmatched_players:actual.players.filter(p=>!sim.playerDraws.has(p.athlete_id)).length});
+    const rotation=(team:string)=>rate.players.filter(p=>p.team_id===team).reduce((n,p)=>n+Array.from(sim.playerDraws.get(p.athlete_id)!.min).filter(x=>x>0).length/iterations,0);
+    results.push({settled_player_markets,home_error:mean(sim.homeTotals)-actual.home_pts,away_error:mean(sim.awayTotals)-actual.away_pts,shape:distributionShape(sim.homeTotals,sim.awayTotals),venue_ablation:{home_error:mean(ablation.homeTotals)-actual.home_pts,away_error:mean(ablation.awayTotals)-actual.away_pts,...scoreProbability(ablation.wins.home/iterations,actual.home_pts>actual.away_pts)},rotation:{home:rotation(actual.home_team_id),away:rotation(actual.away_team_id),actual_home:actual.players.filter(p=>p.team_id===actual.home_team_id).length,actual_away:actual.players.filter(p=>p.team_id===actual.away_team_id).length},archived:!!archive,market:marketP===null?null:{...scoreProbability(marketP,margin>0),closing_confirmed:false},participation,strata:{month:actual.start_time.slice(0,7),historical_availability:archive?'archived':'unknown',rest_home:context.home.rest_days,rest_away:context.away.rest_days},event_id:actual.event_id,cutoff:actual.start_time,training_games:history.length,p,y:Number(margin>0),...scoreProbability(p,margin>0),margin:scoreDistribution(sim.homeTotals.map((x,i)=>x-sim.awayTotals[i]),margin),total:scoreDistribution(sim.combinedTotals,total),baseline:{margin:scoreDistribution(baselineMargins,margin),total:scoreDistribution(baselineTotals,total),...scoreProbability(history.filter(e=>e.home_pts>e.away_pts).length/history.length,margin>0)},playerStats,unmatched_players:actual.players.filter(p=>!sim.playerDraws.has(p.athlete_id)).length});
   }catch(e){skipped.push({event:actual.event_id,reason:e instanceof Error?e.message:'simulation failed'});}
 }
 const aggregate=(xs:ReturnType<typeof scoreDistribution>[])=>Object.fromEntries((['error','mae','crps','coverage80','coverage90'] as const).map(k=>[k,xs.length?mean(xs.map(x=>x[k])):null]));
@@ -70,10 +80,11 @@ function pairedInterval(metric:(r:Result)=>number){
   const differences=Array.from({length:1000},()=>mean(Array.from({length:results.length},()=>metric(results[Math.floor(rng()*results.length)])))).sort((a,b)=>a-b);
   return {difference:mean(results.map(metric)),lower95:differences[24],upper95:differences[974]};
 }
-const report={model_version:MODEL_VERSION,mode:'chronological reconstruction; historical availability unknown',iterations,games:results.length,skipped,closing_market_coverage:0,observed_market_coverage:results.filter(r=>r.market).length,archived_forecasts:results.filter(r=>r.archived).length,release_eligible:false,role_prior_selection:selectRolePrior(events,activeSeason),participation:reliability(results.flatMap(r=>r.participation)),
-  limitations:['No archived historical injury/roster snapshots; candidates inferred from preceding five team boxes.','No historical closing quotes; no market-relative accuracy claim.','Role prior selected on preceding-season appearances; no settled prop-market archive and no release gate passed.','Player metrics cover actual participants present in inferred rosters; unmatched players reported separately.'],
+const groups=(key:(r:Result)=>string)=>Object.fromEntries([...new Set(results.map(key))].map(name=>{const xs=results.filter(r=>key(r)===name);return [name,{games:xs.length,margin:aggregate(xs.map(r=>r.margin)),total:aggregate(xs.map(r=>r.total)),brier:mean(xs.map(r=>r.brier)),home_bias:mean(xs.map(r=>r.home_error)),away_bias:mean(xs.map(r=>r.away_error))}];}));
+const report={venue:{home_bias:results.length?mean(results.map(r=>r.home_error)):null,away_bias:results.length?mean(results.map(r=>r.away_error)):null,without_home_term:{home_bias:results.length?mean(results.map(r=>r.venue_ablation.home_error)):null,away_bias:results.length?mean(results.map(r=>r.venue_ablation.away_error)):null}},strata:{month:groups(r=>r.strata.month),availability:groups(r=>r.strata.historical_availability),rest:groups(r=>r.strata.rest_home===null||r.strata.rest_away===null?'unknown':r.strata.rest_home===0||r.strata.rest_away===0?'back-to-back':'rested')},player_strata:Object.fromEntries(['starter','bench','unknown'].flatMap(role=>['sparse','established'].map(sample=>[`${role}:${sample}`,Object.fromEntries(stats.map(stat=>[stat,aggregate(results.flatMap(r=>r.playerStats.filter(p=>p.role===role&&p.sample_size===sample&&p.stat===stat)))]))]))),settled_player_markets:results.reduce((s,r)=>s+r.settled_player_markets.length,0),conditional_prop_reliability:reliability(results.flatMap(r=>r.settled_player_markets)),model_version:MODEL_VERSION,mode:'chronological reconstruction; historical availability unknown',iterations,games:results.length,skipped,closing_market_coverage:0,observed_market_coverage:results.filter(r=>r.market).length,archived_forecasts:results.filter(r=>r.archived).length,release_eligible:false,role_prior_selection:selectRolePrior(events,activeSeason),participation:reliability(results.flatMap(r=>r.participation)),
+  limitations:['No archived historical injury/roster snapshots; candidates inferred from preceding five team boxes.','No historical closing quotes; no market-relative accuracy claim.','New role selection reserves later preceding-season appearances for evaluation; lineup/participation fits are model-selection diagnostics, not independent release validation.','Role prior selected on preceding-season appearances; no settled prop-market archive and no release gate passed.','Player metrics cover actual participants present in inferred rosters; unmatched players reported separately.'],
   release_gates:{minimum_games:500,minimum_settled_player_markets:2000,margin_bias_max:1,total_bias_max:2,coverage_tolerance:.03,ece_max:.03,requires_clustered_baseline_and_market_comparisons:true},
-  paired_game_bootstrap:{brier:pairedInterval(r=>r.brier-r.baseline.brier),margin_crps:pairedInterval(r=>r.margin.crps-r.baseline.margin.crps),total_crps:pairedInterval(r=>r.total.crps-r.baseline.total.crps)},
+  paired_game_bootstrap:{brier:pairedInterval(r=>r.brier-r.baseline.brier),margin_crps:pairedInterval(r=>r.margin.crps-r.baseline.margin.crps),total_crps:pairedInterval(r=>r.total.crps-r.baseline.total.crps),margin_mae:pairedInterval(r=>r.margin.mae-r.baseline.margin.mae),total_mae:pairedInterval(r=>r.total.mae-r.baseline.total.mae),log_loss:pairedInterval(r=>r.logLoss-r.baseline.logLoss)},
   summary:{brier:results.length?mean(results.map(r=>r.brier)):null,logLoss:results.length?mean(results.map(r=>r.logLoss)):null,reliability:reliability(results),margin:aggregate(results.map(r=>r.margin)),total:aggregate(results.map(r=>r.total)),baseline:{brier:results.length?mean(results.map(r=>r.baseline.brier)):null,margin:aggregate(results.map(r=>r.baseline.margin)),total:aggregate(results.map(r=>r.baseline.total))},players:Object.fromEntries(stats.map(stat=>[stat,aggregate(results.flatMap(r=>r.playerStats.filter(s=>s.stat===stat)))]))},results};
 writeFileSync('data/backtest-report.json',JSON.stringify(report,null,2)+'\n');
 console.log(JSON.stringify({...report,results:undefined},null,2));
