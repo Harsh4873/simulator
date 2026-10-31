@@ -1,0 +1,49 @@
+{
+  "source": "https://api.github.com/repos/Harsh4873/simulator/actions/workflows/refresh-rate-card.yml/runs?created=2026-10-28T00:00:00Z..2026-10-29T00:00:00Z&per_page=100",
+  "queried_at": "2026-10-31T00:50:29.927Z",
+  "total_count": 4,
+  "complete_page": true,
+  "expected_cron_at_revision_8dbfc12": [
+    "11:30 UTC",
+    "18:00 UTC"
+  ],
+  "finding": "No scheduled run before 14:04 UTC manual recovery appears in the complete date-filtered response. The first scheduled run starts 17:14 UTC. Dispatch history alone cannot distinguish a skipped cron from a delayed delivery.",
+  "runs": [
+    {
+      "id": 40776034201,
+      "event": "schedule",
+      "created_at": "2026-10-28T21:56:29Z",
+      "started_at": "2026-10-28T21:56:29Z",
+      "completed_at": "2026-10-28T21:56:47Z",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40740040538,
+      "event": "workflow_dispatch",
+      "created_at": "2026-10-28T17:53:53Z",
+      "started_at": "2026-10-28T17:53:53Z",
+      "completed_at": "2026-10-28T17:54:15Z",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40733818520,
+      "event": "schedule",
+      "created_at": "2026-10-28T17:14:35Z",
+      "started_at": "2026-10-28T17:14:35Z",
+      "completed_at": "2026-10-28T17:15:08Z",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 40702342350,
+      "event": "workflow_dispatch",
+      "created_at": "2026-10-28T14:04:20Z",
+      "started_at": "2026-10-28T14:04:20Z",
+      "completed_at": "2026-10-28T14:04:41Z",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ]
+}
