@@ -22,7 +22,7 @@ test('current possession sampler reconciles scores, possessions, boards, assists
       assert.equal(sum(team.map(p=>p.min)),d.budget);
       const baskets=sum(team.map(p=>p.fgm));
       assert.ok(sum(team.map(p=>p.ast))<=baskets);
-      assert.equal(sum(team.map(p=>p.fga+(p.ft_possession_trips??p.fta/2)+(p.tov??0)-(p.orb??0))),sum(d.possessions!));
+      assert.equal(sum(team.map(p=>p.fga+(p.ft_possession_trips??0)+(p.tov??0)-(p.orb??0))),sum(d.possessions!));
       for(const p of team){assert.ok(p.ast<=baskets-p.fgm);assert.equal(p.pts,2*(p.fgm-p.tpm)+3*p.tpm+p.ftm);if(p.min===0)assert.equal(p.pts+p.ast+p.reb+(p.stl??0)+(p.blk??0),0);}
     }
     const all=[...d.away,...d.home];
