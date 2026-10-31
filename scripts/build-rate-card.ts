@@ -1,3 +1,4 @@
+import {teamCoverage} from '../src/coverage.ts';
 import {sourceVenue} from '../src/schedule-context.ts';
 import {attachPlayCache,savePlayCache} from './play-cache.ts';
 import {availabilityHistory} from '../src/availability-history.ts';
@@ -484,7 +485,9 @@ async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Prom
   return results;
 }
 
-export async function buildRateCard(options:{now?:Date;outputRoot?:string;summaryCap?:number}={}): Promise<void> {
+export async function buildRateCard(options:{now?:Date;outputRoot?:string;summaryCap?:number;generatorSha?:string}={}): Promise<void> {
+  const generatorSha=options.generatorSha??process.env.GENERATOR_SHA??process.env.GITHUB_SHA;
+  if(!generatorSha||! /^(?:[a-f0-9]{40}|pending)$/.test(generatorSha))throw new Error('Set GENERATOR_SHA to the source commit or explicit pending before building publishable data');
   const now = options.now??new Date();
   const outputRoot=options.outputRoot??ROOT;
   const SLATE_PATH=join(outputRoot,'public/data/slate.json'),RATE_CARD_PATH=join(outputRoot,'public/data/rate-card.json'),CACHE_PATH=join(outputRoot,'data/shooting-cache.json');
@@ -546,8 +549,8 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
   if (!outcomes?.length) throw new Error('Required outcome history is empty');
   for (const team of slateTeamIds) if (!roster.some(p => p.team_id === team)) throw new Error(`Missing roster ${team}`);
   const cache = loadCache(CACHE_PATH);
-  attachPlayCache(cache,CACHE_PATH);
   const previousCache = serialize(cache);
+  attachPlayCache(cache,CACHE_PATH);
   let summariesFetched = 0;
   let summariesFailed = 0;
 
@@ -623,7 +626,7 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
         calibration:null,
         unavailable_features:[...MISSING_FEATURES],
         source_cutoff: generatedAt,
-        generator_sha: previous?.input_hash===inputHash&&previous.model_hash===modelHash?previous.generator_sha:process.env.GENERATOR_SHA ?? process.env.GITHUB_SHA ?? 'local-uncommitted',
+        generator_sha: previous?.input_hash===inputHash&&previous.model_hash===modelHash&&/^[a-f0-9]{40}$/.test(previous.generator_sha??'')?previous.generator_sha:generatorSha,
         input_hash: inputHash,
         model_hash:modelHash,
         columns: [...COLUMNS],
@@ -647,11 +650,14 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
           ];
         }),
       };
-      rateCard.unavailable_features=rateCard.unavailable_features!.filter(feature=>feature!=='lineup_defense'||!rateCard.games.every(g=>g.context?.lineup_effects?.status==='fitted'));
-      rateCard.coverage=slateTeamIds.map(team=>{const xs=trainingEvents.filter(e=>[e.home_team_id,e.away_team_id].includes(team));return {team_id:team,regular_games:xs.length,current_season_games:xs.filter(e=>e.season===activeSeason).length,play_history_games:xs.filter(e=>e.play_history?.final_reconciled).length,latest_completed_start:xs.at(-1)?.start_time??null,players_without_shooting:fitted.players.filter(p=>p.team_id===team&&p.shooting_games===0).length};});
+      rateCard.unavailable_features=rateCard.unavailable_features!.filter(feature=>!rateCard.games.length||!rateCard.games.every(g=>{
+        const c=g.context;
+        return feature==='lineup_defense'?c?.lineup_effects?.status==='fitted':feature==='absence_efficiency'?c?.usage_effects?.status==='fitted':feature==='ft_trip_types'?c?.free_throws?.status==='fitted':feature==='foul_outs'?c?.fouls?.status==='fitted':feature==='late_game_tactics'?c?.rotation_state?.status==='fitted'&&c?.free_throws?.late?.status==='fitted':false;
+      }));
+      rateCard.coverage=teamCoverage(rosterIds,cache.events!,{teams:teamsByEvent(outcomes),seasons:eventSeasons(outcomes),dates:new Map(outcomes.filter(r=>r.event_date).map(r=>[r.event_id,r.event_date!])),retries:cache.retries!},activeSeason,generatedAt,fitted.players);
       mkdirSync(dirname(RATE_CARD_PATH), { recursive: true });
       validateGeneration(slate, rateCard);
-      console.log(JSON.stringify({team_coverage:slateTeamIds.map(team=>({team_id:team,regular_games:trainingEvents.filter(e=>[e.home_team_id,e.away_team_id].includes(team)).length,current_season_games:trainingEvents.filter(e=>e.season===activeSeason&&[e.home_team_id,e.away_team_id].includes(team)).length,roster_players:roster.filter(p=>p.team_id===team).length,players_without_shooting:fitted.players.filter(p=>p.team_id===team&&p.shooting_games===0).length,latest_completed_start:trainingEvents.filter(e=>[e.home_team_id,e.away_team_id].includes(team)).at(-1)?.start_time??null}))}));
+      console.log(JSON.stringify({team_coverage:rateCard.coverage}));
       writeFileSync(`${SLATE_PATH}.tmp`, serialize(slate));
       writeFileSync(`${RATE_CARD_PATH}.tmp`, serialize(rateCard));
       renameSync(`${RATE_CARD_PATH}.tmp`, RATE_CARD_PATH);

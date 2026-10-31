@@ -7,6 +7,6 @@ export function validateArtifact(root){
     else if(!/^(index\.html|favicon\.svg|\.nojekyll|assets\/[\w.-]+\.(js|css)|data\/(slate|rate-card|manifest|health)\.json)$/.test(rel))throw new Error(`Unexpected public artifact: ${rel}`);
   }}
   visit(root);
-  for(const f of ['data/slate.json','data/rate-card.json'])JSON.parse(readFileSync(join(root,f),'utf8'));
+  for(const f of ['data/slate.json','data/rate-card.json']){const data=JSON.parse(readFileSync(join(root,f),'utf8'));if(data.generator_sha==='local-uncommitted')throw new Error('Uncommitted generator provenance is not publishable');}
 }
 if(process.argv[1]?.endsWith('/validate-artifact.mjs'))validateArtifact('dist');

@@ -87,7 +87,7 @@ export interface RatePlayer {
   role_prior_games?: number;
   points_scale?: number;
   shooting_posterior?:Partial<Record<'share'|'fg2'|'tp'|'ft',[number,number]>>;
-  skill_prior?:{source:string;role:string;strengths:Record<string,number>;older_history:string};
+  skill_prior?:{source:string;role:string;strengths:Record<string,number>;accepted?:Partial<Record<string,boolean>>;older_history:string};
   evidence?: PlayerEvidence;
   injury_reported_at?: string | null;
   minutes_restriction?: number | null;
@@ -120,7 +120,7 @@ export interface RateCard {
   model_hash?: string;
   calibration?: CalibrationArtifact | null;
   unavailable_features?: UnavailableFeature[];
-  coverage?:{team_id:string;regular_games:number;current_season_games:number;play_history_games:number;latest_completed_start:string|null;players_without_shooting:number}[];
+  coverage?:import('./coverage.ts').TeamCoverage[];
   columns: ColumnKey[];
   games: RateGame[];
 }
@@ -186,6 +186,9 @@ export interface MatchupContext {
   travel_coefficient?:number|null;
   timezone_coefficient?:number|null;
   usage_effects?:import('./usage-effects.ts').UsageEffects;
+  rotation_state?:import('./game-state-model.ts').RotationStateModel;
+  fouls?:import('./game-state-model.ts').FoulModel;
+  residual_diagnostics?:import('./residual-model.ts').ResidualDiagnostics;
   lineup_effects?:import('./lineup-effects.ts').LineupEffects;
   free_throws?:import('./free-throw-model.ts').FreeThrowModel;
 }

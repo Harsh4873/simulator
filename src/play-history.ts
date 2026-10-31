@@ -20,7 +20,7 @@ export function parsePlayHistory(payload:unknown,event:CompletedEvent):PlayHisto
  const chronological=plays.every((p,i)=>!i||p.period>plays[i-1].period||(p.period===plays[i-1].period&&p.seconds<=plays[i-1].seconds));
  return {...base,final_reconciled:end,final_observed_at:end?final.wallclock:null,plays,status:!bad&&end&&chronological?'complete':'partial',reason:bad?'Malformed/duplicate plays':!end?'Final score/period not reconciled':!chronological?'Clock reversal':null};
 }
-export interface FreeThrowTrip {attempts:number;made:number;kind:'shooting'|'technical'|'take'|'other';period:number;seconds:number;home_margin:number}
+export interface FreeThrowTrip {attempts:number;made:number;kind:'shooting'|'bonus'|'technical'|'take'|'flagrant'|'other';team:string;period:number;seconds:number;home_margin:number}
 export function freeThrowTrips(event:CompletedEvent):{status:'complete'|'unknown';trips:FreeThrowTrip[]}{
  const history=event.play_history;if(!(history?.final_reconciled??!!history?.final_observed_at)||history.reason==='Malformed/duplicate plays')return {status:'unknown',trips:[]};
  const trips:FreeThrowTrip[]=[];const counted=new Map<string,number>();let foul='',foulPeriod=0,foulSeconds=-1,current:{key:string;expected:number;trip:FreeThrowTrip}|null=null;
@@ -33,7 +33,7 @@ export function freeThrowTrips(event:CompletedEvent):{status:'complete'|'unknown
   if(!size||!attempt||size>3||attempt>size)return {status:'unknown',trips:[]};
   const key=`${p.period}:${p.seconds}:${shooter}`;
   if(attempt===1){if(current&&current.trip.attempts!==current.expected)return {status:'unknown',trips:[]};
-   current={key,expected:size,trip:{attempts:0,made:0,kind:technical?'technical':foul.includes('shooting')?'shooting':foul.includes('take')?'take':'other',period:p.period,seconds:p.seconds,home_margin:p.home-p.away}};trips.push(current.trip);
+   current={key,expected:size,trip:{attempts:0,made:0,kind:technical?'technical':foul.includes('shooting')?'shooting':['transition take foul','clear path foul'].includes(foul)?'take':foul.includes('flagrant')?'flagrant':size===2&&['personal foul','personal take foul','loose ball foul'].includes(foul)?'bonus':'other',team:p.team??event.players.find(x=>x.athlete_id===shooter)?.team_id??'',period:p.period,seconds:p.seconds,home_margin:p.home-p.away-(p.made?(p.team===event.home_team_id?1:-1):0)}};trips.push(current.trip);
   }
   if(!current||current.key!==key||attempt!==current.trip.attempts+1)return {status:'unknown',trips:[]};current.trip.attempts++;current.trip.made+=Number(p.made);
  }

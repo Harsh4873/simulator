@@ -288,7 +288,7 @@ export function fitPlayers(input: FitInput): FitResult {
     let ftPct = clampProbability(rate(ft, K_FT, player.athlete_id, player.team_id, group));
     const skill=input.skillModel,role=skill?.roles[player.athlete_id]??'unknown';
     if(skill?.source==='chronological-selection'){
-      const predict=(key:'share'|'fg2'|'tp'|'ft',pool:Pool,current:number)=>{const prior=skill.player_rates[player.athlete_id]?.[key]??skill.rates[role]?.[key],own=exposureOf(pool.player,player.athlete_id),k=skill.strengths[key];if(prior===undefined)return current;shootingPosterior[key]=[own.s+k*prior,own.e-own.s+k*(1-prior)];return (own.s+k*prior)/(own.e+k);};
+      const predict=(key:'share'|'fg2'|'tp'|'ft',pool:Pool,current:number)=>{if(skill.accepted?.[key]===false)return current;const prior=skill.player_rates[player.athlete_id]?.[key]??skill.rates[role]?.[key],own=exposureOf(pool.player,player.athlete_id),k=skill.strengths[key];if(prior===undefined)return current;shootingPosterior[key]=[own.s+k*prior,own.e-own.s+k*(1-prior)];return (own.s+k*prior)/(own.e+k);};
       tpaGivenFga=predict('share',tpaShare,tpaGivenFga);fg2Pct=predict('fg2',fg2,fg2Pct);tpPct=predict('tp',tp,tpPct);ftPct=predict('ft',ft,ftPct);
     }
     // Continuous count evidence: valid zeros contribute, and one shooting game does not erase it.
@@ -297,7 +297,7 @@ export function fitPlayers(input: FitInput): FitResult {
     const logPoints=logs.reduce((n,r)=>n+seasonWeight(r.season,input.activeSeason??2027)*r.actual,0);
     // A measured near-zero three-point profile shrinks with its own attempts, not an abrupt zero-game rule.
     const share=exposureOf(tpaShare.player,player.athlete_id);
-    if(share.e>0&&skill?.source!=='chronological-selection'){const strength=K_FGA_SHARE/(1+share.e/K_FGA_SHARE);tpaGivenFga=(share.s+strength*tpaGivenFga)/(share.e+strength);}
+    if(share.e>0&&(skill?.source!=='chronological-selection'||skill.accepted?.share===false)){const strength=K_FGA_SHARE/(1+share.e/K_FGA_SHARE);tpaGivenFga=(share.s+strength*tpaGivenFga)/(share.e+strength);}
     const prior=priorPointsPerMinute({fga_per_min:fgaPerMin,fta_per_min:ftaPerMin,tpa_given_fga:tpaGivenFga,fg2_pct:fg2Pct,tp_pct:tpPct,ft_pct:ftPct});
     const shootingExposure=exposureOf(fga.player,player.athlete_id).e;
     const blend=logExposure/(logExposure+shootingExposure+K_MINUTES);
@@ -307,7 +307,7 @@ export function fitPlayers(input: FitInput): FitResult {
     const ratePlayer: RatePlayer = {
       active_season: input.activeSeason??2027,
       points_scale: pointsScale,
-      skill_prior:skill?{source:skill.source,role,strengths:skill.strengths,older_history:priorGames2026?'observed':'unknown'}:undefined,
+      skill_prior:skill?{source:skill.source,role,accepted:skill.accepted,strengths:{share:skill.accepted?.share===false?K_FGA_SHARE:skill.strengths.share,fg2:skill.accepted?.fg2===false?K_FG2:skill.strengths.fg2,tp:skill.accepted?.tp===false?K_TP:skill.strengths.tp,ft:skill.accepted?.ft===false?K_FT:skill.strengths.ft},older_history:priorGames2026?'observed':'unknown'}:undefined,
       injury_reported_at: input.injuries.find(x=>x.athlete_id===player.athlete_id)?.reported_at??null,
       minutes_restriction: input.injuries.find(x=>x.athlete_id===player.athlete_id)?.minutes_restriction??null,
       athlete_id: player.athlete_id,

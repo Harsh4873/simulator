@@ -70,7 +70,7 @@ test('failed required inputs leave both published files byte-for-byte unchanged'
     if(url.includes('/roster'))return Response.json({athletes:[]});
     throw new Error('Unexpected source');
    };
-   await assert.rejects(buildRateCard());
+   await assert.rejects(buildRateCard({generatorSha:'pending'}));
    assert.deepEqual(paths.map(p=>readFileSync(p,'utf8')),before);
   }
  }finally{globalThis.fetch=original;}

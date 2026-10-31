@@ -57,7 +57,8 @@ test('reported restrictions cap the full game and explicit DNP coverage is retai
  const cache=JSON.parse(readFileSync('data/shooting-cache.json','utf8'));
  const events:CompletedEvent[]=cache.events.filter((e:CompletedEvent)=>e.season===2027&&[e.home_team_id,e.away_team_id].includes(p.team_id)).slice(-4);
  events.forEach((e,i)=>{e.participation=[{athlete_id:p.athlete_id,team_id:p.team_id,played:i<2,starter:null}];});
- fitCurrentRoles([p],events,2027,[],'2026-10-30');
+ const cutoff=new Date(Math.max(...events.map(e=>Date.parse(e.start_time)))+86400000).toISOString();
+ fitCurrentRoles([p],events,2027,[],cutoff);
  assert.equal(p.participation_coverage.known,events.length);assert.equal(p.participation_coverage.source,'explicit-DNP');assert.ok(p.play_probability>0&&p.play_probability<1);
 });
 test('game-aware refresh and expiry cover early/evening tips, DST, and no-game days',async()=>{

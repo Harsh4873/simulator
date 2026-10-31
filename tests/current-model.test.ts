@@ -36,7 +36,7 @@ test('current possession sampler reconciles scores, possessions, boards, assists
 test('minutes vary continuously across 24 and identical players remain exchangeable',()=>{
   const base=structuredClone(card.games[0]);
   // Synthetic equal-role fixture, never a published data source.
-  base.players=base.players.filter(p=>p.team_id===base.away_team_id).slice(0,10).flatMap((p,i)=>[base.away_team_id,base.home_team_id].map(team=>({...p,athlete_id:`${team}-${i}`,team_id:team,minutes_mean:24,minutes_weight:1 as const,play_probability:1,games:50,games_2026:45,games_2027:5,shooting_games:50,questionable_widen:false})));
+  base.players=base.players.filter(p=>p.team_id===base.away_team_id).slice(0,10).flatMap((p,i)=>[base.away_team_id,base.home_team_id].map(team=>({...p,athlete_id:`${team}-${i}`,team_id:team,starter_rate:0,closing_rate:0,minutes_residual_sd:6,minutes_restriction:null,injury_status:'healthy',minutes_mean:24,minutes_weight:1 as const,play_probability:1,games:50,games_2026:45,games_2027:5,shooting_games:50,questionable_widen:false})));
   const means=[];
   for(const target of [23.5,23.9,24,24.1,24.5]){
     const g=structuredClone(base);g.players[0].minutes_mean=target;

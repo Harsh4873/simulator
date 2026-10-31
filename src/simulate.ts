@@ -37,6 +37,10 @@ export interface PointsBand {
 }
 
 export interface DrawnPlayer {
+  fouls?:number;
+  foul_out_minute?:number;
+  ft_retained?:number;
+  ft_bonus?:number;
   athlete_id: string;
   name: string;
   team_id: string;
@@ -504,6 +508,7 @@ function extendSquad(state: SquadState, roster: RatePlayer[], playingIds: Set<st
   const playing = playingRoster(roster, playingIds);
   const byId = new Map(state.lines.map((line) => [line.athlete_id, line]));
   const caps = playing.map((player) => {
+    if((byId.get(player.athlete_id)?.fouls??0)>=6)return 0;
     const current = byId.get(player.athlete_id)?.min ?? 0;
     if(player.minutes_restriction!=null)return Math.min(5,Math.max(0,player.minutes_restriction-current));
     if (minuteCap(player) === UNOBSERVED_MINUTE_CAP) return Math.min(5, Math.max(0, UNOBSERVED_MINUTE_CAP - current));
@@ -607,6 +612,7 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
     possessions.push(Math.round(pace));
     drawPossessions(away.lines,home.lines,game.players,periodMinutes[0].away,periodMinutes[0].home,game.context,possessions[0],rng);
   }
+  for(const line of [...away.lines,...home.lines]){regulationMinutes.set(`${line.team_id}:${line.athlete_id}`,line.min);if(line.min>0)playingIds.add(line.athlete_id);}
   let awayPts = teamPoints(away.lines);
   let homePts = teamPoints(home.lines);
   const regulationAwayPts = awayPts;
@@ -624,6 +630,7 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
       const count=Math.max(1,Math.round(pace*5/48));possessions.push(count);
       drawPossessions(away.lines,home.lines,game.players,minutes.away,minutes.home,game.context,count,rng);
     }
+    for(const line of [...away.lines,...home.lines])if(line.min>0)playingIds.add(line.athlete_id);
     awayPts = teamPoints(away.lines);
     homePts = teamPoints(home.lines);
   }

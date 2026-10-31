@@ -30,12 +30,14 @@ test('full builder is byte-stable on identical inputs across clocks and fails cl
  };
  try{
   mkdirSync(join(root,'data'),{recursive:true});mkdirSync(join(root,'public/data'),{recursive:true});writeFileSync(join(root,'data/shooting-cache.json'),JSON.stringify(cache));
-  const run=(clock:string)=>buildRateCard({outputRoot:root,now:new Date(clock),summaryCap:0});
+  const run=(clock:string)=>buildRateCard({outputRoot:root,now:new Date(clock),summaryCap:0,generatorSha:'pending'});
   await run('2026-10-30T12:00Z');
   const files=['rate-card.json','slate.json','manifest.json'];const before=files.map(f=>readFileSync(join(root,'public/data',f),'utf8'));
   await run('2026-10-30T13:00Z');
   assert.deepEqual(files.map(f=>readFileSync(join(root,'public/data',f),'utf8')),before);
   assert.equal(JSON.parse(readFileSync(join(root,'.refresh-status.json'),'utf8')).checked_at,'2026-10-30T13:00:00Z');
+  const poisoned=JSON.parse(before[0]);poisoned.generator_sha='local-uncommitted';writeFileSync(join(root,'public/data/rate-card.json'),JSON.stringify(poisoned));
+  await run('2026-10-30T13:30Z');assert.deepEqual(files.map(f=>readFileSync(join(root,'public/data',f),'utf8')),before);
   broken=true;await assert.rejects(run('2026-10-30T14:00Z'),/injury/);
   assert.deepEqual(files.map(f=>readFileSync(join(root,'public/data',f),'utf8')),before);
  }finally{globalThis.fetch=originalFetch;rmSync(root,{recursive:true});}

@@ -25,6 +25,15 @@ export function validateGame(game: RateGame): void {
   if(game.context){
     const c=game.context;
     if(!Number.isFinite(c.league_efficiency)||c.league_efficiency<=0||!Number.isFinite(c.pace_sd)||c.pace_sd<0||!Number.isFinite(c.home_log_advantage))throw new Error('Invalid matchup model');
+    const distribution=(xs:number[])=>{if(!Array.isArray(xs)||!xs.length||xs.some(x=>!Number.isFinite(x)||x<0)||Math.abs(xs.reduce((a,b)=>a+b,0)-1)>1e-6)throw new Error('Invalid fitted probability distribution');};
+    if(c.fouls?.status==='fitted'){distribution(c.fouls.probabilities);for(const xs of Object.values(c.fouls.by_count))distribution(xs);}
+    if(c.rotation_state?.status==='fitted'){for(const p of [...Object.values(c.rotation_state.shares),...Object.values(c.rotation_state.baseline)])if(!Number.isFinite(p)||p<=0||p>=1)throw new Error('Invalid fitted rotation probability');}
+    if(c.free_throws?.status==='fitted'){
+      const f=c.free_throws;distribution(f.trip_weights);if(f.trip_types?.length)distribution(f.trip_types.map(t=>t.weight));
+      for(const p of [f.and_one_per_make,f.technical_per_possession,f.retained_per_possession??0])if(!Number.isFinite(p)||p<0||p>1)throw new Error('Invalid fitted foul probability');
+      if(f.retained_per_possession&&f.retained_trip_weights)distribution(f.retained_trip_weights);
+      if(f.late?.status==='fitted'&&[f.late.share,f.late.baseline_share].some(p=>!Number.isFinite(p)||p<=0||p>=1))throw new Error('Invalid late FT probability');
+    }
     for(const p of [c.away,c.home]){
       for(const key of ['pace','offense','defense'] as const)if(!Number.isFinite(p[key])||p[key]<=0)throw new Error('Invalid team profile');
       for(const key of ['turnover_rate','offensive_rebound_rate','assist_rate'] as const)if(!Number.isFinite(p[key])||p[key]<0||p[key]>=1)throw new Error('Invalid team probability');
@@ -41,7 +50,8 @@ export function validateGame(game: RateGame): void {
 export function validateGeneration(slate: Slate, card: RateCard): void {
   if (slate?.schema_version !== 1 || card?.schema_version !== 1 || !Array.isArray(slate.games) || !Array.isArray(card.games)) throw new Error('Invalid data schema');
   if (!slate.generated_at || !Number.isFinite(Date.parse(slate.generated_at)) || slate.generated_at !== card.generated_at || slate.date !== card.date) throw new Error('Mismatched data generations');
-  if(card.model_version&&!['possessions-v1','possessions-v2','possessions-v3'].includes(card.model_version))throw new Error('Unsupported model version');
+  if(card.generator_sha==='local-uncommitted')throw new Error('Uncommitted generator provenance is not publishable');
+  if(card.model_version&&!['possessions-v1','possessions-v2','possessions-v3','possessions-v4'].includes(card.model_version))throw new Error('Unsupported model version');
   if (slate.timezone !== 'America/Chicago' || card.iterations !== 10000 || !Array.isArray(card.columns)) throw new Error('Invalid simulation contract');
   if (slate.games.length !== card.games.length || new Set(card.games.map(g => g.event_id)).size !== card.games.length || new Set(slate.games.map(g => g.event_id)).size !== slate.games.length) throw new Error('Incomplete slate coverage');
   if(!['min','fgm','fga','tpm','tpa','ftm','fta','pts','reb','ast'].every(k=>card.columns.includes(k as typeof card.columns[number])))throw new Error('Missing display columns');

@@ -1,0 +1,292 @@
+{
+  "model_version": "possessions-v4",
+  "cutoff": "2026-10-31T06:24:34Z",
+  "input_hash": "7df27c2faacd7cce1e11abc25089a531ed0ae1c82163fe3c10a150ce80ab9884",
+  "model_hash": "02314c3d6625fbfeb81d506c09fd8710bc859dea56140df9f5f0cc324da26ec6",
+  "cache_sha256": "d17791e276d53b5c84d3fe87ecd983cfbe45c7bf825e6960fd08352ea1d4f02d",
+  "play_cache_sha256": "acd2d89b3bb88e39a2059cf15c5b53013fec8a5dce98be03486cef3391ce482d",
+  "regular_games": 1266,
+  "role": {
+    "window": 10,
+    "half_life": 2,
+    "prior_games": 1,
+    "samples": 15581,
+    "heldout_samples": 4766,
+    "mae": 5.136021900632485,
+    "recent_mae": 5.2861693943208845,
+    "prior_mae": 5.954848150551628,
+    "residual_sd": {
+      "starter": 6.117188000754904,
+      "bench": 7.245007112977876
+    },
+    "source": "chronological-validation"
+  },
+  "participation": {
+    "coefficients": [
+      -0.7647238165807508,
+      1.5080067595966387,
+      2.198452677524989,
+      1.2617808560714447
+    ],
+    "samples": 31512,
+    "brier": 0.11852612167206082,
+    "baseline_brier": 0.1485918011616992,
+    "selection_events": 248,
+    "heldout_events": 248,
+    "reason": null
+  },
+  "shooting": {
+    "heldout_samples": 4990,
+    "heldout_loss": {
+      "share": 0.21065537383089933,
+      "fg2": 0.24366570889738065,
+      "tp": 0.2316028858726333,
+      "ft": 0.16592143413591015
+    },
+    "heldout_baseline_loss": {
+      "share": 0.2127043721402827,
+      "fg2": 0.24364183472421394,
+      "tp": 0.23185381561665538,
+      "ft": 0.1660778963218636
+    },
+    "accepted": {
+      "share": true,
+      "fg2": false,
+      "tp": true,
+      "ft": true
+    },
+    "strengths": {
+      "share": 10,
+      "fg2": 120,
+      "tp": 240,
+      "ft": 30
+    },
+    "samples": 18960,
+    "source": "chronological-selection",
+    "loss": {
+      "share": 0.2119948111216313,
+      "fg2": 0.24639792034139116,
+      "tp": 0.2297536941917671,
+      "ft": 0.16448194983745698
+    },
+    "baseline_loss": {
+      "share": 0.21621445617159699,
+      "fg2": 0.24641133317727787,
+      "tp": 0.23031453888268638,
+      "ft": 0.16458008968495144
+    }
+  },
+  "lineups": {
+    "status": "unknown",
+    "games": 933,
+    "heldout_games": 187,
+    "mae": 1.0887776968934155,
+    "baseline_mae": 1.0886220251161118,
+    "reason": "Fewer than 20 untouched complete lineup games",
+    "selection_games": 187,
+    "full_game_checks": {
+      "games": 14,
+      "mae": 11.060788299617315,
+      "baseline_mae": 10.716413016109225,
+      "home_bias": -4.588899602685631,
+      "away_bias": 1.9341833780670268
+    }
+  },
+  "usage": {
+    "status": "unknown",
+    "games": 933,
+    "heldout_shots": 8066,
+    "log_loss": 1.5796403686055576,
+    "baseline_log_loss": 1.579488618026445,
+    "reason": "Creator-off-court adjustment did not improve chronological baseline"
+  },
+  "free_throws": {
+    "games": 956,
+    "heldout_games": 192,
+    "trip_weights": [
+      0.9596224436287363,
+      0.040377556371263765
+    ],
+    "and_one_per_make": 0.055915797387463585,
+    "technical_per_possession": 0.004058030610691096,
+    "holdout_trip_log_loss": 0.1584661422272746,
+    "status": "fitted",
+    "reason": null,
+    "trip_types": [
+      {
+        "kind": "shooting",
+        "attempts": 2,
+        "weight": 0.747017175822735
+      },
+      {
+        "kind": "bonus",
+        "attempts": 2,
+        "weight": 0.1884095974826275
+      },
+      {
+        "kind": "shooting",
+        "attempts": 3,
+        "weight": 0.0390061623180805
+      },
+      {
+        "kind": "other",
+        "attempts": 2,
+        "weight": 0.024255932870066867
+      },
+      {
+        "kind": "other",
+        "attempts": 3,
+        "weight": 0.001311131506490101
+      }
+    ],
+    "unknown_trip_fraction": 0.02982367758186398,
+    "retained_per_possession": 0.0012496157753556707,
+    "retained_trip_weights": [
+      0.422680412371134,
+      0.41237113402061853,
+      0.16494845360824742
+    ],
+    "late": {
+      "status": "fitted",
+      "share": 0.3612613077888859,
+      "baseline_share": 0.10040940445474172,
+      "heldout_events": 335,
+      "log_loss": 0.648998586634148,
+      "baseline_log_loss": 0.8781638694208338
+    }
+  },
+  "rotations": {
+    "status": "fitted",
+    "games": 932,
+    "heldout_games": 187,
+    "shares": {
+      "early:middle": 0.5875950055527493,
+      "early:close": 0.6775632282445794,
+      "late:close": 0.7478835516608342,
+      "early:large": 0.5327343923617319,
+      "late:middle": 0.6842691406707374,
+      "late:large": 0.2416665319615878
+    },
+    "baseline": {
+      "early": 0.6197578801452873,
+      "late": 0.5312751879211501
+    },
+    "log_loss": 0.6499237160316306,
+    "baseline_log_loss": 0.6672880097818229,
+    "reason": null
+  },
+  "fouls": {
+    "status": "fitted",
+    "games": 404,
+    "heldout_minutes": 16907,
+    "probabilities": [
+      0.9318244229574065,
+      0.06632557198398589,
+      0.0017632860714853517,
+      0.000043359493561115205,
+      0.000014453164520371736,
+      0.000014453164520371736,
+      0.000014453164520371736
+    ],
+    "by_count": {
+      "0": [
+        0.9309017060897602,
+        0.06751246109333572,
+        0.0015855692894262174,
+        1.3176373890392684e-7,
+        4.392124630130895e-8,
+        4.392124630130895e-8,
+        4.392124630130895e-8
+      ],
+      "1": [
+        0.9314822967594698,
+        0.06659599778803094,
+        0.0019212572923590974,
+        2.2408007008328274e-7,
+        7.469335669442757e-8,
+        7.469335669442757e-8,
+        7.469335669442757e-8
+      ],
+      "2": [
+        0.9323546290726817,
+        0.06543895671853812,
+        0.0020152577661922853,
+        0.00019074380941721657,
+        1.3754439018244895e-7,
+        1.3754439018244895e-7,
+        1.3754439018244895e-7
+      ],
+      "3": [
+        0.9326745377345906,
+        0.06503533112170323,
+        0.0022883555706692334,
+        8.877865184503524e-7,
+        2.959288394834508e-7,
+        2.959288394834508e-7,
+        2.959288394834508e-7
+      ],
+      "4": [
+        0.9395328241689946,
+        0.060361461256227766,
+        0.00010075920408487723,
+        0.0000024776853463494405,
+        8.258951154498135e-7,
+        8.258951154498135e-7,
+        8.258951154498135e-7
+      ],
+      "5": [
+        0.9821995882395318,
+        0.01731738171905637,
+        0.00046038800822071843,
+        0.000011321016595591438,
+        0.0000037736721985304795,
+        0.0000037736721985304795,
+        0.0000037736721985304795
+      ]
+    },
+    "conditional": true,
+    "log_loss": 0.24643728768523807,
+    "baseline_log_loss": 0.24677102719124006,
+    "reason": null
+  },
+  "residuals": {
+    "status": "diagnostic",
+    "training_games": 886,
+    "heldout_games": 380,
+    "score_covariance": [
+      [
+        141.77190129338157,
+        26.68391291402905
+      ],
+      [
+        26.68391291402905,
+        152.0499772276048
+      ]
+    ],
+    "efficiency_covariance": [
+      [
+        0.012801582309183306,
+        0.0011299352613299471
+      ],
+      [
+        0.0011299352613299471,
+        0.01241629343263035
+      ]
+    ],
+    "margin_sd": 15.50658094787269,
+    "total_sd": 18.633027245969576,
+    "home_bias": -2.074949827436412,
+    "away_bias": -0.9805394109259403,
+    "rested_bias": -1.7774529751917045,
+    "back_to_back_bias": -1.008313892605164,
+    "reason": "Observed residual covariance includes intrinsic possession noise; extra-shock and probability calibration require independent archived forecast outcomes"
+  },
+  "calibration": null,
+  "limitations": [
+    "Component holdouts are model diagnostics, not independent forecast calibration.",
+    "Historical pretip injuries, verified closing prices and settled player-market coverage remain unavailable.",
+    "Foul increments are sampled at minute boundaries; joint foul/bonus/FT state has not been validated.",
+    "Residual covariance includes existing possession noise and is not added as another shock.",
+    "Travel and timezone effects remain null without source coordinates/timezones."
+  ]
+}
