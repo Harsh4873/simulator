@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-31T01:09:42Z",
+  "generated_at": "2026-10-31T01:37:28Z",
   "date": "2026-10-30",
   "timezone": "America/Chicago",
   "games": [
@@ -10,8 +10,8 @@
       "start_time": "2026-10-30T23:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "30",
         "name": "Charlotte Hornets",
