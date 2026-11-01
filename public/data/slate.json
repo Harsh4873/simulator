@@ -1,90 +1,32 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-01T01:14:23Z",
-  "date": "2026-10-31",
+  "generated_at": "2026-11-01T06:17:23Z",
+  "date": "2026-11-01",
   "timezone": "America/Chicago",
   "games": [
     {
-      "event_id": "401909896",
-      "date": "2026-10-31",
-      "start_time": "2026-10-31T19:00:00Z",
+      "event_id": "401909903",
+      "date": "2026-11-01",
+      "start_time": "2026-11-01T20:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "post",
-      "completed": true,
-      "away": {
-        "team_id": "22",
-        "name": "Portland Trail Blazers",
-        "abbreviation": "POR",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/por.png"
-      },
-      "home": {
-        "team_id": "26",
-        "name": "Utah Jazz",
-        "abbreviation": "UTAH",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/utah.png"
-      },
-      "neutral_site": false,
-      "venue": {
-        "id": "3093",
-        "latitude": null,
-        "longitude": null,
-        "timezone": null
-      },
-      "spread_caption": null
-    },
-    {
-      "event_id": "401909897",
-      "date": "2026-10-31",
-      "start_time": "2026-10-31T22:00:00Z",
-      "season": 2027,
-      "season_type": "regular",
-      "status_state": "post",
-      "completed": true,
-      "away": {
-        "team_id": "20",
-        "name": "Philadelphia 76ers",
-        "abbreviation": "PHI",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/phi.png"
-      },
-      "home": {
-        "team_id": "30",
-        "name": "Charlotte Hornets",
-        "abbreviation": "CHA",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/cha.png"
-      },
-      "neutral_site": false,
-      "venue": {
-        "id": "1893",
-        "latitude": null,
-        "longitude": null,
-        "timezone": null
-      },
-      "spread_caption": null
-    },
-    {
-      "event_id": "401909898",
-      "date": "2026-10-31",
-      "start_time": "2026-10-31T23:00:00Z",
-      "season": 2027,
-      "season_type": "regular",
-      "status_state": "in",
+      "status_state": "pre",
       "completed": false,
       "away": {
-        "team_id": "1",
-        "name": "Atlanta Hawks",
-        "abbreviation": "ATL",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/atl.png"
+        "team_id": "2",
+        "name": "Boston Celtics",
+        "abbreviation": "BOS",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bos.png"
       },
       "home": {
-        "team_id": "3",
-        "name": "New Orleans Pelicans",
-        "abbreviation": "NO",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/no.png"
+        "team_id": "19",
+        "name": "Orlando Magic",
+        "abbreviation": "ORL",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/orl.png"
       },
       "neutral_site": false,
       "venue": {
-        "id": "985",
+        "id": "3432",
         "latitude": null,
         "longitude": null,
         "timezone": null
@@ -92,28 +34,28 @@
       "spread_caption": null
     },
     {
-      "event_id": "401909899",
-      "date": "2026-10-31",
-      "start_time": "2026-11-01T00:00:00Z",
+      "event_id": "401909904",
+      "date": "2026-11-01",
+      "start_time": "2026-11-01T22:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
+      "status_state": "pre",
       "completed": false,
       "away": {
-        "team_id": "23",
-        "name": "Sacramento Kings",
-        "abbreviation": "SAC",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/sac.png"
+        "team_id": "17",
+        "name": "Brooklyn Nets",
+        "abbreviation": "BKN",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bkn.png"
       },
       "home": {
-        "team_id": "29",
-        "name": "Memphis Grizzlies",
-        "abbreviation": "MEM",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/mem.png"
+        "team_id": "11",
+        "name": "Indiana Pacers",
+        "abbreviation": "IND",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/ind.png"
       },
       "neutral_site": false,
       "venue": {
-        "id": "1392",
+        "id": "2183",
         "latitude": null,
         "longitude": null,
         "timezone": null
@@ -121,28 +63,28 @@
       "spread_caption": null
     },
     {
-      "event_id": "401909900",
-      "date": "2026-10-31",
-      "start_time": "2026-11-01T00:00:00Z",
+      "event_id": "401909905",
+      "date": "2026-11-01",
+      "start_time": "2026-11-02T01:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
+      "status_state": "pre",
       "completed": false,
       "away": {
-        "team_id": "5",
-        "name": "Cleveland Cavaliers",
-        "abbreviation": "CLE",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/cle.png"
+        "team_id": "12",
+        "name": "LA Clippers",
+        "abbreviation": "LAC",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/lac.png"
       },
       "home": {
-        "team_id": "15",
-        "name": "Milwaukee Bucks",
-        "abbreviation": "MIL",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/mil.png"
+        "team_id": "9",
+        "name": "Golden State Warriors",
+        "abbreviation": "GS",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/gs.png"
       },
       "neutral_site": false,
       "venue": {
-        "id": "5777",
+        "id": "6270",
         "latitude": null,
         "longitude": null,
         "timezone": null
@@ -150,57 +92,28 @@
       "spread_caption": null
     },
     {
-      "event_id": "401909901",
-      "date": "2026-10-31",
-      "start_time": "2026-11-01T00:00:00Z",
+      "event_id": "401909906",
+      "date": "2026-11-01",
+      "start_time": "2026-11-02T02:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
+      "status_state": "pre",
       "completed": false,
       "away": {
-        "team_id": "16",
-        "name": "Minnesota Timberwolves",
-        "abbreviation": "MIN",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/min.png"
+        "team_id": "28",
+        "name": "Toronto Raptors",
+        "abbreviation": "TOR",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/tor.png"
       },
       "home": {
-        "team_id": "24",
-        "name": "San Antonio Spurs",
-        "abbreviation": "SA",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/sa.png"
+        "team_id": "13",
+        "name": "Los Angeles Lakers",
+        "abbreviation": "LAL",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/lal.png"
       },
       "neutral_site": false,
       "venue": {
-        "id": "780",
-        "latitude": null,
-        "longitude": null,
-        "timezone": null
-      },
-      "spread_caption": null
-    },
-    {
-      "event_id": "401909902",
-      "date": "2026-10-31",
-      "start_time": "2026-11-01T00:30:00Z",
-      "season": 2027,
-      "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
-      "away": {
-        "team_id": "25",
-        "name": "Oklahoma City Thunder",
-        "abbreviation": "OKC",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/okc.png"
-      },
-      "home": {
-        "team_id": "10",
-        "name": "Houston Rockets",
-        "abbreviation": "HOU",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/hou.png"
-      },
-      "neutral_site": false,
-      "venue": {
-        "id": "1394",
+        "id": "1841",
         "latitude": null,
         "longitude": null,
         "timezone": null
