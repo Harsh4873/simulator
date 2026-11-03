@@ -31,7 +31,7 @@ test('backlog ordering honors dates/seasons, authorized IDs, retries, and cap',(
  assert.equal(pendingEvents(Array.from({length:500},(_,i)=>String(i)),options).length,400);
 });
 test('mixed manifests retry coherently and malformed versions fail closed',async()=>{
- const slate=readFileSync('public/data/slate.json','utf8'),card=readFileSync('public/data/rate-card.json','utf8'),c=JSON.parse(card);
+ const slate=readFileSync('tests/fixtures/generation-2026-11-02/slate.json','utf8'),card=readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json','utf8'),c=JSON.parse(card);
  const manifest={schema_version:1,input_hash:c.input_hash,model_hash:c.model_hash,generated_at:c.generated_at,slate_hash:hash(slate),card_hash:hash(card)};
  let attempts=0;
  const result=await loadGeneration(async name=>name==='slate.json'?slate:name==='rate-card.json'?card:name==='manifest.json'?JSON.stringify({...manifest,card_hash:attempts++===0?'bad':manifest.card_hash}):null,async s=>hash(s));
@@ -65,7 +65,7 @@ test('market observations are pretip validation records, never asserted closing 
 });
 test('archives reject target-event leakage, future cutoff and missing source lineage',async()=>{
  const {archivedForecast}=await import('../src/forecast-archive.ts');
- const slate=JSON.parse(readFileSync('public/data/slate.json','utf8')),card=JSON.parse(readFileSync('public/data/rate-card.json','utf8'));
+ const slate=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/slate.json','utf8')),card=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json','utf8'));
  const game=slate.games[0];
  card.generated_at=new Date(Date.parse(game.start_time)-3600000).toISOString();slate.generated_at=card.generated_at;
  const archive={slate,card,source_lineage:{input_hash:card.input_hash,model_hash:card.model_hash,maximum_event_start:'2026-10-28T00:00:00Z',training_event_ids:[] as string[]}};
@@ -82,4 +82,19 @@ test('workflow action revisions and Node runtime are pinned and updates are conf
   assert.ok(!/node-version:\s*"22"/.test(text));
  }
  assert.match(readFileSync('.github/dependabot.yml','utf8'),/github-actions/);
+});
+
+
+test('SIM-068: every refresh authors and commits as Harsh4873 and retains token deployment and trailer guard',()=>{
+ const workflow=readFileSync('.github/workflows/refresh-rate-card.yml','utf8');
+ const commit=workflow.split('      - name: Commit validated generation')[1].split('      - name: Deploy and verify completion')[0];
+ assert.match(commit,/git config user.name Harsh4873/);
+ assert.ok(commit.includes("git config user.email '43502626+Harsh4873@users.noreply.github.com'"));
+ assert.match(commit,/test "\$AUTHOR" = Harsh4873/);
+ assert.match(commit,/%ae/);assert.match(commit,/%cn <%ce>/);
+ assert.ok(!commit.includes('github-actions[bot]'));
+ assert.match(commit,/Co-authored-by:/);
+ assert.match(workflow,/GITHUB_TOKEN: \$\{\{ github.token \}\}/);
+ assert.match(workflow,/group: simulator-rate-card/);
+ assert.match(workflow,/node scripts\/deploy-and-wait.mjs/);
 });

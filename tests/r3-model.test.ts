@@ -14,7 +14,7 @@ import {mulberry32} from '../src/rng.ts';
 import {attachPlayCache,savePlayCache} from '../scripts/play-cache.ts';
 import type {CompletedEvent} from '../src/parse-summary.ts';
 import type {RatePlayer,ShootingCache} from '../src/types.ts';
-const base:RatePlayer=JSON.parse(readFileSync('public/data/rate-card.json','utf8')).games[0].players.find((p:RatePlayer)=>p.injury_status==='healthy'&&p.minutes_mean>25);
+const base:RatePlayer=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json','utf8')).games[0].players.find((p:RatePlayer)=>p.injury_status==='healthy'&&p.minutes_mean>25);
 function fixture(i:number,season=2026):CompletedEvent{
  return {event_id:String(i),start_time:new Date(Date.UTC(season-1,9,1+i)).toISOString(),season,season_type:2,neutral:false,periods:4,home_team_id:'h',away_team_id:'a',home_pts:100,away_pts:100,players:['h','a'].flatMap(team=>Array.from({length:8},(_,j)=>({athlete_id:team+j,team_id:team,starter:j<5,minutes:j<5?36:20,fgm:4,fga:8,tpm:0,tpa:j===0?0:2,ftm:2,fta:3,pts:10,reb:4,ast:2,orb:1,tov:1})))};
 }

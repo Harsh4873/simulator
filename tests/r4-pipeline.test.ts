@@ -15,7 +15,7 @@ test('packed history preserves fields and ignores property and event insertion o
 test('publication refuses silent local provenance even when a previous generation could be reused',async()=>{
  const prior=process.env.GENERATOR_SHA,github=process.env.GITHUB_SHA;delete process.env.GENERATOR_SHA;delete process.env.GITHUB_SHA;
  try{await assert.rejects(buildRateCard(),/GENERATOR_SHA/);await assert.rejects(buildRateCard({generatorSha:'local-uncommitted'}),/GENERATOR_SHA/);}finally{if(prior!==undefined)process.env.GENERATOR_SHA=prior;if(github!==undefined)process.env.GITHUB_SHA=github;}
- const card=JSON.parse(readFileSync('public/data/rate-card.json','utf8')),slate=JSON.parse(readFileSync('public/data/slate.json','utf8'));card.generator_sha='local-uncommitted';assert.throws(()=>validateGeneration(slate,card),/provenance/);
+ const card=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json','utf8')),slate=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/slate.json','utf8'));card.generator_sha='local-uncommitted';assert.throws(()=>validateGeneration(slate,card),/provenance/);
 });
 test('coverage exposes authorized missing dates, seasons and deferred retries without inventing a full schedule',()=>{
  const rows=teamCoverage(['a','b'],[],{teams:new Map([['9',['a']],['1',['a','b']]]),seasons:new Map([['9',2026],['1',2027]]),dates:new Map([['1','2026-10-01']]),retries:{'1':{failures:2,next_check:'2026-11-01',last_error:'missing'}}},2027,'2026-10-31',[]);

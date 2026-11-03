@@ -1,3 +1,4 @@
+import { availablePlayer, rosterIssue, InsufficientRosterError } from './roster-capacity.ts';
 import {freshnessBudget} from './refresh-window.ts';
 import { healthyCheck, type RefreshHealth } from './generation.ts';
 import { chicagoDate } from './date.ts';
@@ -40,11 +41,12 @@ export function validateGame(game: RateGame): void {
     }
   }
   for (const team of [game.away_team_id, game.home_team_id]) {
-    const active = game.players.filter(p => p.team_id === team && p.minutes_weight === 1 && (p.play_probability ?? 1)>0);
-    const capacity = active.reduce((n, p) => n + (p.shooting_games === 0 && (p.games < 3 || (p.games_2027 === 0 && p.games_2026 < 20)) ? 12 : 48), 0);
-    if (active.filter(p => (p.minutes_restriction==null||p.minutes_restriction===48)&&!(p.shooting_games === 0 && (p.games < 3 || (p.games_2027 === 0 && p.games_2026 < 20)))).length < 5 || capacity < 240) throw new Error(`Insufficient active roster: ${team}`);
-    if (!active.some(p => p.shooting_games > 0 && p.fga_per_min > 0 && p.fta_per_min > 0)) throw new Error(`Missing shooting coverage: ${team}`);
+    const active = game.players.filter(p => p.team_id === team && availablePlayer(p));
+    if (active.length >= 5 && !active.some(p => p.shooting_games > 0 && p.fga_per_min > 0 && p.fta_per_min > 0)) throw new Error(`Missing shooting coverage: ${team}`);
   }
+  const issue = rosterIssue(game);
+  if (issue) throw issue;
+  if (game.simulation_error !== undefined) throw new Error('Unexpected simulation error on playable game');
 }
 
 export function validateGeneration(slate: Slate, card: RateCard): void {
@@ -60,7 +62,9 @@ export function validateGeneration(slate: Slate, card: RateCard): void {
     if (g.date !== slate.date || !Number.isFinite(Date.parse(g.start_time))) throw new Error('Invalid game date');
     const r = card.games.find(x => x.event_id === g.event_id);
     if (!r || r.away_team_id !== g.away.team_id || r.home_team_id !== g.home.team_id) throw new Error('Slate team mismatch');
-    validateGame(r);
+    try { validateGame(r); } catch (error) {
+      if (!(error instanceof InsufficientRosterError) || r.simulation_error !== error.message) throw error;
+    }
     for (const p of r.players) {
       if (memberships.has(p.athlete_id) && memberships.get(p.athlete_id) !== p.team_id) throw new Error('Cross-team athlete membership');
       memberships.set(p.athlete_id, p.team_id);

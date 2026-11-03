@@ -10,8 +10,8 @@ import {renderBoxScore,renderPlayerPanel} from '../src/boxscore.ts';
 import {validatePublicText} from '../scripts/validate-privacy.mjs';
 import {validateArtifact} from '../scripts/validate-artifact.mjs';
 import type {RateCard,Slate} from '../src/types.ts';
-const card=JSON.parse(readFileSync('public/data/rate-card.json','utf8')) as RateCard;
-const slate=JSON.parse(readFileSync('public/data/slate.json','utf8')) as Slate;
+const card=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json','utf8')) as RateCard;
+const slate=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/slate.json','utf8')) as Slate;
 test('combination and milestone settlements preserve same-draw correlations and voids',()=>{
  const sample={min:[30,30,0],pts:[10,20,40],reb:[10,4,20],ast:[10,5,20],tpm:[0,2,2],stl:[0,0,0],blk:[0,0,0]};
  assert.equal(valueAt(sample,0,'pa'),20);assert.equal(valueAt(sample,1,'pr'),24);assert.equal(valueAt(sample,1,'ra'),9);

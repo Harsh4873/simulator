@@ -229,6 +229,6 @@ test('slate copy covers the placeholder, an off day, and a card without rates', 
     games: [{ event_id: '401909877', away_team_id: '17', home_team_id: '2', players: [] }],
   };
   const enabled = renderSlate(ready, withRates, new Date('2026-10-27T18:00:00Z'));
-  assert.match(enabled,/Insufficient active roster/);
+  assert.match(enabled,/fewer than five eligible/);
   assert.equal(enabled.includes('data-event='),false);
 });

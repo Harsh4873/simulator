@@ -56,10 +56,11 @@ function matchupSide(side: TeamSide): string {
 function renderCard(game: SlateGame, card: RateCard, now: Date, capturedAt: string | null): string {
   const rate = card.games.find((item) => item.event_id === game.event_id);
   let ready = false;
-  try { if(rate){validateGame(rate);ready=true;} } catch { ready=false; }
+  let unavailable = 'Shooting rates are not ready';
+  try { if(rate){validateGame(rate);ready=true;} } catch (error) { ready=false; if(error instanceof Error)unavailable=error.message; }
   const season = game.season_type ? `<p class="tag">${escapeHtml(game.season_type)}</p>` : '';
   const spread = game.spread_caption ? `<p class="spread">${escapeHtml(game.spread_caption)}</p>` : '';
-  const label = ready ? 'Simulate' : 'Shooting rates are not ready';
+  const label = ready ? 'Simulate' : escapeHtml(unavailable);
   return `<article class="game-card">
     <h2 class="matchup">${matchupSide(game.away)}<span class="at">@</span>${matchupSide(game.home)}</h2>
     <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>

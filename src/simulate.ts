@@ -1,3 +1,4 @@
+import { availablePlayer, healthyReserve, InsufficientRosterError, relaxMinuteCaps } from './roster-capacity.ts';
 import {discreteRead,summarizeDistribution,type DistributionSummary} from './distributions.ts';
 import { conditionalParticipants } from './availability.ts';
 import { validateGame } from './validate-card.ts';
@@ -37,6 +38,7 @@ export interface PointsBand {
 }
 
 export interface DrawnPlayer {
+  minute_cap_relaxed?: true;
   fouls?:number;
   foul_out_minute?:number;
   ft_retained?:number;
@@ -82,6 +84,7 @@ export interface Draw {
 }
 
 export interface RevisedDraw extends Draw {
+  relaxedMinuteCaps?: true;
   overtimePeriods: number;
   regulationAwayPts: number;
   regulationHomePts: number;
@@ -145,6 +148,7 @@ export interface ScenarioView {
 }
 
 export interface Simulation {
+  relaxedMinuteCapDraws?: number;
   overtime: boolean;
   budget: number;
   index: number;
@@ -395,7 +399,7 @@ function restedLine(player: RatePlayer): DrawnPlayer {
 }
 
 function rawMinutes(players: RatePlayer[], budget: number, rng: Rng): number[] {
-  if (players.length === 0 || !(budget > 0)) throw new Error('minute cap cannot fill the team budget');
+  if (players.length === 0 || !(budget > 0)) throw new InsufficientRosterError(players[0]?.team_id ?? 'unknown');
   const targets = players.map(p => conditionalMinutes(p));
   const total = targets.reduce((a,b)=>a+b,0);
   return players.map((p,i) => {
@@ -409,7 +413,7 @@ function rawMinutes(players: RatePlayer[], budget: number, rng: Rng): number[] {
 }
 
 function cappedMinutes(rows: { athlete_id: string; raw: number; cap: number }[], budget: number): number[] {
-  if(rows.reduce((n,r)=>n+r.cap,0)<budget)throw new Error('minute cap cannot fill the team budget');
+  if(rows.reduce((n,r)=>n+r.cap,0)<budget)throw new Error('Unrelaxed minute capacity');
   const values=rows.map(()=>0);
   let left=budget;
   let open=rows.map((_,i)=>i);
@@ -485,7 +489,8 @@ function drawSquad(roster: RatePlayer[], playingIds: Set<string>, rng: Rng, poss
   // Mean-1 lognormal shock shared by the team's volume rates.
   const shock = Math.exp(TEAM_SHOCK_SIGMA * z - (TEAM_SHOCK_SIGMA ** 2) / 2);
   const playing = playingRoster(roster, playingIds);
-  const caps = playing.map((player) => minuteCap(player));
+  const originalCaps = playing.map((player) => minuteCap(player));
+  const caps = relaxMinuteCaps(originalCaps, playing.map(() => 48), REGULATION_MINUTES, roster[0]?.team_id ?? 'unknown');
   const minutes = allocate(playing, caps, REGULATION_MINUTES, rng);
   const lines: DrawnPlayer[] = [];
   for (let i = 0; i < playing.length; i += 1) {
@@ -493,6 +498,7 @@ function drawSquad(roster: RatePlayer[], playingIds: Set<string>, rng: Rng, poss
     const stats = possessionMode ? {fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,pts:0,reb:0,ast:0,stl:0,blk:0,tov:0,orb:0,drb:0} : drawStats(player, minutes[i] ?? 0, shock, rng);
     lines.push({
       ...restedLine(player),
+      ...(caps[i] > originalCaps[i] ? {minute_cap_relaxed: true as const} : {}),
       minutes_weight: 1,
       min: minutes[i] ?? 0,
       ...stats,
@@ -505,19 +511,30 @@ function drawSquad(roster: RatePlayer[], playingIds: Set<string>, rng: Rng, poss
 }
 
 function extendSquad(state: SquadState, roster: RatePlayer[], playingIds: Set<string>, _periods: number, rng: Rng, possessionMode = false): void {
-  const playing = playingRoster(roster, playingIds);
   const byId = new Map(state.lines.map((line) => [line.athlete_id, line]));
-  const caps = playing.map((player) => {
-    if((byId.get(player.athlete_id)?.fouls??0)>=6)return 0;
+  // Foul-outs may exhaust the sampled rotation between periods.
+  const eligible = (p: RatePlayer) => availablePlayer(p) && (byId.get(p.athlete_id)?.fouls ?? 0) < 6;
+  const selected = new Set([...playingIds].filter(id => roster.some(p => p.athlete_id === id)));
+  for (const reserve of roster.filter(p => eligible(p) && healthyReserve(p)).sort((a,b) => b.minutes_mean-a.minutes_mean || byAthleteId(a,b))) {
+    if (roster.filter(p => selected.has(p.athlete_id) && eligible(p)).length >= 5) break;
+    selected.add(reserve.athlete_id);
+    playingIds.add(reserve.athlete_id);
+  }
+  const playing = playingRoster(roster, selected);
+  if (playing.filter(eligible).length < 5) throw new InsufficientRosterError(roster[0]?.team_id ?? 'unknown');
+  const originalCaps = playing.map((player) => {
+    if (!eligible(player)) return 0;
     const current = byId.get(player.athlete_id)?.min ?? 0;
     if(player.minutes_restriction!=null)return Math.min(5,Math.max(0,player.minutes_restriction-current));
     if (minuteCap(player) === UNOBSERVED_MINUTE_CAP) return Math.min(5, Math.max(0, UNOBSERVED_MINUTE_CAP - current));
     return PLAYER_CAP_PER_OT;
   });
+  const caps = relaxMinuteCaps(originalCaps, playing.map(p => eligible(p) ? 5 : 0), OT_PERIOD_MINUTES, roster[0]?.team_id ?? 'unknown');
   const extra = allocate(playing, caps, OT_PERIOD_MINUTES, rng);
   for (let i = 0; i < playing.length; i += 1) {
     const line = byId.get(playing[i].athlete_id);
-    if (!line) throw new Error('minute cap cannot fill the team budget');
+    if (!line) throw new Error('Missing roster line');
+    if (caps[i] > originalCaps[i]) line.minute_cap_relaxed = true;
     const minutes = extra[i] ?? 0;
     if (possessionMode) line.min += minutes;
     else addStats(line, drawStats(playing[i], minutes, state.volumeShock, rng), minutes);
@@ -525,7 +542,7 @@ function extendSquad(state: SquadState, roster: RatePlayer[], playingIds: Set<st
 }
 
 function playerCap(player: DrawnPlayer, overtimePeriods: number): number {
-  if (cameo(player) || isUnobservedProfile(player)) return UNOBSERVED_MINUTE_CAP;
+  if (!player.minute_cap_relaxed && (cameo(player) || isUnobservedProfile(player))) return UNOBSERVED_MINUTE_CAP;
   return PLAYER_CAP_REGULATION + PLAYER_CAP_PER_OT * overtimePeriods;
 }
 
@@ -565,7 +582,7 @@ function validateDraw(draw: RevisedDraw, regulationMinutes: Map<string, number>)
   if (teamPoints(draw.away) === teamPoints(draw.home)) throw new Error('overtime did not separate the teams');
   for (const line of [...draw.away, ...draw.home]) {
     const regulation = regulationMinutes.get(`${line.team_id}:${line.athlete_id}`) ?? 0;
-    const cap = minuteCap(line);
+    const cap = line.minute_cap_relaxed ? PLAYER_CAP_REGULATION : minuteCap(line);
     if (regulation > cap) throw new Error('player minutes exceed the cap');
   }
   validateTeam(draw.away, draw.budget, draw.overtimePeriods);
@@ -582,9 +599,15 @@ function participation(away: RatePlayer[], home: RatePlayer[], rng: Rng): Set<st
   const playing=new Set<string>();
   for(const roster of [away,home]){
     const games=teamGamesPlayed(roster),full=roster.filter(p=>minuteCap(p)===48).sort(byAthleteId);
-    const chosen=conditionalParticipants(full.map(p=>playProbability(p,games)),5,rng);
+    const probabilities=full.map(p=>availablePlayer(p)?playProbability(p,games):0);
+    const chosen=conditionalParticipants(probabilities,Math.min(5,probabilities.filter(p=>p>0).length),rng);
     full.forEach((p,i)=>{if(chosen[i])playing.add(p.athlete_id);});
-    for(const p of roster.filter(p=>minuteCap(p)!==48).sort(byAthleteId))if(rng()<playProbability(p,games))playing.add(p.athlete_id);
+    for(const p of roster.filter(p=>minuteCap(p)!==48).sort(byAthleteId))if(rng()<playProbability(p,games) && availablePlayer(p))playing.add(p.athlete_id);
+    for (const reserve of roster.filter(healthyReserve).sort((a,b)=>b.minutes_mean-a.minutes_mean || byAthleteId(a,b))) {
+      if (roster.filter(p=>playing.has(p.athlete_id)).length >= 5) break;
+      playing.add(reserve.athlete_id);
+    }
+    if (roster.filter(p=>playing.has(p.athlete_id)).length < 5) throw new InsufficientRosterError(roster[0]?.team_id ?? 'unknown');
   }
   return playing;
 }
@@ -639,6 +662,7 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
     .map((player) => player.athlete_id)
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const draw: RevisedDraw = {
+    ...([...away.lines, ...home.lines].some(p=>p.minute_cap_relaxed) ? {relaxedMinuteCaps: true as const} : {}),
     periodMinutes, possessions,
     overtime: overtimePeriods > 0,
     overtimePeriods,
@@ -804,9 +828,11 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
   for (const player of game.players) series.set(player.athlete_id, blankSeries(iterations, !!game.context && player.stl_per_min !== undefined && player.blk_per_min !== undefined && player.tov_per_min !== undefined));
   const combinedTotals = new Array<number>(iterations);
 
+  let relaxedMinuteCapDraws = 0;
   for (let index = 0; index < iterations; index += 1) {
     if(index%250===0)progress?.(index);
     const draw = drawGame(game, mulberry32(iterationSeed(seed, index)));
+    if (draw.relaxedMinuteCaps) relaxedMinuteCapDraws++;
     const awayPts = teamPoints(draw.away);
     const homePts = teamPoints(draw.home);
     awayTotals[index] = awayPts;
@@ -836,6 +862,7 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
     series,
   );
   return {
+    ...(relaxedMinuteCapDraws ? {relaxedMinuteCapDraws} : {}),
     overtime: chosen.overtime,
     budget: chosen.budget,
     index,

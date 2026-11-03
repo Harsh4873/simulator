@@ -51,7 +51,7 @@ const noEvents:CompletedEvent[]=[];assert.equal(noEvents.length,0);
 
 test('reported restrictions cap the full game and explicit DNP coverage is retained',async()=>{
  const {readFileSync}=await import('node:fs');const {fitCurrentRoles}=await import('../src/team-model.ts');const {simulate}=await import('../src/simulate.ts');
- const card=JSON.parse(readFileSync('public/data/rate-card.json','utf8'));
+ const card=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json','utf8'));
  const game=card.games[0],p=game.players.find((p:{minutes_weight:number;minutes_mean:number})=>p.minutes_weight===1&&p.minutes_mean>25);p.minutes_restriction=18;p.play_probability=1;
  const result=simulate(game,8,100);assert.ok(Array.from(result.playerDraws.get(p.athlete_id)!.min).every(x=>x<=18));
  const cache=JSON.parse(readFileSync('data/shooting-cache.json','utf8'));

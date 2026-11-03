@@ -1,3 +1,4 @@
+import { availablePlayer, healthyReserve, InsufficientRosterError, relaxMinuteCaps } from './roster-capacity.ts';
 import {rotationStateKey} from './game-state-model.ts';
 import {lateFoulState} from './free-throw-model.ts';
 import {usageWeights} from './usage-effects.ts';
@@ -35,20 +36,34 @@ export function drawPossessions(
   const caps=[away,home].map((team,t)=>team.map((p,i)=>{
     const rate=rates.get(p.athlete_id)!;
     const thin=rate.shooting_games===0&&(rate.games<3||(rate.games_2027===0&&rate.games_2026<20));
+    if (p.minute_cap_relaxed) return periodLength;
     return Math.max(0,Math.floor(Math.min(periodLength,(rate.minutes_restriction??(thin?12:Infinity))-before[t][i])));
   }));
   const adjust=(team:DrawnPlayer[],stints:number[][],mins:number[],minute:number,t:number)=>{
-    const eligible=team.map((_,i)=>i).filter(i=>(before[t][i]+mins[i]>0||emergency[t].has(i))&&(team[i].fouls??0)<6&&actual[t][i]<caps[t][i]);
+    let eligible=team.map((_,i)=>i).filter(i=>(before[t][i]+mins[i]>0||emergency[t].has(i))&&(team[i].fouls??0)<6&&actual[t][i]<caps[t][i]);
     // A healthy coach-DNP can enter if a foul-out exhausts the sampled rotation.
     // A missed uncertain/injured availability draw never becomes an emergency substitute.
     if(eligible.length<5){
-      const reserves=team.map((_,i)=>i).filter(i=>!eligible.includes(i)&&before[t][i]+mins[i]===0&&team[i].minutes_weight===1&&team[i].injury_status==='healthy'&&(rates.get(team[i].athlete_id)?.play_probability??1)>0&&(team[i].fouls??0)<6&&caps[t][i]-actual[t][i]>=periodLength-minute).sort((a,b)=>rates.get(team[b].athlete_id)!.minutes_mean-rates.get(team[a].athlete_id)!.minutes_mean);
+      const reserves=team.map((_,i)=>i).filter(i=>!eligible.includes(i)&&before[t][i]+mins[i]===0&&healthyReserve(team[i])&&(team[i].fouls??0)<6&&caps[t][i]-actual[t][i]>=periodLength-minute).sort((a,b)=>rates.get(team[b].athlete_id)!.minutes_mean-rates.get(team[a].athlete_id)!.minutes_mean);
       while(eligible.length<5&&reserves.length){const i=reserves.shift()!;emergency[t].add(i);eligible.push(i);}
+    }
+    if (eligible.length < 5) {
+      const available = team.map((_,i)=>i).filter(i => availablePlayer(team[i]) && (team[i].fouls??0)<6 &&
+        (before[t][i]+mins[i]>0 || emergency[t].has(i) || healthyReserve(team[i])));
+      if (available.length < 5) throw new InsufficientRosterError(team[0].team_id);
+      const remaining = periodLength-minute;
+      const oldCaps = available.map(i=>Math.max(0,Math.min(remaining,caps[t][i]-actual[t][i])));
+      const relaxed = relaxMinuteCaps(oldCaps,available.map(()=>remaining),remaining*5,team[0].team_id);
+      available.forEach((i,j)=>{
+        if(relaxed[j]>oldCaps[j]){caps[t][i]=actual[t][i]+relaxed[j];team[i].minute_cap_relaxed=true;}
+        if(healthyReserve(team[i]))emergency[t].add(i);
+      });
+      eligible=available.filter(i=>actual[t][i]<caps[t][i]);
     }
     let chosen=stints[minute].filter(i=>eligible.includes(i));
     const candidates=eligible.filter(i=>!chosen.includes(i)).sort((a,b)=>(mins[b]-actual[t][b])-(mins[a]-actual[t][a]));
     while(chosen.length<5&&candidates.length)chosen.push(candidates.shift()!);
-    if(chosen.length!==5)throw new Error('Foul-outs or minute restrictions leave fewer than five eligible players');
+    if(chosen.length!==5)throw new InsufficientRosterError(team[0].team_id);
     const model=context.rotation_state;
     if(periodLength===48&&model?.status==='fitted'){
       const margin=sum(away.map(p=>p.pts))-sum(home.map(p=>p.pts)),key=rotationStateKey(minute,margin),base=model.baseline[key.split(':')[0]],share=model.shares[key]??base;

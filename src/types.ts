@@ -101,6 +101,7 @@ export interface RatePlayer {
 }
 
 export interface RateGame {
+  simulation_error?: string;
   event_id: string;
   away_team_id: string;
   home_team_id: string;

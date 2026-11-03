@@ -7,8 +7,8 @@ import { crps, scoreProbability } from '../src/evaluation.ts';
 import { eligibleEvents, fitCurrentRoles, fitMatchup } from '../src/team-model.ts';
 import { renderPlayerPanel } from '../src/boxscore.ts';
 import type { RateCard, Slate, ShootingCache } from '../src/types.ts';
-const card:RateCard=JSON.parse(readFileSync('public/data/rate-card.json','utf8'));
-const slate:Slate=JSON.parse(readFileSync('public/data/slate.json','utf8'));
+const card:RateCard=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json','utf8'));
+const slate:Slate=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/slate.json','utf8'));
 const cache:ShootingCache=JSON.parse(readFileSync('data/shooting-cache.json','utf8'));
 const sum=(xs:number[])=>xs.reduce((a,b)=>a+b,0);
 
@@ -78,6 +78,6 @@ test('proper scores match hand calculations',()=>{
 test('current replay is deterministic and ignores a market caption',()=>{
  const g=card.games[0];const first=simulate(g,91,100);
  assert.deepEqual(simulate({...g,spread_caption:'HOME -99'} as typeof g,91,100),first);
- const impossible=structuredClone(g);impossible.players.filter(p=>p.team_id===g.home_team_id).forEach(p=>{p.play_probability=0;});
- assert.throws(()=>drawGame(impossible,mulberry32(1)),/Insufficient eligible/);
+ const impossible=structuredClone(g);impossible.players.filter(p=>p.team_id===g.home_team_id).forEach(p=>{p.play_probability=0;p.minutes_weight=0;p.injury_status='out';});
+ assert.throws(()=>drawGame(impossible,mulberry32(1)),/fewer than five eligible/);
 });

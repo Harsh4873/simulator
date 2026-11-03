@@ -1,3 +1,4 @@
+import { rosterIssue } from '../src/roster-capacity.ts';
 import {teamCoverage} from '../src/coverage.ts';
 import {sourceVenue} from '../src/schedule-context.ts';
 import {attachPlayCache,savePlayCache} from './play-cache.ts';
@@ -650,6 +651,10 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
           ];
         }),
       };
+      for (const game of rateCard.games) {
+        const issue = rosterIssue(game);
+        if (issue) game.simulation_error = issue.message;
+      }
       rateCard.unavailable_features=rateCard.unavailable_features!.filter(feature=>!rateCard.games.length||!rateCard.games.every(g=>{
         const c=g.context;
         return feature==='lineup_defense'?c?.lineup_effects?.status==='fitted':feature==='absence_efficiency'?c?.usage_effects?.status==='fitted':feature==='ft_trip_types'?c?.free_throws?.status==='fitted':feature==='foul_outs'?c?.fouls?.status==='fitted':feature==='late_game_tactics'?c?.rotation_state?.status==='fitted'&&c?.free_throws?.late?.status==='fitted':false;

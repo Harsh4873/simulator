@@ -1,3 +1,4 @@
+import { rosterIssue, InsufficientRosterError } from '../src/roster-capacity.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseHTML} from 'linkedom';
@@ -8,30 +9,35 @@ import {tmpdir} from 'node:os';
 import {pathToFileURL} from 'node:url';
 import {simulate} from '../src/simulate.ts';
 import type {RateCard,Slate} from '../src/types.ts';
-test('DOM navigation restores focus, tabs respond to keys, worker cancel and cache remain usable',async()=>{
+for(const mode of ['populated','empty','unavailable'] as const)test(mode==='populated'?'DOM navigation restores focus, tabs respond to keys, worker cancel and cache remain usable':`DOM boots a valid ${mode} slate`,async()=>{
  const dir=mkdtempSync(join(tmpdir(),'sim-dom-'));
  const {window,document}=parseHTML(readFileSync('index.html','utf8'));
  const globals=globalThis as unknown as Record<string,unknown>;
  for(const key of ['window','document','HTMLElement','HTMLButtonElement','HTMLInputElement','HTMLSelectElement','HTMLImageElement','HTMLDetailsElement','Element','Event'])globals[key]=(window as unknown as Record<string,unknown>)[key];
- Object.defineProperty(window,'matchMedia',{value:()=>({matches:false})});window.scrollTo=()=>{};
+ Object.defineProperty(window,'matchMedia',{configurable:true,value:()=>({matches:false})});window.scrollTo=()=>{};
  globals.CSS={escape:(x:string)=>x};globals.localStorage={getItem:()=>null,setItem:()=>{}};
  let focused:Element|null=null;
  window.HTMLElement.prototype.focus=function(){focused=this;};
  const timer=globalThis.setInterval;globals.setInterval=()=>0;
- const card=JSON.parse(readFileSync('public/data/rate-card.json','utf8')) as RateCard;
- const slate=JSON.parse(readFileSync('public/data/slate.json','utf8')) as Slate;
+ const card=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json','utf8')) as RateCard;
+ const slate=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/slate.json','utf8')) as Slate;
  const now=new Date();card.generated_at=now.toISOString();slate.generated_at=card.generated_at;
  const chicago=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Chicago',year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
  card.date=chicago;slate.date=chicago;slate.games.forEach(g=>{g.date=chicago;g.status_state='pre';g.completed=false;g.start_time=new Date(now.getTime()+3600000).toISOString();});
  // This fixture exercises the supported older-card path without a manifest.
  delete card.model_hash;
  globals.fetch=async(url:string)=>new Response(url.endsWith('/slate.json')?JSON.stringify(slate):url.endsWith('/rate-card.json')?JSON.stringify(card):'',{status:url.endsWith('/slate.json')||url.endsWith('/rate-card.json')?200:404});
- let workerCount=0,terminations=0,pending=false;
+ let workerCount=0,terminations=0,pending=false,workerError=false;
  const result=simulate(card.games[0],55,100);
+ if(mode==='empty'){card.games=[];slate.games=[];}
+ if(mode==='unavailable'){
+   const game=card.games[0];game.players.filter(p=>p.team_id===game.away_team_id).forEach(p=>{p.minutes_weight=0;p.injury_status='out';});
+   game.simulation_error=rosterIssue(game)!.message;
+ }
  class FakeWorker{
   onmessage:((event:{data:unknown})=>void)|null=null;onerror:unknown;
   constructor(){workerCount++;}
-  postMessage(){if(!pending)queueMicrotask(()=>this.onmessage?.({data:{result}}));}
+  postMessage(){if(!pending)queueMicrotask(()=>this.onmessage?.({data:workerError?{error:new InsufficientRosterError(card.games[1].away_team_id).message}:{result}}));}
   terminate(){terminations++;}
  }
  globals.Worker=FakeWorker;
@@ -41,6 +47,22 @@ test('DOM navigation restores focus, tabs respond to keys, worker cancel and cac
  try{
   await build({entryPoints:['src/main.ts'],bundle:true,format:'esm',outfile:join(dir,'app.mjs'),loader:{'.css':'empty'},logLevel:'silent'});
   await import(pathToFileURL(join(dir,'app.mjs')).href);await flush();
+  if(mode==='empty'){
+    assert.match(document.body.textContent!,new RegExp(`No NBA games on ${chicago}`));
+    assert.equal(document.querySelector('button[data-event]'),null);
+    assert.equal(document.querySelector('[data-mode="empty"]')!==null,true);
+    assert.equal(workerCount,0);return;
+  }
+  if(mode==='unavailable'){
+    const buttons=document.querySelectorAll<HTMLButtonElement>('button[data-event]');
+    assert.equal(buttons[0].disabled,true);assert.match(buttons[0].textContent!,/fewer than five eligible/);
+    assert.equal(buttons[1].disabled,false);
+    workerError=true;buttons[1].click();await flush();
+    assert.match(document.querySelector('[role="alert"]')!.textContent!,/fewer than five eligible/);
+    assert.equal(buttons[1].disabled,false);assert.equal(buttons[2].disabled,false);
+    workerError=false;buttons[2].click();await flush();
+    assert.ok(document.querySelector('[data-back]'));return;
+  }
   click('button[data-event]');await flush();
   assert.ok((focused as Element|null)?.hasAttribute('data-back'));
   click('button[data-sort="pts"][data-side="away"]');assert.equal((focused as Element|null)?.getAttribute('data-sort'),'pts');

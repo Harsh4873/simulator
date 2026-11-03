@@ -6,7 +6,7 @@ import { gzipSync } from 'node:zlib';
 import { buildRateCard, fetchWithRetry, parseInjuries, parseOutcomeLines, gamesFromScoreboard } from '../scripts/build-rate-card.ts';
 import { parseCompletedSummary } from '../src/parse-summary.ts';
 import type { RateCard, Slate } from '../src/types.ts';
-const load = () => ({ card: JSON.parse(readFileSync('public/data/rate-card.json','utf8')) as RateCard, slate: JSON.parse(readFileSync('public/data/slate.json','utf8')) as Slate });
+const load = () => ({ card: JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json','utf8')) as RateCard, slate: JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/slate.json','utf8')) as Slate });
 test('generation requires every matchup, unique identities, feasible rosters and finite rates', () => {
   for (const mutate of [
     (c: RateCard) => { c.games[0].players = []; },

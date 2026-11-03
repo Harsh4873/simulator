@@ -9,7 +9,7 @@ import {drawPossessions} from '../src/possessions.ts';
 import {drawGame,type DrawnPlayer} from '../src/simulate.ts';
 import {mulberry32} from '../src/rng.ts';
 import type {RateCard,RatePlayer} from '../src/types.ts';
-const card=JSON.parse(readFileSync('public/data/rate-card.json','utf8')) as RateCard;
+const card=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json','utf8')) as RateCard;
 test('unsupported state and residual fits remain explicitly unknown',()=>{
  assert.equal(fitFouls([]).status,'unknown');assert.equal(fitRotationState([]).status,'unknown');assert.equal(fitResidualDiagnostics([],()=>100).status,'unknown');assert.equal(fitLineupEffects([]).status,'unknown');assert.equal(fitFreeThrows([]).status,'unknown');
  assert.equal(personalFoul('Offensive Foul Turnover'),false);assert.equal(personalFoul('Technical Foul'),false);assert.equal(personalFoul('Shooting Foul'),true);
@@ -79,4 +79,21 @@ test('fouls that cause substitutions retain their event and fractional exposure'
  e.play_history.plays=Array.from({length:6},(_,i)=>play(i+1,710-i*15,'Personal Foul',['h0']));
  e.play_history.plays.push(play(7,635,'Substitution',['h5','h0']),play(8,0,'End Period',[]));
  const rows=foulExposureRows(e);assert.equal(rows.reduce((s,r)=>s+r.count,0),6);assert.equal(rows.filter(r=>r.before===5).reduce((s,r)=>s+r.count,0),1);assert.ok(rows.some(r=>r.minutes>0&&r.minutes<1));
+});
+
+
+test('a restricted healthy reserve fills regulation and overtime after a foul-out by relaxing only soft caps',()=>{
+ for(const period of [48,5]){
+  const f=fixture();f.context.rotation_state=undefined;f.context.lineup_effects=undefined;
+  f.context.fouls={status:'fitted',games:200,heldout_minutes:1000,probabilities:[1,0],by_count:{5:[0,1]},conditional:true,log_loss:0,baseline_log_loss:1,reason:null};
+  const a=[period,period,period,period,period,0],h=[period,period,period,period,period,0];
+  f.away.forEach((p,i)=>p.min=a[i]+(period===5&&i<5?40:0));
+  f.home.forEach((p,i)=>p.min=h[i]+(period===5&&i<5?40:0));
+  f.away[0].fouls=5;f.away[5].injury_status='healthy';
+  f.roster.find(p=>p.athlete_id===f.away[5].athlete_id)!.minutes_restriction=1;
+  drawPossessions(f.away,f.home,f.roster,a,h,f.context,100,mulberry32(42));
+  assert.equal(f.away[0].fouls,6);assert.equal(a[0],1);
+  assert.equal(a[5],period-1);assert.equal(f.away[5].minute_cap_relaxed,true);
+  assert.equal(a.reduce((x,y)=>x+y,0),period*5);assert.ok(a.every(m=>m<=period));
+ }
 });
