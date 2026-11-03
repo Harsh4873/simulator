@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-02T20:47:52Z",
+  "generated_at": "2026-11-03T03:29:12Z",
   "date": "2026-11-02",
   "timezone": "America/Chicago",
   "games": [
@@ -10,8 +10,8 @@
       "start_time": "2026-11-03T00:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "25",
         "name": "Oklahoma City Thunder",
@@ -39,8 +39,8 @@
       "start_time": "2026-11-03T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "8",
         "name": "Detroit Pistons",
@@ -68,8 +68,8 @@
       "start_time": "2026-11-03T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "1",
         "name": "Atlanta Hawks",
@@ -97,8 +97,8 @@
       "start_time": "2026-11-03T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "17",
         "name": "Brooklyn Nets",
@@ -126,8 +126,8 @@
       "start_time": "2026-11-03T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "27",
         "name": "Washington Wizards",
@@ -155,8 +155,8 @@
       "start_time": "2026-11-03T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "4",
         "name": "Chicago Bulls",
@@ -184,7 +184,7 @@
       "start_time": "2026-11-03T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "23",
@@ -213,7 +213,7 @@
       "start_time": "2026-11-03T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "3",
@@ -242,8 +242,8 @@
       "start_time": "2026-11-03T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "15",
         "name": "Milwaukee Bucks",
@@ -271,7 +271,7 @@
       "start_time": "2026-11-03T01:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "2",
@@ -300,7 +300,7 @@
       "start_time": "2026-11-03T01:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "26",
@@ -329,7 +329,7 @@
       "start_time": "2026-11-03T02:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "22",
@@ -358,7 +358,7 @@
       "start_time": "2026-11-03T03:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "21",
@@ -387,7 +387,7 @@
       "start_time": "2026-11-03T03:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "28",
@@ -416,7 +416,7 @@
       "start_time": "2026-11-03T03:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "14",
