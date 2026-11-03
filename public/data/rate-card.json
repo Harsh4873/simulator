@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-03T14:27:39Z",
+  "generated_at": "2026-11-03T18:28:15Z",
   "date": "2026-11-03",
   "iterations": 10000,
   "model_version": "possessions-v4",
@@ -14,9 +14,9 @@
     "late_game_tactics",
     "foul_outs"
   ],
-  "source_cutoff": "2026-11-03T14:27:39Z",
-  "generator_sha": "292d58477c31567b3f3f8b79b5b073c9a6296ea9",
-  "input_hash": "fcf74ddcf9164e730e4f40d1db641c8344cbadb9c0594d53fd6222ff2694c8e9",
+  "source_cutoff": "2026-11-03T18:28:15Z",
+  "generator_sha": "cbed209b59bbffd4e292673376386415fb2e7c5c",
+  "input_hash": "4c7d5e9728cef4d6da711d889d4bce2c26d949f08f48732a4d051bfce0eecbd6",
   "model_hash": "eb84fcf5df40e3a33c293f0a7b7266f6dea96923553f48c6e680f7a881aae22c",
   "columns": [
     "min",
