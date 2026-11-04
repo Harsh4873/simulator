@@ -458,7 +458,7 @@ export function legacyFitPlayers(input: FitInput): FitResult {
 
   for (const row of input.shooting) {
     const weight = seasonWeight(row.season);
-    if (weight === 0 || !row.athlete_id) continue;
+    if (weight === 0 || !row.athlete_id || !(row.minutes > 0)) continue;
     shootingGames.set(row.athlete_id, (shootingGames.get(row.athlete_id) ?? 0) + row.games);
     const group = groupFor(row.athlete_id);
     add(fga, row.athlete_id, row.team_id, group, weight * row.fga, weight * row.minutes);

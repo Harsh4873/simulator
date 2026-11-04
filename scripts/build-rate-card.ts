@@ -1,4 +1,4 @@
-import { rosterIssue } from '../src/roster-capacity.ts';
+import { fillThinRoster, rosterIssue } from '../src/roster-capacity.ts';
 import {teamCoverage} from '../src/coverage.ts';
 import {sourceVenue} from '../src/schedule-context.ts';
 import {attachPlayCache,savePlayCache} from './play-cache.ts';
@@ -641,13 +641,13 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
           const players = [...awayPlayers, ...homePlayers];
           if (players.length === 0) return [];
           return [
-            {
+            fillThinRoster({
               event_id: game.event_id,
               away_team_id: game.away.team_id,
               home_team_id: game.home.team_id,
               players,
               context: fitMatchup(trainingEvents,game,generatedAt),
-            },
+            }),
           ];
         }),
       };

@@ -422,7 +422,7 @@ export function renderBoxScore(
     scenario === 'upside'
       ? UPSIDE_LABEL
       : expected
-        ? 'Each row is that player\'s average across all 10,000 games, including games they sit. The range under each stat is that player\'s own 10th to 90th percentile. It is not one box score.'
+        ? 'Each row is that player\'s average across all 10,000 games, including games they sit, so minutes still sum to the team budget. The player panel expected line uses only draws with minutes. The range under each stat is that player\'s own 10th to 90th percentile. It is not one box score.'
         : 'This box score is the simulated game nearest the median combined score. The range under each score is the 5th to 95th percentile.';
   const upsideChecked = scenario === 'upside' ? ' checked' : '';
   return `<div data-event="${escapeHtml(eventId)}">
@@ -438,6 +438,7 @@ export function renderBoxScore(
       ${distributionPanel(score)}
       ${boxTable('away', game.away, shown.away, sort.away, expected)}
       ${boxTable('home', game.home, shown.home, sort.home, expected)}
+      ${score.thin_rotation ? '<p class="note" role="status">Thin rotation: labelled replacement-level minutes fill remaining spots from league-average rates. Those lines are not invented player stats.</p>' : ''}
       <p class="note">${note}</p>
       <p class="note">The minutes column totals team-minutes: five players on the floor at once. Regulation is 240 (5 × 48). Overtime is 265 (5 × 53). It is not the length of the game.</p>
       <p class="legend">Brighter blue means that number is further from this player's middle in the 10,000 games. The percent is the mid-CDF: the share below the displayed value plus half the share tied with it. Common discrete outcomes stay near the middle.</p>
@@ -580,8 +581,9 @@ function samplingList(row: CardRow | null, score: Simulation, shock: number | un
 
 function expectedLine(line: SimulatedPlayer): string {
   const e=line.expectation!;
-  const fields=[['MIN',e.minMean],['FGM',e.counts?.fgm],['FGA',e.counts?.fga],['3PM',e.counts?.tpm],['FTM',e.counts?.ftm],['FTA',e.counts?.fta],['PTS',e.ptsMean],['REB',e.rebMean],['AST',e.astMean],['STL',e.counts?.stl],['BLK',e.counts?.blk]] as const;
-  return `<dl class="line">${fields.map(([k,v])=>`<dt>${k}</dt><dd>${v===undefined?'—':v.toFixed(1)}</dd>`).join('')}</dl><p>All-draw averages, including simulated DNPs. Plays in ${(e.playRate*100).toFixed(1)}% of draws. Prop probabilities below exclude DNPs and pushes.</p>`;
+  const shown=e.played??e;
+  const fields=[['MIN',shown.minMean],['FGM',shown.counts?.fgm??e.counts?.fgm],['FGA',shown.counts?.fga??e.counts?.fga],['3PM',shown.counts?.tpm??e.counts?.tpm],['FTM',shown.counts?.ftm??e.counts?.ftm],['FTA',shown.counts?.fta??e.counts?.fta],['PTS',shown.ptsMean],['REB',shown.rebMean],['AST',shown.astMean],['STL',shown.counts?.stl??e.counts?.stl],['BLK',shown.counts?.blk??e.counts?.blk]] as const;
+  return `<dl class="line">${fields.map(([k,v])=>`<dt>${k}</dt><dd>${v===undefined?'—':v.toFixed(1)}</dd>`).join('')}</dl><p>Averages in the draws this player appeared (minutes greater than 0). Plays in ${(e.playRate*100).toFixed(1)}% of draws. The roster table still counts sit-outs so team minutes sum to 240. Prop probabilities below exclude DNPs and pushes.</p>`;
 }
 
 function drawnLine(line: SimulatedPlayer): string {

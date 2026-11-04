@@ -192,3 +192,35 @@ test('rates use shooting attempts and gzip rebounds, and an id injury wins', () 
   assert.ok(Math.abs(beta.ft_pct - 0.8) < 1e-9);
   assert.ok(Math.abs(beta.minutes_mean - 30) < 1e-9);
 });
+
+test('zero-minute DNP rows do not count as zero-stat games', () => {
+  const roster = [{ athlete_id: '1', name: 'Alpha Player', team_id: '2', position: 'SF' }];
+  const shooting = [{
+    athlete_id: '1', team_id: '2', season: 2026, games: 2, minutes: 20,
+    fgm: 5, fga: 10, tpm: 1, tpa: 4, ftm: 8, fta: 10, reb: 8, ast: 4, pts: 16,
+  }];
+  const outcomes = [
+    { season: 2026, athlete_id: '1', team_id: '2', event_id: '10', stat_key: 'points' as const, actual: 20, minutes: 30 },
+    { season: 2026, athlete_id: '1', team_id: '2', event_id: '10', stat_key: 'totalRebounds' as const, actual: 10, minutes: 30 },
+  ];
+  const base = fitPlayers({ roster, injuries: [], shooting, outcomes }).players[0];
+  const withDnp = fitPlayers({
+    roster,
+    injuries: [],
+    shooting: [...shooting, {
+      athlete_id: '1', team_id: '2', season: 2026, games: 1, minutes: 0,
+      fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, reb: 0, ast: 0, pts: 0,
+    }],
+    outcomes: [
+      ...outcomes,
+      { season: 2026, athlete_id: '1', team_id: '2', event_id: '11', stat_key: 'points', actual: 0, minutes: 0 },
+      { season: 2026, athlete_id: '1', team_id: '2', event_id: '11', stat_key: 'totalRebounds', actual: 0, minutes: 0 },
+    ],
+  }).players[0];
+  assert.equal(withDnp.shooting_games, base.shooting_games);
+  assert.equal(withDnp.games, base.games);
+  assert.equal(withDnp.games_2026, base.games_2026);
+  assert.equal(withDnp.minutes_mean, base.minutes_mean);
+  assert.equal(withDnp.fga_per_min, base.fga_per_min);
+  assert.equal(withDnp.reb_per_min, base.reb_per_min);
+});

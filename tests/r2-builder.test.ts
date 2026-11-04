@@ -42,10 +42,12 @@ test('full builder is byte-stable on identical inputs across clocks and fails cl
   broken=true;await assert.rejects(run('2026-10-30T14:00Z'),/injury/);
   assert.deepEqual(files.map(f=>readFileSync(join(root,'public/data',f),'utf8')),before);
   broken=false;
-  await t.test('builder publishes a per-game error when fewer than five eligible players remain',async()=>{
+  await t.test('builder fills a thin rotation instead of failing when fewer than five healthy players remain',async()=>{
     depleted=true;await run('2026-10-30T15:00Z');
     const generated=await checkGeneration(join(root,'public'));
-    assert.match(generated.card.games[0].simulation_error!,/fewer than five eligible/);
+    assert.equal(generated.card.games[0].simulation_error,undefined);
+    assert.equal(generated.card.games[0].thin_rotation,true);
+    assert.ok(generated.card.games[0].players.some(p=>p.replacement_level));
     assert.equal(generated.slate.games.length,1);
   });
   await t.test('November 3 empty build replaces the previous date and passes publication and rendering checks',async()=>{

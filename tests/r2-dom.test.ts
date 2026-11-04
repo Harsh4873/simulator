@@ -31,7 +31,8 @@ for(const mode of ['populated','empty','unavailable'] as const)test(mode==='popu
  const result=simulate(card.games[0],55,100);
  if(mode==='empty'){card.games=[];slate.games=[];}
  if(mode==='unavailable'){
-   const game=card.games[0];game.players.filter(p=>p.team_id===game.away_team_id).forEach(p=>{p.minutes_weight=0;p.injury_status='out';});
+   const game=card.games[0];
+   game.players=game.players.filter(p=>p.team_id===game.home_team_id);
    game.simulation_error=rosterIssue(game)!.message;
  }
  class FakeWorker{

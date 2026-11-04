@@ -58,7 +58,9 @@ test('forecast panel renders aggregate expectations, not a representative score'
   p.pts=999;p.min=999;
   const html=renderPlayerPanel(slate.games[0],g,r,p.athlete_id);
   assert.match(html,/<h3>Expected line<\/h3>/);
-  assert.ok(html.includes(p.expectation!.ptsMean.toFixed(1)));
+  const shown=p.expectation!.played?.ptsMean??p.expectation!.ptsMean;
+  assert.ok(html.includes(shown.toFixed(1)));
+  assert.match(html,/Averages in the draws this player appeared/);
   assert.ok(!html.includes('>999<'));
 });
 test('chronological fitting excludes future and nonregular events',()=>{
@@ -78,6 +80,10 @@ test('proper scores match hand calculations',()=>{
 test('current replay is deterministic and ignores a market caption',()=>{
  const g=card.games[0];const first=simulate(g,91,100);
  assert.deepEqual(simulate({...g,spread_caption:'HOME -99'} as typeof g,91,100),first);
- const impossible=structuredClone(g);impossible.players.filter(p=>p.team_id===g.home_team_id).forEach(p=>{p.play_probability=0;p.minutes_weight=0;p.injury_status='out';});
+ const impossible=structuredClone(g);impossible.players=impossible.players.filter(p=>p.team_id!==g.home_team_id);
  assert.throws(()=>drawGame(impossible,mulberry32(1)),/fewer than five eligible/);
+ const injured=structuredClone(g);injured.players.filter(p=>p.team_id===g.home_team_id).forEach(p=>{p.play_probability=0;p.minutes_weight=0;p.injury_status='out';});
+ const rescued=simulate(injured,91,20);
+ assert.equal(rescued.thin_rotation,true);
+ assert.ok(rescued.home.players.some(p=>p.replacement_level));
 });

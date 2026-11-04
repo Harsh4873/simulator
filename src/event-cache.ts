@@ -6,6 +6,7 @@ export function upsertEvents(events:CompletedEvent[],event:CompletedEvent):Compl
 export function aggregateShooting(events:CompletedEvent[]):ShootingRow[]{
   const rows=new Map<string,ShootingRow>();
   for(const e of [...events].sort((a,b)=>a.event_id.localeCompare(b.event_id)))for(const p of e.players){
+    if(!(p.minutes>0))continue;
     const key=`${e.season}:${p.team_id}:${p.athlete_id}`;
     const row=rows.get(key)??{season:e.season,team_id:p.team_id,athlete_id:p.athlete_id,games:0,minutes:0,fgm:0,fga:0,tpm:0,tpa:0,ftm:0,fta:0,pts:0,reb:0,ast:0};
     row.games++;

@@ -98,6 +98,7 @@ export interface RatePlayer {
   role_context?:{window:number;half_life:number|null;team_changed:boolean;return_from_injury:'unknown'|'observed'};
   participation_coverage?: {known:number;unknown:number;source:"explicit-DNP"|"scenario-prior"};
   availability_calibration_n?:number;
+  replacement_level?: true;
 }
 
 export interface RateGame {
@@ -107,6 +108,7 @@ export interface RateGame {
   home_team_id: string;
   players: RatePlayer[];
   context?: MatchupContext;
+  thin_rotation?: true;
 }
 
 export interface RateCard {
