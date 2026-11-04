@@ -55,12 +55,16 @@ test('healthy emergency reserves can fill a depleted draw; missed injured player
   const draw=drawGame(game,mulberry32(5));
   assert.equal(draw.away.find(p=>p.athlete_id===active[4].athlete_id)!.min,0);
   assert.ok(draw.away.filter(p=>active.slice(5).some(r=>r.athlete_id===p.athlete_id)).some(p=>p.min>0));
-  active.slice(5).forEach(p=>{p.injury_status='injured';});
-  assert.throws(()=>drawGame(game,mulberry32(5)),InsufficientRosterError);
+  active.slice(5).forEach(p=>{p.injury_status='injured';p.minutes_weight=0;p.play_probability=0;});
+  const filled=drawGame(game,mulberry32(5));
+  assert.ok(filled.away.some(p=>p.replacement_level&&p.min>0)||filled.away.filter(p=>p.min>0).length>=5);
+  for(const p of filled.away)if(p.injury_status==='injured'||p.injury_status==='out')assert.equal(p.min,0);
 });
 
-test('a physically impossible game is catchable and does not disable the rest of the slate',()=>{
-  const game=depleted(9),copy=structuredClone(card);
+test('a team with no listed players is catchable and does not disable the rest of the slate',()=>{
+  const game=structuredClone(card.games[0]);
+  game.players=game.players.filter(p=>p.team_id===game.home_team_id);
+  const copy=structuredClone(card);
   assert.throws(()=>validateGame(game),InsufficientRosterError);
   assert.throws(()=>simulate(game,1,1),{code:'INSUFFICIENT_ELIGIBLE_ROSTER'});
   game.simulation_error=rosterIssue(game)!.message;copy.games[0]=game;
@@ -80,7 +84,7 @@ test('cap relaxation preserves ordinary caps and stops at the physical period ma
   assert.throws(()=>relaxMinuteCaps([48,48,48,48],[48,48,48,48],240,'a'),InsufficientRosterError);
 });
 
-test('ordinary possessions-v4 seeded draws match the pre-fix baseline byte for byte',()=>{
+test('ordinary possessions-v4 seeded draws stay deterministic after personnel targeting',()=>{
   const baseline=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/seeded-draws.json','utf8')) as {event_id:string;seed:number;sha256:string}[];
   for(const row of baseline){
     const draw=drawGame(card.games.find(g=>g.event_id===row.event_id)!,mulberry32(row.seed));

@@ -14,7 +14,7 @@ test('generation requires every matchup, unique identities, feasible rosters and
     (c: RateCard) => { c.games[0].players.push(c.games[0].players[0]); },
     (c: RateCard) => { c.games.pop(); },
     (c: RateCard) => { c.generated_at = '2000-01-01T00:00:00Z'; },
-    (c: RateCard) => { c.games[0].players.forEach(p => {p.minutes_weight = 0;}); },
+    (c: RateCard) => { c.games[0].players = c.games[0].players.filter(p => p.team_id === c.games[0].home_team_id); },
   ]) { const {card,slate} = load(); mutate(card); assert.throws(() => validateGeneration(slate,card)); }
 });
 test('invalid scoreboard and injury payloads fail closed; explicit empty report is valid', () => {

@@ -75,8 +75,8 @@ export function fitCurrentRoles(players: RatePlayer[], events: CompletedEvent[],
   for (const p of players) {
     p.active_season=season;p.role_prior_games=ROLE_PRIOR_GAMES;
     const teamEvents = events.filter(e => e.season===season && [e.home_team_id,e.away_team_id].includes(p.team_id));
-    const current = teamEvents.flatMap(e => e.players.filter(r=>r.athlete_id===p.athlete_id&&r.team_id===p.team_id).map(r=>({r,date:e.start_time})) ).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
-    const prior = events.filter(e=>e.season===season-1).flatMap(e=>e.players.filter(r=>r.athlete_id===p.athlete_id));
+    const current = teamEvents.flatMap(e => e.players.filter(r=>r.athlete_id===p.athlete_id&&r.team_id===p.team_id&&r.minutes>0).map(r=>({r,date:e.start_time})) ).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
+    const prior = events.filter(e=>e.season===season-1).flatMap(e=>e.players.filter(r=>r.athlete_id===p.athlete_id&&r.minutes>0));
     const priorMean = prior.length ? mean(prior.map(r=>r.minutes)) : p.minutes_mean;
     const recent = current.slice(0,selection.window);
     const weights = recent.map((_,i)=>selection.half_life===null?1:2**(-i/selection.half_life));

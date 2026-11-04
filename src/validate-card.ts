@@ -1,4 +1,4 @@
-import { availablePlayer, rosterIssue, InsufficientRosterError } from './roster-capacity.ts';
+import { availablePlayer, fillThinRoster, rosterIssue, InsufficientRosterError } from './roster-capacity.ts';
 import {freshnessBudget} from './refresh-window.ts';
 import { healthyCheck, type RefreshHealth } from './generation.ts';
 import { chicagoDate } from './date.ts';
@@ -42,11 +42,12 @@ export function validateGame(game: RateGame): void {
   }
   for (const team of [game.away_team_id, game.home_team_id]) {
     const active = game.players.filter(p => p.team_id === team && availablePlayer(p));
-    if (active.length >= 5 && !active.some(p => p.shooting_games > 0 && p.fga_per_min > 0 && p.fta_per_min > 0)) throw new Error(`Missing shooting coverage: ${team}`);
+    if (active.length >= 5 && !active.some(p => (p.replacement_level || p.shooting_games > 0) && p.fga_per_min > 0 && p.fta_per_min > 0)) throw new Error(`Missing shooting coverage: ${team}`);
   }
-  const issue = rosterIssue(game);
+  const filled = fillThinRoster(game);
+  const issue = rosterIssue(filled);
   if (issue) throw issue;
-  if (game.simulation_error !== undefined) throw new Error('Unexpected simulation error on playable game');
+  if (game.simulation_error !== undefined && filled.players.length === game.players.length && !filled.thin_rotation) throw new Error('Unexpected simulation error on playable game');
 }
 
 export function validateGeneration(slate: Slate, card: RateCard): void {

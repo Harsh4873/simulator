@@ -36,6 +36,12 @@ test('current sampler expected columns, bands, progress and displayed score anno
   const draws=sim.playerDraws.get(p.athlete_id)!;
   for(const key of ['fgm','fga','tpm','tpa','ftm','fta'] as const){assert.equal(p.expectation!.counts![key],Array.from(draws[key]!).reduce((a,b)=>a+b,0)/500);}
   for(const key of ['min','pts','reb','ast'] as const){const band=p.expectation!.bands![key]!;assert.ok(band.p10<=band.p50&&band.p50<=band.p90);}
+  const mins=Array.from(draws.min);
+  if(mins.some(m=>m===0)&&mins.some(m=>m>0)){
+    assert.ok(p.expectation!.played);
+    assert.ok(p.expectation!.played.ptsMean>=p.expectation!.ptsMean-1e-9);
+    assert.ok(p.expectation!.played.minMean>p.expectation!.minMean);
+  }
  }
  const html=renderBoxScore(slate.games[0],card.games[0],sim,new Date());
  assert.ok(html.includes(`mean ${sim.distributions!.total.mean.toFixed(1)}`));

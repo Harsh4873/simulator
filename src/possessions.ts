@@ -4,6 +4,7 @@ import {lateFoulState} from './free-throw-model.ts';
 import {usageWeights} from './usage-effects.ts';
 import {lineupLogEffect} from './lineup-effects.ts';
 import { minuteLineups } from './lineups.ts';
+import { personnelFactor } from './personnel.ts';
 import type { DrawnPlayer } from './simulate.ts';
 import type { MatchupContext, RatePlayer, TeamProfile } from './types.ts';
 import type { Rng } from './rng.ts';
@@ -46,6 +47,10 @@ export function drawPossessions(
     if(eligible.length<5){
       const reserves=team.map((_,i)=>i).filter(i=>!eligible.includes(i)&&before[t][i]+mins[i]===0&&healthyReserve(team[i])&&(team[i].fouls??0)<6&&caps[t][i]-actual[t][i]>=periodLength-minute).sort((a,b)=>rates.get(team[b].athlete_id)!.minutes_mean-rates.get(team[a].athlete_id)!.minutes_mean);
       while(eligible.length<5&&reserves.length){const i=reserves.shift()!;emergency[t].add(i);eligible.push(i);}
+    }
+    if(eligible.length<5){
+      const sitters=team.map((_,i)=>i).filter(i=>!eligible.includes(i)&&availablePlayer(team[i])&&(team[i].fouls??0)<6&&caps[t][i]-actual[t][i]>=periodLength-minute).sort((a,b)=>rates.get(team[b].athlete_id)!.minutes_mean-rates.get(team[a].athlete_id)!.minutes_mean);
+      while(eligible.length<5&&sitters.length){const i=sitters.shift()!;emergency[t].add(i);eligible.push(i);}
     }
     if (eligible.length < 5) {
       const available = team.map((_,i)=>i).filter(i => availablePlayer(team[i]) && (team[i].fouls??0)<6 &&
@@ -100,18 +105,16 @@ export function drawPossessions(
     const andOne=ftModel?.and_one_per_make??0,technical=ftModel?.technical_per_possession??0;
     const retained=ftModel?.retained_per_possession??0,retainedWeights=ftModel?.retained_trip_weights??[0,0,0];
     const retainedAttempts=retainedWeights.reduce((s,w,i)=>s+w*(i+1),0)*retained;
-    const expectedMakes=sum(p.map((x,i)=>shots[i]*((1-x.tpa_given_fga)*x.fg2_pct+x.tpa_given_fga*x.tp_pct)));
-    const ordinaryAttempts=Math.max(0,fta-expectedMakes*andOne-possessions*(technical+retainedAttempts));
+    const ordinaryAttempts=Math.max(0,fta-sum(p.map((x,i)=>shots[i]*((1-x.tpa_given_fga)*x.fg2_pct+x.tpa_given_fga*x.tp_pct)))*andOne-possessions*(technical+retainedAttempts));
     const ftShare = ordinaryAttempts/tripMean/Math.max(1,fga+ordinaryAttempts/tripMean);
-    const fgValue = sum(p.map((x,i)=>shots[i]*(2*(1-x.tpa_given_fga)*x.fg2_pct+3*x.tpa_given_fga*x.tp_pct)))/Math.max(1,fga);
     const fgPct = sum(p.map((x,i)=>shots[i]*((1-x.tpa_given_fga)*x.fg2_pct+x.tpa_given_fga*x.tp_pct)))/Math.max(1,fga);
     const ftPct = sum(p.map((x,i)=>fts[i]*x.ft_pct))/Math.max(1,fta);
     const orb = bound(profile.offensive_rebound_rate);
     const tov = bound(profile.turnover_rate);
-    const raw = ((1-tov)*((1-ftShare)*(fgValue+fgPct*andOne*ftPct)+ftShare*tripMean*ftPct)+(technical+retainedAttempts)*ftPct)/Math.max(0.1,1-(1-tov)*((1-ftShare)*(1-fgPct+fgPct*andOne*(1-ftPct))+ftShare*(1-ftPct))*orb);
-    // Equal-strength shrinkage between the available lineup's scoring profile and observed team efficiency.
-    // This prior weight requires walk-forward calibration; no market values enter this expression.
-    const target = Math.sqrt(Math.max(0.01,raw)*profile.offense)*opponent.defense/context.league_efficiency*Math.exp(venue);
+    const factor = personnelFactor(p,mins,profile,context.free_throws,possessions);
+    // Tonight's lineup relative to the same roster at role minutes, including OUT players still on the card.
+    // Full-strength personnel keeps the fitted team rating; absences scale it. No geometric-mean shrinkage toward league-like player rates.
+    const target = Math.max(0.01,profile.offense*factor)*opponent.defense/context.league_efficiency*Math.exp(venue);
     // Solve expected points per possession for a make-rate multiplier, including second chances.
     const expected = (scale:number) => {
       const fg = sum(p.map((x,i)=>shots[i]*((1-x.tpa_given_fga)*bound(x.fg2_pct*scale)+x.tpa_given_fga*bound(x.tp_pct*scale))))/Math.max(1,fga);

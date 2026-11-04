@@ -1,4 +1,4 @@
-import { availablePlayer, healthyReserve, InsufficientRosterError, relaxMinuteCaps } from './roster-capacity.ts';
+import { availablePlayer, fillThinRoster, healthyReserve, InsufficientRosterError, relaxMinuteCaps } from './roster-capacity.ts';
 import {discreteRead,summarizeDistribution,type DistributionSummary} from './distributions.ts';
 import { conditionalParticipants } from './availability.ts';
 import { validateGame } from './validate-card.ts';
@@ -53,6 +53,7 @@ export interface DrawnPlayer {
   games_2026: number;
   games_2027: number;
   shooting_games: number;
+  replacement_level?: true;
   minutes_restriction?:number|null;
   min: number;
   fgm: number;
@@ -100,20 +101,24 @@ export interface MarginalRead {
   bucket: TypicalityBucket;
 }
 
-export interface PlayerExpectation {
-  playRate: number;
+export interface PlayedExpectation {
   minMean: number;
   ptsMean: number;
   rebMean: number;
   astMean: number;
   praMean: number;
   counts?: Partial<Record<'fgm'|'fga'|'tpm'|'tpa'|'ftm'|'fta'|'stl'|'blk'|'tov',number>>;
-  bands?:Partial<Record<keyof ToneSeries,PointsBand>>;
   minP10: number;
   minP90: number;
   ptsP10: number;
   ptsP90: number;
   ptsP95: number;
+}
+
+export interface PlayerExpectation extends PlayedExpectation {
+  playRate: number;
+  bands?:Partial<Record<keyof ToneSeries,PointsBand>>;
+  played: PlayedExpectation | null;
 }
 
 export interface SimulatedPlayer extends DrawnPlayer {
@@ -148,6 +153,7 @@ export interface ScenarioView {
 }
 
 export interface Simulation {
+  thin_rotation?: true;
   relaxedMinuteCapDraws?: number;
   overtime: boolean;
   budget: number;
@@ -186,7 +192,9 @@ export function isUnobservedProfile(player: {
   minutes_weight: number;
   shooting_games: number;
   games: number;
+  replacement_level?: true;
 }): boolean {
+  if (player.replacement_level) return false;
   return player.minutes_weight !== 0 && player.shooting_games === 0 && player.games < UNOBSERVED_MAX_GAMES;
 }
 
@@ -229,7 +237,8 @@ export function conditionalMinutes(player: AppearancePlayer): number {
   return Math.max(0, player.minutes_mean);
 }
 
-function cameo(player: Pick<RatePlayer, 'games_2026' | 'games_2027' | 'minutes_weight' | 'shooting_games'>): boolean {
+function cameo(player: Pick<RatePlayer, 'games_2026' | 'games_2027' | 'minutes_weight' | 'shooting_games' | 'replacement_level'>): boolean {
+  if (player.replacement_level) return false;
   return (
     player.minutes_weight !== 0 &&
     player.games_2027 === 0 &&
@@ -384,6 +393,7 @@ function restedLine(player: RatePlayer): DrawnPlayer {
     games_2026: player.games_2026,
     games_2027: player.games_2027,
     shooting_games: player.shooting_games,
+    replacement_level: player.replacement_level,
     minutes_restriction:player.minutes_restriction,
     min: 0,
     fgm: 0,
@@ -520,6 +530,11 @@ function extendSquad(state: SquadState, roster: RatePlayer[], playingIds: Set<st
     selected.add(reserve.athlete_id);
     playingIds.add(reserve.athlete_id);
   }
+  for (const reserve of roster.filter(p => eligible(p) && availablePlayer(p) && !selected.has(p.athlete_id)).sort((a,b) => b.minutes_mean-a.minutes_mean || byAthleteId(a,b))) {
+    if (roster.filter(p => selected.has(p.athlete_id) && eligible(p)).length >= 5) break;
+    selected.add(reserve.athlete_id);
+    playingIds.add(reserve.athlete_id);
+  }
   const playing = playingRoster(roster, selected);
   if (playing.filter(eligible).length < 5) throw new InsufficientRosterError(roster[0]?.team_id ?? 'unknown');
   const originalCaps = playing.map((player) => {
@@ -607,12 +622,17 @@ function participation(away: RatePlayer[], home: RatePlayer[], rng: Rng): Set<st
       if (roster.filter(p=>playing.has(p.athlete_id)).length >= 5) break;
       playing.add(reserve.athlete_id);
     }
+    for (const reserve of roster.filter(p=>availablePlayer(p) && !playing.has(p.athlete_id)).sort((a,b)=>b.minutes_mean-a.minutes_mean || byAthleteId(a,b))) {
+      if (roster.filter(p=>playing.has(p.athlete_id)).length >= 5) break;
+      playing.add(reserve.athlete_id);
+    }
     if (roster.filter(p=>playing.has(p.athlete_id)).length < 5) throw new InsufficientRosterError(roster[0]?.team_id ?? 'unknown');
   }
   return playing;
 }
 
 export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
+  game = fillThinRoster(game);
   if(game.context)game={...game,players:game.players.map(player=>{
     if(!player.shooting_posterior)return player;
     const draw={...player};
@@ -658,7 +678,7 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
     homePts = teamPoints(home.lines);
   }
   const missingShootingAthleteIds = game.players
-    .filter((player) => player.shooting_games === 0)
+    .filter((player) => player.shooting_games === 0 && !player.replacement_level)
     .map((player) => player.athlete_id)
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   const draw: RevisedDraw = {
@@ -743,17 +763,42 @@ function expectationFrom(series: ToneSeries | undefined): PlayerExpectation {
   const assists = series ? Array.from(series.ast) : [];
   const count = Math.max(minutes.length, 1);
   const mean = (values: number[]) => (values.length === 0 ? 0 : values.reduce((sum, value) => sum + value, 0) / values.length);
-  const played = minutes.filter((value) => value > 0).length;
+  const playedIdx = minutes.flatMap((value, index) => value > 0 ? [index] : []);
+  const slice = (values: number[]) => playedIdx.map(i => values[i]);
   const minMean = mean(minutes);
   const ptsMean = mean(points);
   const rebMean = mean(rebounds);
   const astMean = mean(assists);
   const minuteBand = bandFrom(minutes);
   const pointBand = bandFrom(points);
+  const playedMinutes = slice(minutes);
+  const playedPoints = slice(points);
+  const playedRebounds = slice(rebounds);
+  const playedAssists = slice(assists);
+  const playedMinuteBand = bandFrom(playedMinutes);
+  const playedPointBand = bandFrom(playedPoints);
+  const countMean = (key: 'fgm'|'fga'|'tpm'|'tpa'|'ftm'|'fta'|'stl'|'blk'|'tov', onlyPlayed: boolean) => {
+    if (!series?.[key]) return undefined;
+    const values = Array.from(series[key]!);
+    return mean(onlyPlayed ? slice(values) : values);
+  };
+  const played:PlayedExpectation|null = playedIdx.length ? {
+    counts: Object.fromEntries((['fgm','fga','tpm','tpa','ftm','fta','stl','blk','tov'] as const).filter(k=>series?.[k]!==undefined).map(k=>[k,countMean(k,true)])),
+    minMean: mean(playedMinutes),
+    ptsMean: mean(playedPoints),
+    rebMean: mean(playedRebounds),
+    astMean: mean(playedAssists),
+    praMean: mean(playedPoints) + mean(playedRebounds) + mean(playedAssists),
+    minP10: playedMinuteBand.p10,
+    minP90: playedMinuteBand.p90,
+    ptsP10: playedPointBand.p10,
+    ptsP90: playedPointBand.p90,
+    ptsP95: playedPointBand.p95,
+  } : null;
   const result:PlayerExpectation={
     bands:series?Object.fromEntries(Object.entries(series).map(([key,values])=>[key,bandFrom(values)])):{},
-    counts: Object.fromEntries((['fgm','fga','tpm','tpa','ftm','fta','stl','blk','tov'] as const).filter(k=>series?.[k]!==undefined).map(k=>[k,mean(Array.from(series?.[k]??[]))])),
-    playRate: played / count,
+    counts: Object.fromEntries((['fgm','fga','tpm','tpa','ftm','fta','stl','blk','tov'] as const).filter(k=>series?.[k]!==undefined).map(k=>[k,countMean(k,false)])),
+    playRate: playedIdx.length / count,
     minMean,
     ptsMean,
     rebMean,
@@ -764,6 +809,7 @@ function expectationFrom(series: ToneSeries | undefined): PlayerExpectation {
     ptsP10: pointBand.p10,
     ptsP90: pointBand.p90,
     ptsP95: pointBand.p95,
+    played,
   };
   if(series)expectationCache.set(series,result);
   return result;
@@ -819,6 +865,7 @@ function scenarioFrom(
 
 export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIONS, progress?:(completed:number)=>void): Simulation {
   if (!Number.isInteger(iterations) || iterations < 1) throw new Error('iterations must be a positive integer');
+  game = fillThinRoster(game);
   validateGame(game);
   for(const team of [game.away_team_id,game.home_team_id])if(!game.players.some(p=>p.team_id===team&&p.minutes_weight!==0&&((p.fga_per_min>0&&(p.fg2_pct>0||p.tp_pct>0))||(p.fta_per_min>0&&p.ft_pct>0))))throw new Error('Forecast unavailable: no scoring support');
   const seed = baseSeed >>> 0;
@@ -862,6 +909,7 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
     series,
   );
   return {
+    ...(game.thin_rotation ? {thin_rotation: true as const} : {}),
     ...(relaxedMinuteCapDraws ? {relaxedMinuteCapDraws} : {}),
     overtime: chosen.overtime,
     budget: chosen.budget,
@@ -871,7 +919,7 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
     regulationAwayPts: chosen.regulationAwayPts,
     regulationHomePts: chosen.regulationHomePts,
     missingShootingAthleteIds: game.players
-      .filter((player) => player.shooting_games === 0)
+      .filter((player) => player.shooting_games === 0 && !player.replacement_level)
       .map((player) => player.athlete_id)
       .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
     combinedTotals,
