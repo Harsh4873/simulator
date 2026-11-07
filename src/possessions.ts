@@ -6,6 +6,7 @@ import {lineupLogEffect} from './lineup-effects.ts';
 import { minuteLineups } from './lineups.ts';
 import { personnelFactor } from './personnel.ts';
 import { leadTilt } from './lead-effect.ts';
+import { concentrate } from './usage-concentration.ts';
 import type { DrawnPlayer } from './simulate.ts';
 import type { MatchupContext, RatePlayer, TeamProfile } from './types.ts';
 import type { Rng } from './rng.ts';
@@ -103,6 +104,14 @@ export function drawPossessions(
     let blocks = q.map((x,i)=>defMins[i]*(x.blk_per_min ?? 0));
     let turnovers = p.map((x,i)=>mins[i]*(x.tov_per_min ?? 0));
     const fga=sum(shots), fta=sum(fts);
+    // Shot and trip shares lean toward high-usage players by the fitted exponent; team totals stay the same.
+    const usage=context.usage_concentration?.status==='fitted'?context.usage_concentration:null;
+    const shotExponent=usage?.shots??1,tripExponent=usage?.trips??1,assistExponent=usage?.assists??1,reboundExponent=usage?.rebounds??1;
+    // Box scores credit only part of non-offensive-rebound misses to a defender; the rest are uncredited team rebounds.
+    const defensiveCredit=context.rebound_credit?.status==='fitted'?context.rebound_credit.defensive:1;
+    const rescale=(xs:number[],total:number)=>{const s=sum(xs);return s>0?xs.map(x=>x*total/s):xs;};
+    shots=rescale(p.map((x,i)=>mins[i]*concentrate(x.fga_per_min,shotExponent)),fga);
+    fts=rescale(p.map((x,i)=>mins[i]*concentrate(x.fta_per_min,tripExponent)),fta);
     const ftModel=context.free_throws?.status==='fitted'?context.free_throws:null;
     const tripMean=ftModel?2*ftModel.trip_weights[0]+3*ftModel.trip_weights[1]:2;
     const andOne=ftModel?.and_one_per_make??0,technical=ftModel?.technical_per_possession??0;
@@ -136,10 +145,10 @@ export function drawPossessions(
       lastMinute=minute;
       const on=new Set(offStints[minute]),against=new Set(defStints[minute]);
       const active=[...on],activeWeights=usageWeights(context.usage_effects,off[0].team_id,active.map(i=>off[i].athlete_id),active.map(i=>p[i].fga_per_min));
-      shots=p.map(()=>0);active.forEach((i,j)=>shots[i]=activeWeights[j]);fts=p.map((x,i)=>on.has(i)?x.fta_per_min:0);
-      creators=p.map((x,i)=>on.has(i)?x.ast_per_min:0);offensiveBoards=p.map((x,i)=>on.has(i)?x.reb_per_min:0);
+      shots=p.map(()=>0);active.forEach((i,j)=>shots[i]=concentrate(activeWeights[j],shotExponent));fts=p.map((x,i)=>on.has(i)?concentrate(x.fta_per_min,tripExponent):0);
+      creators=p.map((x,i)=>on.has(i)?concentrate(x.ast_per_min,assistExponent):0);offensiveBoards=p.map((x,i)=>on.has(i)?concentrate(x.reb_per_min,reboundExponent):0);
       turnovers=p.map((x,i)=>on.has(i)?x.tov_per_min??0:0);
-      defensiveBoards=q.map((x,i)=>against.has(i)?x.reb_per_min:0);steals=q.map((x,i)=>against.has(i)?x.stl_per_min??0:0);blocks=q.map((x,i)=>against.has(i)?x.blk_per_min??0:0);
+      defensiveBoards=q.map((x,i)=>against.has(i)?concentrate(x.reb_per_min,reboundExponent):0);steals=q.map((x,i)=>against.has(i)?x.stl_per_min??0:0);blocks=q.map((x,i)=>against.has(i)?x.blk_per_min??0:0);
       lineupEffect=context.lineup_effects?.status==='fitted'?lineupLogEffect(context.lineup_effects,off[0].team_id,[...on].map(i=>off[i].athlete_id),'offense')+lineupLogEffect(context.lineup_effects,def[0].team_id,[...against].map(i=>def[i].athlete_id),'defense'):0;
       }
       if(technical>0&&rng()<technical){const who=pick(fts,rng);if(who>=0){off[who].fta++;off[who].ft_technical=(off[who].ft_technical??0)+1;if(rng()<p[who].ft_pct){off[who].ftm++;off[who].pts++;}}}
@@ -198,7 +207,7 @@ export function drawPossessions(
           if(rng()<orb) {
             const who=pick(offensiveBoards,rng);
             if(who>=0){off[who].reb++;off[who].orb=(off[who].orb??0)+1;live=true;}
-          } else {
+          } else if(defensiveCredit>=1||rng()<defensiveCredit) {
             const who=pick(defensiveBoards,rng);
             if(who>=0){def[who].reb++;def[who].drb=(def[who].drb??0)+1;}
           }

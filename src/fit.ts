@@ -3,6 +3,14 @@ import type { OutcomeRow, PositionGroup, RatePlayer, ShootingRow } from './types
 export const SEASON_WEIGHT_2027 = 1;
 export const K_GAMES = 10;
 export const K_MINUTES = 200;
+/**
+ * Per-minute counting rates (attempts, free throws, rebounds, assists, steals, blocks, turnovers) shrink toward the
+ * team/position mean with a 75-minute prior and count last season at half weight. On 13,171 out-of-sample player-games
+ * the old 200-minute prior and 0.2 weight pulled stars' volume down and role players' up; this pair cut that bias by
+ * about half and lowered attempt, rebound and assist error.
+ */
+export const K_RATE_MINUTES = 75;
+export const PLAYER_RATE_PRIOR_SEASON_WEIGHT = 0.5;
 export const K_FGA_SHARE = 80;
 export const K_FG2 = 60;
 export const K_TP = 40;
@@ -224,8 +232,11 @@ export function fitPlayers(input: FitInput): FitResult {
   const games2027 = new Map<string, number>();
   const shootingGames = new Map<string, number>();
 
+  const active = input.activeSeason ?? 2027;
+  const rateWeight = (season: number) => (season === active ? 1 : season === active - 1 ? PLAYER_RATE_PRIOR_SEASON_WEIGHT : 0);
   for (const row of input.outcomes) {
     const weight = seasonWeight(row.season,input.activeSeason??2027);
+    const counting = rateWeight(row.season);
     if (weight === 0 || !(row.minutes > 0) || !row.athlete_id) continue;
     const group = groupFor(row.athlete_id);
     if (row.stat_key === 'points') {
@@ -233,12 +244,12 @@ export function fitPlayers(input: FitInput): FitResult {
       const bucket = row.season === (input.activeSeason??2027) ? games2027 : games2026;
       bucket.set(row.athlete_id, (bucket.get(row.athlete_id) ?? 0) + 1);
     } else if (row.stat_key === 'totalRebounds') {
-      add(reb, row.athlete_id, row.team_id, group, weight * row.actual, weight * row.minutes);
+      add(reb, row.athlete_id, row.team_id, group, counting * row.actual, counting * row.minutes);
     } else if (['steals','blocks','turnovers'].includes(row.stat_key)) {
       const pool = row.stat_key === 'steals' ? stl : row.stat_key === 'blocks' ? blk : tov;
-      add(pool,row.athlete_id,row.team_id,group,weight*row.actual,weight*row.minutes);
+      add(pool,row.athlete_id,row.team_id,group,counting*row.actual,counting*row.minutes);
     } else if (row.stat_key === 'assists') {
-      add(ast, row.athlete_id, row.team_id, group, weight * row.actual, weight * row.minutes);
+      add(ast, row.athlete_id, row.team_id, group, counting * row.actual, counting * row.minutes);
     }
   }
 
@@ -247,8 +258,9 @@ export function fitPlayers(input: FitInput): FitResult {
     if (weight === 0 || !row.athlete_id || !(row.minutes > 0)) continue;
     shootingGames.set(row.athlete_id, (shootingGames.get(row.athlete_id) ?? 0) + row.games);
     const group = groupFor(row.athlete_id);
-    add(fga, row.athlete_id, row.team_id, group, weight * row.fga, weight * row.minutes);
-    add(fta, row.athlete_id, row.team_id, group, weight * row.fta, weight * row.minutes);
+    const counting = rateWeight(row.season);
+    add(fga, row.athlete_id, row.team_id, group, counting * row.fga, counting * row.minutes);
+    add(fta, row.athlete_id, row.team_id, group, counting * row.fta, counting * row.minutes);
     add(tpaShare, row.athlete_id, row.team_id, group, weight * row.tpa, weight * row.fga);
     add(fg2, row.athlete_id, row.team_id, group, weight * (row.fgm - row.tpm), weight * (row.fga - row.tpa));
     add(tp, row.athlete_id, row.team_id, group, weight * row.tpm, weight * row.tpa);
@@ -279,8 +291,8 @@ export function fitPlayers(input: FitInput): FitResult {
     const injury = assignInjury(resolveInjury(player, input.injuries));
     const shootingCount = shootingGames.get(player.athlete_id) ?? 0;
     const gameCount = priorGames2026 + priorGames2027;
-    let fgaPerMin = clampPerMinute(rate(fga, K_MINUTES, player.athlete_id, player.team_id, group));
-    let ftaPerMin = clampPerMinute(rate(fta, K_MINUTES, player.athlete_id, player.team_id, group));
+    let fgaPerMin = clampPerMinute(rate(fga, K_RATE_MINUTES, player.athlete_id, player.team_id, group));
+    let ftaPerMin = clampPerMinute(rate(fta, K_RATE_MINUTES, player.athlete_id, player.team_id, group));
     const shootingPosterior:Partial<Record<'share'|'fg2'|'tp'|'ft',[number,number]>>={};
     let tpaGivenFga = clampProbability(rate(tpaShare, K_FGA_SHARE, player.athlete_id, player.team_id, group));
     let fg2Pct = clampProbability(rate(fg2, K_FG2, player.athlete_id, player.team_id, group));
@@ -332,11 +344,11 @@ export function fitPlayers(input: FitInput): FitResult {
       fg2_pct: fg2Pct,
       tp_pct: tpPct,
       ft_pct: ftPct,
-      reb_per_min: clampPerMinute(rate(reb, K_MINUTES, player.athlete_id, player.team_id, group)),
-      ...(stl.league.e > 0 ? {stl_per_min: clampPerMinute(rate(stl,K_MINUTES,player.athlete_id,player.team_id,group))} : {}),
-      ...(blk.league.e > 0 ? {blk_per_min: clampPerMinute(rate(blk,K_MINUTES,player.athlete_id,player.team_id,group))} : {}),
-      ...(tov.league.e > 0 ? {tov_per_min: clampPerMinute(rate(tov,K_MINUTES,player.athlete_id,player.team_id,group))} : {}),
-      ast_per_min: clampPerMinute(rate(ast, K_MINUTES, player.athlete_id, player.team_id, group)),
+      reb_per_min: clampPerMinute(rate(reb, K_RATE_MINUTES, player.athlete_id, player.team_id, group)),
+      ...(stl.league.e > 0 ? {stl_per_min: clampPerMinute(rate(stl,K_RATE_MINUTES,player.athlete_id,player.team_id,group))} : {}),
+      ...(blk.league.e > 0 ? {blk_per_min: clampPerMinute(rate(blk,K_RATE_MINUTES,player.athlete_id,player.team_id,group))} : {}),
+      ...(tov.league.e > 0 ? {tov_per_min: clampPerMinute(rate(tov,K_RATE_MINUTES,player.athlete_id,player.team_id,group))} : {}),
+      ast_per_min: clampPerMinute(rate(ast, K_RATE_MINUTES, player.athlete_id, player.team_id, group)),
     };
     if (typeof player.headshot_url === 'string' && player.headshot_url.trim()) {
       ratePlayer.headshot_url = player.headshot_url;

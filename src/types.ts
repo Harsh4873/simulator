@@ -198,6 +198,8 @@ export interface MatchupContext {
   usage_effects?:import('./usage-effects.ts').UsageEffects;
   rotation_state?:import('./game-state-model.ts').RotationStateModel;
   lead_effect?:import('./lead-effect.ts').LeadEffectModel;
+  usage_concentration?:import('./usage-concentration.ts').UsageConcentration;
+  rebound_credit?:import('./rebound-credit.ts').ReboundCredit;
   fouls?:import('./game-state-model.ts').FoulModel;
   residual_diagnostics?:import('./residual-model.ts').ResidualDiagnostics;
   lineup_effects?:import('./lineup-effects.ts').LineupEffects;

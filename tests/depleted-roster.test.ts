@@ -87,7 +87,7 @@ test('cap relaxation preserves ordinary caps and stops at the physical period ma
 // Non-integers are rounded to nine significant digits so last-bit libm differences between CPU platforms cannot move the pin;
 // every minute, attempt, make, rebound, assist, foul and point stays pinned exactly.
 const stableDraw=(draw:unknown)=>JSON.stringify(draw,(_key,value)=>typeof value==='number'&&!Number.isInteger(value)?Number(value.toPrecision(9)):value);
-test('ordinary possessions-v6 seeded draws stay deterministic after personnel targeting',()=>{
+test('ordinary possessions-v7 seeded draws stay deterministic after personnel targeting',()=>{
   const baseline=JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/seeded-draws.json','utf8')) as {event_id:string;seed:number;sha256:string}[];
   for(const row of baseline){
     const draw=drawGame(card.games.find(g=>g.event_id===row.event_id)!,mulberry32(row.seed));

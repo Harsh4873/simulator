@@ -3,6 +3,8 @@ import {freshnessBudget} from './refresh-window.ts';
 import { healthyCheck, type RefreshHealth } from './generation.ts';
 import { chicagoDate } from './date.ts';
 import { MAX_LEAD_TILT } from './lead-effect.ts';
+import { USAGE_EXPONENT_RANGE } from './usage-concentration.ts';
+import { MIN_DEFENSIVE_CREDIT } from './rebound-credit.ts';
 import type { RateCard, RateGame, Slate } from './types.ts';
 
 export function validateGame(game: RateGame): void {
@@ -29,6 +31,8 @@ export function validateGame(game: RateGame): void {
     if(!Number.isFinite(c.league_efficiency)||c.league_efficiency<=0||!Number.isFinite(c.pace_sd)||c.pace_sd<0||!Number.isFinite(c.home_log_advantage))throw new Error('Invalid matchup model');
     const distribution=(xs:number[])=>{if(!Array.isArray(xs)||!xs.length||xs.some(x=>!Number.isFinite(x)||x<0)||Math.abs(xs.reduce((a,b)=>a+b,0)-1)>1e-6)throw new Error('Invalid fitted probability distribution');};
     if(c.fouls?.status==='fitted'){distribution(c.fouls.probabilities);for(const xs of Object.values(c.fouls.by_count))distribution(xs);}
+    if(c.usage_concentration?.status==='fitted'&&[c.usage_concentration.shots,c.usage_concentration.trips,c.usage_concentration.assists??1,c.usage_concentration.rebounds??1].some(x=>!Number.isFinite(x)||x<USAGE_EXPONENT_RANGE[0]||x>USAGE_EXPONENT_RANGE[1]))throw new Error('Invalid usage concentration');
+    if(c.rebound_credit?.status==='fitted'&&(!Number.isFinite(c.rebound_credit.defensive)||c.rebound_credit.defensive<MIN_DEFENSIVE_CREDIT||c.rebound_credit.defensive>1))throw new Error('Invalid rebound credit');
     if(c.lead_effect?.status==='fitted'&&[c.lead_effect.early,c.lead_effect.late].some(x=>!Number.isFinite(x)||x<0||x>MAX_LEAD_TILT))throw new Error('Invalid lead effect');
     if(c.rotation_state?.status==='fitted'){for(const p of [...Object.values(c.rotation_state.shares),...Object.values(c.rotation_state.baseline)])if(!Number.isFinite(p)||p<=0||p>=1)throw new Error('Invalid fitted rotation probability');}
     if(c.free_throws?.status==='fitted'){
@@ -56,7 +60,7 @@ export function validateGeneration(slate: Slate, card: RateCard): void {
   if (slate?.schema_version !== 1 || card?.schema_version !== 1 || !Array.isArray(slate.games) || !Array.isArray(card.games)) throw new Error('Invalid data schema');
   if (!slate.generated_at || !Number.isFinite(Date.parse(slate.generated_at)) || slate.generated_at !== card.generated_at || slate.date !== card.date) throw new Error('Mismatched data generations');
   if(card.generator_sha==='local-uncommitted')throw new Error('Uncommitted generator provenance is not publishable');
-  if(card.model_version&&!['possessions-v1','possessions-v2','possessions-v3','possessions-v4','possessions-v5','possessions-v6'].includes(card.model_version))throw new Error('Unsupported model version');
+  if(card.model_version&&!['possessions-v1','possessions-v2','possessions-v3','possessions-v4','possessions-v5','possessions-v6','possessions-v7'].includes(card.model_version))throw new Error('Unsupported model version');
   if (slate.timezone !== 'America/Chicago' || card.iterations !== 10000 || !Array.isArray(card.columns)) throw new Error('Invalid simulation contract');
   if (slate.games.length !== card.games.length || new Set(card.games.map(g => g.event_id)).size !== card.games.length || new Set(slate.games.map(g => g.event_id)).size !== slate.games.length) throw new Error('Incomplete slate coverage');
   if(!['min','fgm','fga','tpm','tpa','ftm','fta','pts','reb','ast'].every(k=>card.columns.includes(k as typeof card.columns[number])))throw new Error('Missing display columns');
