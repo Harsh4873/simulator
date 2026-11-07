@@ -197,6 +197,7 @@ export interface MatchupContext {
   timezone_coefficient?:number|null;
   usage_effects?:import('./usage-effects.ts').UsageEffects;
   rotation_state?:import('./game-state-model.ts').RotationStateModel;
+  lead_effect?:import('./lead-effect.ts').LeadEffectModel;
   fouls?:import('./game-state-model.ts').FoulModel;
   residual_diagnostics?:import('./residual-model.ts').ResidualDiagnostics;
   lineup_effects?:import('./lineup-effects.ts').LineupEffects;

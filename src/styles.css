@@ -120,7 +120,7 @@ button, input, select { font: inherit; }
   color: var(--text);
 }
 
-.sub, .tip, .status, .tag, .spread, .note, .state, .legend, .draw-index, .sim-label, .percentile-caption, .interval-caption, .win-caption {
+.sub, .tip, .status, .tag, .spread, .note, .state, .draw-index, .sim-label, .percentile-caption, .interval-caption, .win-caption {
   color: var(--muted);
 }
 
@@ -508,7 +508,7 @@ html[data-theme="light"] .pill.tone-out { background: #fde8e7; color: #b42318; }
 
 .avatar .mono { font-size: 0.6875rem; font-weight: 800; color: var(--muted); }
 
-.tip, .status, .tag, .spread, .note, .state, .legend, .draw-index, .sim-label, .percentile-caption, .interval-caption, .win-caption { margin: 0; }
+.tip, .status, .tag, .spread, .note, .state, .draw-index, .sim-label, .percentile-caption, .interval-caption, .win-caption { margin: 0; }
 
 .tag { font-size: 0.8125rem; margin-top: 6px; }
 
@@ -615,8 +615,6 @@ html[data-theme="light"] .pill.tone-out { background: #fde8e7; color: #b42318; }
 .draw-score.away { grid-column: 1; grid-row: 3; }
 .draw-score.home { grid-column: 2; grid-row: 3; text-align: right; }
 
-.draw-board .team-pct.away { grid-column: 1; grid-row: 4; justify-self: start; }
-.draw-board .team-pct.home { grid-column: 2; grid-row: 4; justify-self: end; }
 
 .scoreboard {
   display: grid;
@@ -649,8 +647,6 @@ html[data-theme="light"] .pill.tone-out { background: #fde8e7; color: #b42318; }
 .interval.away { grid-area: 5 / 1; }
 .interval.home { grid-area: 5 / 3; text-align: right; }
 .interval-caption { grid-area: 6 / 1 / 7 / 4; text-align: center; font-size: 0.75rem; }
-.scoreboard .team-pct.away { grid-area: 7 / 1; }
-.scoreboard .team-pct.home { grid-area: 7 / 3; justify-self: end; }
 .percentile-caption { grid-area: 8 / 1 / 9 / 4; text-align: center; font-size: 0.8125rem; }
 .margin-caption {
   grid-area: 10 / 1 / 11 / 4;
@@ -706,16 +702,6 @@ html[data-theme="light"] .pill.tone-out { background: #fde8e7; color: #b42318; }
 
 .win-away { color: var(--blue); }
 .win-home { color: var(--accent); }
-
-.team-pct {
-  display: inline-block;
-  margin-top: 2px;
-  padding: 2px 8px;
-  border-radius: 8px;
-  font-family: var(--mono);
-  font-size: 0.875rem;
-  line-height: 1.3;
-}
 
 .tie-line {
   text-align: center;
@@ -876,67 +862,6 @@ html[data-theme="light"] .ot { color: #ffffff; }
 .hist .axis { stroke: var(--border-strong); stroke-width: 1; }
 .hist .tick { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
 .hist .tick.mid { fill: var(--text); font-weight: 700; }
-
-/* Options */
-
-.view-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 22px;
-  align-items: flex-start;
-  margin: 0 0 6px;
-}
-
-.color-choice,
-.scenario-choice {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  margin: 0 0 12px;
-  color: var(--text);
-  font-size: 0.9rem;
-  line-height: 1.4;
-  max-width: 42rem;
-  cursor: pointer;
-}
-
-.color-choice input,
-.scenario-choice input {
-  appearance: none;
-  -webkit-appearance: none;
-  flex: none;
-  position: relative;
-  width: 2.25rem;
-  height: 1.25rem;
-  margin: 0;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  cursor: pointer;
-  transition: background-color 150ms;
-}
-
-.color-choice input::after,
-.scenario-choice input::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 0.875rem;
-  height: 0.875rem;
-  border-radius: 50%;
-  background: var(--muted);
-  transition: transform 150ms, background-color 150ms;
-}
-
-.color-choice input:checked,
-.scenario-choice input:checked { background: color-mix(in srgb, var(--accent) 35%, var(--surface)); border-color: var(--accent); }
-
-.color-choice input:checked::after,
-.scenario-choice input:checked::after { transform: translateX(1rem); background: var(--accent); }
-
-.color-choice input:focus-visible,
-.scenario-choice input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 .dist-panel {
   margin: 6px 0 8px;
@@ -1176,40 +1101,12 @@ td .pct {
   opacity: 0.85;
 }
 
-td[data-bucket],
-.tone[data-bucket] { transition: background-color 150ms; }
-
-.desk[data-colors="on"] td[data-bucket="0"],
-.desk[data-colors="on"] .tone[data-bucket="0"] { background: #1e3344; color: #e8edf2; }
-
-.desk[data-colors="on"] td[data-bucket="1"],
-.desk[data-colors="on"] .tone[data-bucket="1"] { background: #1a4d68; color: #e8edf2; }
-
-.desk[data-colors="on"] td[data-bucket="2"],
-.desk[data-colors="on"] .tone[data-bucket="2"] { background: #1a6a8c; color: #e8edf2; }
-
-.desk[data-colors="on"] td[data-bucket="3"],
-.desk[data-colors="on"] .tone[data-bucket="3"] { background: #2f8eb0; color: #061018; }
-
-.desk[data-colors="on"] td[data-bucket="4"],
-.desk[data-colors="on"] .tone[data-bucket="4"] { background: #5eabc4; color: #061018; }
-
-.desk[data-colors="on"] td[data-bucket="5"],
-.desk[data-colors="on"] .tone[data-bucket="5"] { background: #a9d4e4; color: #061018; }
-
-.desk[data-colors="on"] td[data-bucket="6"],
-.desk[data-colors="on"] .tone[data-bucket="6"] { background: #e7f5fb; color: #061018; }
-
 .pct { color: inherit; }
 
-.legend, .note {
+.note {
   font-size: 0.8125rem;
   line-height: 1.5;
 }
-
-.legend { display: none; margin-top: 14px; }
-
-.desk[data-colors="on"] .legend { display: block; }
 
 .note { margin-top: 10px; max-width: 60rem; }
 
@@ -1264,10 +1161,6 @@ td[data-bucket],
 .line dt { margin: 0; color: var(--muted); }
 
 .line dd { margin: 0; }
-
-.tone .stat { margin-right: 4px; }
-
-.tone .pct { font-size: 0.75rem; }
 
 .why p { margin: 8px 0 0; line-height: 1.45; }
 
@@ -1460,8 +1353,6 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
   .win-caption { grid-column: 1 / -1; }
 
   .interval-caption { grid-row: 8; }
-  .scoreboard .team-pct.away { grid-column: 1; grid-row: 9; }
-  .scoreboard .team-pct.home { grid-column: 2; grid-row: 9; }
   .percentile-caption { grid-row: 10; }
   .win-caption { grid-row: 11; }
   .margin-caption { grid-column: 1 / -1; grid-row: 12; }
@@ -1481,16 +1372,9 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  td[data-bucket],
-  .tone[data-bucket] { transition: none; }
-
   button,
   .game-card,
-  .choice-opt span,
-  .color-choice input,
-  .color-choice input::after,
-  .scenario-choice input,
-  .scenario-choice input::after { transition: none; }
+  .choice-opt span { transition: none; }
 
   button:hover:not(:disabled),
   .game-card:hover { transform: none; }

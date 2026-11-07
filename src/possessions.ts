@@ -5,6 +5,7 @@ import {usageWeights} from './usage-effects.ts';
 import {lineupLogEffect} from './lineup-effects.ts';
 import { minuteLineups } from './lineups.ts';
 import { personnelFactor } from './personnel.ts';
+import { leadTilt } from './lead-effect.ts';
 import type { DrawnPlayer } from './simulate.ts';
 import type { MatchupContext, RatePlayer, TeamProfile } from './types.ts';
 import type { Rng } from './rng.ts';
@@ -25,7 +26,7 @@ const bound = (v:number) => Math.max(0,Math.min(1,v));
 export function drawPossessions(
   away: DrawnPlayer[], home: DrawnPlayer[], roster: RatePlayer[], awayMinutes: number[], homeMinutes: number[],
   context: MatchupContext, possessions: number, rng: Rng,
-): void {
+): number[] {
   const periodLength=awayMinutes.reduce((a,b)=>a+b,0)/5;
   const rates = new Map(roster.map(p=>[p.athlete_id,p]));
   const roles=(players:DrawnPlayer[])=>({opening:players.map(p=>rates.get(p.athlete_id)?.starter_rate??0),closing:players.map(p=>rates.get(p.athlete_id)?.closing_rate??0)});
@@ -88,7 +89,9 @@ export function drawPossessions(
       p.fouls=Math.min(6,previousFouls+Math.max(0,pick(weights,rng)));if(p.fouls===6&&previousFouls<6)p.foul_out_minute=before[0].reduce((a,b)=>a+b,0)/5+minute+1;
     }
   };
-  const attack = (off: DrawnPlayer[], def: DrawnPlayer[], mins: number[], defMins: number[], profile: TeamProfile, opponent: TeamProfile, venue: number, offStints:number[][], defStints:number[][]) => {
+  // Home minus away expected points per possession, set once both targets are solved.
+  let edge=0;
+  const attack = (off: DrawnPlayer[], def: DrawnPlayer[], mins: number[], defMins: number[], profile: TeamProfile, opponent: TeamProfile, venue: number, offStints:number[][], defStints:number[][], side: 1|-1) => {
     const p = off.map(x=>rates.get(x.athlete_id)!);
     const q = def.map(x=>rates.get(x.athlete_id)!);
     let shots = p.map((x,i)=>mins[i]*x.fga_per_min);
@@ -127,7 +130,7 @@ export function drawPossessions(
     const stealChance=bound(sum(steals)/Math.max(1,possessions*tov));
     const blockChance=bound(sum(blocks)/Math.max(1,possessions*(1-tov)*(1-fgPct)));
     let lastMinute=-1,lineupEffect=0;
-    return (n:number) => {
+    const play = (n:number) => {
       const minute=Math.min(periodLength-1,Math.floor(n*periodLength/possessions));
       if(minute!==lastMinute){
       lastMinute=minute;
@@ -176,7 +179,9 @@ export function drawPossessions(
         } else {
           const three=rng()<rate.tpa_given_fga;
           line.fga++;if(three)line.tpa++;
-          const made=rng()<bound((three?rate.tp_pct:rate.fg2_pct)*efficiency*Math.exp(lineupEffect));
+          // Trailing teams make a little more and leading teams a little less, fitted from quarter-by-quarter give-back.
+          const tilt=context.lead_effect?.status==='fitted'?leadTilt(context.lead_effect,sum(off.map(x=>x.pts))-sum(def.map(x=>x.pts))-side*edge*n,periodLength!==48||minute>=36):0;
+          const made=rng()<bound((three?rate.tp_pct:rate.fg2_pct)*efficiency*Math.exp(lineupEffect+tilt));
           if(made) {
             line.fgm++;if(three)line.tpm++;line.pts+=three?3:2;
             if(andOne>0&&rng()<andOne){line.fta++;line.ft_and_one=(line.ft_and_one??0)+1;if(rng()<rate.ft_pct){line.ftm++;line.pts++;}else miss=true;}
@@ -199,17 +204,23 @@ export function drawPossessions(
           }
         }
       }
-    }
+    };
+    return Object.assign(play,{target});
   };
   const rest=context.away.rest_days!==null&&context.home.rest_days!==null?(context.rest_coefficient??0)*(Math.log1p(context.home.rest_days)-Math.log1p(context.away.rest_days)):0;
   const delta=(key:'previous_minutes'|'travel_km'|'timezone_change_hours')=>{const a=context.away.schedule?.[key],h=context.home.schedule?.[key];return a!=null&&h!=null?h-a:0;};
   const venue=(context.neutral?0:context.home_log_advantage)+rest+(context.workload_coefficient??0)*delta('previous_minutes')/5+(context.travel_coefficient??0)*delta('travel_km')/1000+(context.timezone_coefficient??0)*delta('timezone_change_hours');
-  const a=attack(away,home,awayMinutes,homeMinutes,context.away,context.home,-venue,awayLineups,homeLineups);
-  const h=attack(home,away,homeMinutes,awayMinutes,context.home,context.away,venue,homeLineups,awayLineups);
+  const a=attack(away,home,awayMinutes,homeMinutes,context.away,context.home,-venue,awayLineups,homeLineups,-1);
+  const h=attack(home,away,homeMinutes,awayMinutes,context.home,context.away,venue,homeLineups,awayLineups,1);
+  edge=h.target-a.target;
+  // Home margins at the end of the first three quarters, for checking quarter dynamics against real games.
+  const checkpoints:number[]=[];
   for(let minute=0;minute<periodLength;minute++){
     if(dynamic){adjust(away,awayLineups,awayMinutes,minute,0);adjust(home,homeLineups,homeMinutes,minute,1);}
     for(let n=Math.ceil(minute*possessions/periodLength);n<Math.ceil((minute+1)*possessions/periodLength);n++){a(n);h(n);}
     if(dynamic){foulMinute(away,awayLineups,minute);foulMinute(home,homeLineups,minute);}
+    if(periodLength===48&&minute%12===11&&minute<47)checkpoints.push(sum(home.map(p=>p.pts))-sum(away.map(p=>p.pts)));
   }
   if(dynamic)for(const [t,team,mins] of [[0,away,awayMinutes],[1,home,homeMinutes]] as const)team.forEach((p,i)=>{mins[i]=actual[t][i];p.min=before[t][i]+mins[i];});
+  return checkpoints;
 }

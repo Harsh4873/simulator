@@ -45,9 +45,9 @@ test('current sampler expected columns, bands, progress and displayed score anno
  }
  const html=renderBoxScore(slate.games[0],card.games[0],sim,new Date());
  assert.ok(html.includes(`mean ${sim.distributions!.total.mean.toFixed(1)}`));
- assert.ok(html.includes('Mid-CDF'));
+ assert.equal(html.includes('Mid-CDF'),false);
  const p=card.games[0].players[0];
- const panel=renderPlayerPanel(slate.games[0],card.games[0],sim,p.athlete_id,'median','forecast');
+ const panel=renderPlayerPanel(slate.games[0],card.games[0],sim,p.athlete_id,'forecast');
  assert.ok(panel.includes('Conditional minute target:'));
 });
 test('artifact and privacy boundaries fail on prohibited fixtures',()=>{

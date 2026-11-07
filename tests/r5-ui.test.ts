@@ -82,7 +82,7 @@ test('slate cards keep Simulate, add Lineups and flag the viewer\'s changes',()=
 test('the score view shows the call banner, key numbers and both distributions',()=>{
  const g=slate.games.find(x=>x.event_id===game.event_id)!;
  const sim=simulate(game,5,400);
- const html=renderBoxScore(g,game,sim,new Date(),undefined,'median',{ruledOut:['A Player'],ruledIn:[]});
+ const html=renderBoxScore(g,game,sim,new Date(),undefined,{ruledOut:['A Player'],ruledIn:[]});
  assert.match(html,/Your lineups\./);assert.match(html,/Ruled out: A Player/);assert.match(html,/data-lineup-clear/);
  assert.match(html,/Win chance/);assert.match(html,/Projected total/);
  assert.equal((html.match(/<svg class="hist"/g)??[]).length,2);

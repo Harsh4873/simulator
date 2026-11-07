@@ -93,6 +93,8 @@ export interface RevisedDraw extends Draw {
   missingShootingAthleteIds: string[];
   periodMinutes?: { away: number[]; home: number[] }[];
   possessions?: number[];
+  /** Home margin at the end of quarters one to three (possession model only). */
+  checkpoints?: number[];
 }
 
 export interface MarginalRead {
@@ -654,10 +656,11 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
   }
   const periodMinutes = [{away:away.lines.map(p=>p.min),home:home.lines.map(p=>p.min)}];
   const possessions: number[] = [];
+  let checkpoints: number[] | undefined;
   const pace = game.context ? Math.max(1,(game.context.away.pace+game.context.home.pace)/2 + normal(rng)*game.context.pace_sd) : 0;
   if(game.context) {
     possessions.push(Math.round(pace));
-    drawPossessions(away.lines,home.lines,game.players,periodMinutes[0].away,periodMinutes[0].home,game.context,possessions[0],rng);
+    checkpoints=drawPossessions(away.lines,home.lines,game.players,periodMinutes[0].away,periodMinutes[0].home,game.context,possessions[0],rng);
   }
   for(const line of [...away.lines,...home.lines]){regulationMinutes.set(`${line.team_id}:${line.athlete_id}`,line.min);if(line.min>0)playingIds.add(line.athlete_id);}
   let awayPts = teamPoints(away.lines);
@@ -688,6 +691,7 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
   const draw: RevisedDraw = {
     ...([...away.lines, ...home.lines].some(p=>p.minute_cap_relaxed) ? {relaxedMinuteCaps: true as const} : {}),
     periodMinutes, possessions,
+    ...(checkpoints ? { checkpoints } : {}),
     overtime: overtimePeriods > 0,
     overtimePeriods,
     budget: REGULATION_MINUTES + OT_PERIOD_MINUTES * overtimePeriods,

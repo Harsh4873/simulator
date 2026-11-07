@@ -11,12 +11,11 @@ import {
   renderBoxScore,
   renderPlayerPanel,
   renderPropResults,
-  type BoxScenario,
   type PanelTab,
   type PropFormState,
   type SideSorts,
 } from './boxscore.ts';
-import { nextPanelAthlete, probabilityColorsOn, themeFromStorage } from './display.ts';
+import { nextPanelAthlete, themeFromStorage } from './display.ts';
 import { renderLineupEditor } from './lineup-editor.ts';
 import { applyLineupOverrides, cleanOverrides, isLineupChoice, LINEUP_STORAGE_KEY, overridesKey, readStoredLineups, summarizeOverrides, type LineupOverrides } from './lineup-overrides.ts';
 import { healthyCheck } from './generation.ts';
@@ -26,7 +25,6 @@ import { ITERATIONS, type Simulation } from './simulate.ts';
 import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
 
 const DATA_BASE = '/simulator/data/';
-const COLOR_KEY = 'simulator.probability-colors';
 const THEME_KEY = 'simulator.theme';
 
 const desk = document.querySelector<HTMLElement>('#desk');
@@ -47,7 +45,6 @@ const simulationCache = new Map<string, Simulation>();
 let panelAthlete: string | null = null;
 let view: { game: SlateGame; rates: RateGame; result: Simulation } | null = null;
 let sideSorts: SideSorts = DEFAULT_SIDE_SORTS;
-let upsideOn = false;
 let panelTab: PanelTab = 'forecast';
 let propForm: PropFormState = { ...DEFAULT_PROP_FORM };
 let lineupEdits: Record<string, LineupOverrides> = {};
@@ -113,31 +110,12 @@ function paintFreshness(): void {
   pill.textContent = stale ? `Data stale · checked ${age}` : `Data checked ${age}`;
 }
 
-function scenario(): BoxScenario {
-  return upsideOn ? 'upside' : 'median';
-}
-
 function rateGame(eventId: string): RateGame | null {
   return card?.games.find((game) => game.event_id === eventId) ?? null;
 }
 
 function gamesFrame(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[data-region="games"]');
-}
-
-function storedColorsOn(): boolean {
-  try {
-    return probabilityColorsOn(localStorage.getItem(COLOR_KEY));
-  } catch {
-    return false;
-  }
-}
-
-function applyProbabilityColors(): void {
-  const on = storedColorsOn();
-  if (desk) desk.dataset.colors = on ? 'on' : 'off';
-  const box = document.querySelector<HTMLInputElement>('input[data-probability-colors]');
-  if (box) box.checked = on;
 }
 
 function showSlate(): void {
@@ -166,8 +144,7 @@ function paintScore(): void {
   const scrollY = window.scrollY;
   const base = rateGame(view.game.event_id);
   const note = base ? summarizeOverrides(base, editsFor(view.game.event_id)) : undefined;
-  boxRoot.innerHTML = renderBoxScore(view.game, view.rates, view.result, new Date(), sideSorts, scenario(), note);
-  applyProbabilityColors();
+  boxRoot.innerHTML = renderBoxScore(view.game, view.rates, view.result, new Date(), sideSorts, note);
   window.scrollTo(0, scrollY);
 }
 
@@ -195,7 +172,6 @@ function syncPanel(): void {
     view.rates,
     view.result,
     panelAthlete,
-    scenario(),
     panelTab,
     propForm,
   );
@@ -236,7 +212,6 @@ async function onSimulate(button: HTMLButtonElement): Promise<void> {
     });
     simulationCache.set(key,result);
     if(simulationCache.size>12)simulationCache.delete(simulationCache.keys().next().value!);
-    upsideOn = false;
     view = { game, rates, result };
     panelAthlete = null;
     panelBody?.replaceChildren();
@@ -405,27 +380,9 @@ function onPropEdit(event: Event): void {
   paintPropResults();
 }
 
-function onProbabilityColors(event: Event): void {
+function onDeskChange(event: Event): void {
   const target = event.target;
-  if (!(target instanceof HTMLInputElement)) return;
-  if (target.matches('input[data-lineup-choice]')) {
-    onLineupChoice(target);
-    return;
-  }
-  if (target.matches('[data-upside-scenario]')) {
-    upsideOn = target.checked;
-    paintScore();
-    syncPanel();
-    return;
-  }
-  if (!target.matches('[data-probability-colors]')) return;
-  const on = target.checked;
-  try {
-    localStorage.setItem(COLOR_KEY, on ? 'on' : 'off');
-  } catch {
-    // The desk still follows the checkbox when storage is blocked.
-  }
-  if (desk) desk.dataset.colors = on ? 'on' : 'off';
+  if (target instanceof HTMLInputElement && target.matches('input[data-lineup-choice]')) onLineupChoice(target);
 }
 
 function onImageError(event: Event): void {
@@ -455,12 +412,11 @@ function bind(): void {
   if (bound || !desk) return;
   bound = true;
   desk.addEventListener('click', onDeskClick);
-  desk.addEventListener('change', onProbabilityColors);
+  desk.addEventListener('change', onDeskChange);
   desk.addEventListener('input', onPropEdit);
   desk.addEventListener('change', onPropEdit);
   desk.addEventListener('error', onImageError, true);
   document.addEventListener('keydown', onKey);
-  applyProbabilityColors();
 }
 
 async function load(): Promise<void> {

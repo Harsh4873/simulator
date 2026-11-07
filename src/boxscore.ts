@@ -1,4 +1,3 @@
-import {marginalRead} from './simulate.ts';
 import { formatTip } from './date.ts';
 import { paletteStyle, playerHeadshotUrl } from './display.ts';
 import { avatarMarkup, escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
@@ -15,12 +14,8 @@ import {
   type PropMarket,
   type PropSide,
 } from './props.ts';
-import type { MarginForecast, MarginalRead, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
+import type { MarginForecast, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
 import type { ColumnKey, RatePlayer, SlateGame, TeamSide } from './types.ts';
-
-export type BoxScenario = 'median' | 'upside';
-
-const UPSIDE_LABEL = 'Explore simulations: one high-total game from the 10,000. The winner and the leading scorer can differ from the forecast.';
 
 const COLUMNS: { key: ColumnKey; label: string }[] = [
   { key: 'min', label: 'MIN' },
@@ -166,31 +161,15 @@ function heldLabel(player: Pick<SimulatedPlayer, 'minutes_weight' | 'injury_stat
   return status || 'not in the data';
 }
 
-function toneCell(key: ColumnKey, value: number, read: MarginalRead | undefined, held: string | null): string {
-  if (!TONE_KEYS.has(key)) return `<td data-col="${key}">${value}</td>`;
-  if (held !== null) {
+function toneCell(key: ColumnKey, value: number, held: string | null): string {
+  if (held !== null && TONE_KEYS.has(key)) {
     return `<td data-col="${key}"><span class="stat">${value}</span><span class="pct">${escapeHtml(held)}</span></td>`;
   }
-  if (!read || read.constant) {
-    const bucket = read?.constant ? ' data-bucket="0"' : '';
-    return `<td data-col="${key}"${bucket}><span class="stat">${value}</span></td>`;
-  }
-  return `<td data-col="${key}" data-bucket="${read.bucket}"><span class="stat">${value}</span><span class="pct">${read.percent}%</span></td>`;
+  return `<td data-col="${key}">${value}</td>`;
 }
 
-function toneSpan(value: number, read: MarginalRead | undefined, held: string | null): string {
-  if (held !== null) {
-    return `<span class="tone"><span class="stat">${value}</span><span class="pct">${escapeHtml(held)}</span></span>`;
-  }
-  if (!read || read.constant) {
-    const bucket = read?.constant ? ' data-bucket="0"' : '';
-    return `<span class="tone"${bucket}><span class="stat">${value}</span></span>`;
-  }
-  return `<span class="tone" data-bucket="${read.bucket}"><span class="stat">${value}</span><span class="pct">${read.percent}%</span></span>`;
-}
-
-function readOf(player: SimulatedPlayer, key: 'min' | 'tpm' | 'pts' | 'reb' | 'ast'): MarginalRead | undefined {
-  return player.reads?.[key];
+function heldSpan(value: number, held: string | null): string {
+  return held === null ? String(value) : `<span class="stat">${value}</span> <span class="pct">${escapeHtml(held)}</span>`;
 }
 
 function expectedValue(player: SimulatedPlayer, key: ColumnKey): number | null {
@@ -221,10 +200,7 @@ function playerRow(player: SimulatedPlayer, expected: boolean): string {
   const held = heldLabel(player);
   const cells = COLUMNS.map((column) => {
     if (expected && player.expectation) return expectedCell(player, column.key);
-    if (column.key === 'min' || column.key === 'tpm' || column.key === 'pts' || column.key === 'reb' || column.key === 'ast') {
-      return toneCell(column.key, player[column.key], readOf(player, column.key), held);
-    }
-    return `<td data-col="${column.key}">${player[column.key]}</td>`;
+    return toneCell(column.key, player[column.key], held);
   }).join('');
   const id = escapeHtml(player.athlete_id);
   return `<tr>
@@ -236,7 +212,6 @@ function playerRow(player: SimulatedPlayer, expected: boolean): string {
 function footerRow(side: string, team: SimulatedTeam): string {
   const sums = columnSums(team.players);
   const cells = COLUMNS.map((column) => {
-    if (column.key === 'pts') return toneCell('pts', sums.pts, team.pointsRead, null);
     return `<td data-col="${column.key}">${sums[column.key]}</td>`;
   }).join('');
   return `<tr data-footer="${side}"><th scope="row">Total</th>${cells}</tr>`;
@@ -307,25 +282,6 @@ function sortBar(side: 'away' | 'home', name: string, sort: BoxSort): string {
   return `<div class="sort-bar" role="group" aria-label="Sort ${escapeHtml(name)}">${buttons}</div>`;
 }
 
-function tailMarkup(side: string, read: MarginalRead | undefined): string {
-  if (!read || read.constant) return '';
-  return `<p class="team-pct ${side} tone" data-bucket="${read.bucket}" title="Mid-CDF; tied mass ${((read.mass??0)*100).toFixed(1)}%">${read.percent}%</p>`;
-}
-
-function presented(score: Simulation, scenario: BoxScenario): Simulation {
-  if (scenario !== 'upside') return score;
-  return {
-    ...score,
-    overtime: score.upside.overtime,
-    budget: score.upside.budget,
-    overtimePeriods: score.upside.overtimePeriods,
-    regulationAwayPts: score.upside.regulationAwayPts,
-    regulationHomePts: score.upside.regulationHomePts,
-    away: score.upside.away,
-    home: score.upside.home,
-  };
-}
-
 function periodCount(score: Pick<Simulation, 'overtime' | 'budget'>): number {
   if (!score.overtime) return 0;
   return Math.max(1, Math.round((score.budget - 240) / 25));
@@ -339,21 +295,17 @@ function minutesMarkup(score: Pick<Simulation, 'overtime' | 'budget'>): string {
   return `<span class="ot">OT</span><span class="ot-minutes">${teamMinutes} team-minutes · 5 × ${playerMinutes}</span>`;
 }
 
-function scoreboard(game: SlateGame, score: Simulation, scenario: BoxScenario, forecast?: MarginForecast): string {
+function scoreboard(game: SlateGame, score: Simulation, forecast?: MarginForecast): string {
   const wins = score.wins ?? { away: 0, tie: 0, home: 0 };
   const total = wins.away + wins.tie + wins.home;
   const awayPct = countPercent(wins.away, total);
   const tiePct = countPercent(wins.tie, total);
   const homePct = countPercent(wins.home, total);
   const label = `Away wins ${awayPct}%. Tie ${tiePct}%. Home wins ${homePct}%.`;
-  const useMeans = scenario !== 'upside' && forecast !== undefined;
+  const useMeans = forecast !== undefined;
   const awayScore = useMeans ? Math.round(forecast.awayMean) : score.away.pts;
   const homeScore = useMeans ? Math.round(forecast.homeMean) : score.home.pts;
-  const caption = scenario === 'upside'
-    ? UPSIDE_LABEL
-    : useMeans
-      ? 'Expected points from 10,000 games'
-      : 'Nearest the median combined score';
+  const caption = useMeans ? 'Expected points from 10,000 games' : 'Nearest the median combined score';
   const margin = useMeans
     ? `<p class="margin-caption">Mean margin ${forecast.marginMean >= 0 ? '+' : ''}${forecast.marginMean.toFixed(1)} home. Median margin ${forecast.marginMedian >= 0 ? '+' : ''}${forecast.marginMedian.toFixed(1)}. Home by 10+ ${(forecast.homeBy10 * 100).toFixed(1)}%. Home by 20+ ${(forecast.homeBy20 * 100).toFixed(1)}%. Away by 10+ ${(forecast.awayBy10 * 100).toFixed(1)}%. Away by 20+ ${(forecast.awayBy20 * 100).toFixed(1)}%.</p>`
     : '';
@@ -376,8 +328,6 @@ function scoreboard(game: SlateGame, score: Simulation, scenario: BoxScenario, f
     <p class="interval-caption">5th to 95th percentile</p>
     <p class="percentile-caption">${caption}</p>
     ${margin}
-    ${tailMarkup('away', useMeans?marginalRead(score.awayTotals,awayScore):score.away.pointsRead)}
-    ${tailMarkup('home', useMeans?marginalRead(score.homeTotals,homeScore):score.home.pointsRead)}
     <p class="win-pct win-away">${awayPct}%</p>
     <p class="tie-line">Tie ${tiePct}%</p>
     <p class="win-pct win-home">${homePct}%</p>
@@ -468,19 +418,15 @@ export function renderBoxScore(
   score: Simulation,
   now: Date,
   sort: SideSorts = DEFAULT_SIDE_SORTS,
-  scenario: BoxScenario = 'median',
   edits?: LineupNote,
 ): string {
-  const shown = presented(score, scenario);
-  const expected = scenario !== 'upside' && shown.away.players.some((player) => player.expectation);
+  const shown = score;
+  const expected = shown.away.players.some((player) => player.expectation);
   const eventId = textOf(rate?.event_id) || textOf(game.event_id);
   const note =
-    scenario === 'upside'
-      ? UPSIDE_LABEL
-      : expected
+    expected
         ? 'Each row is that player\'s average across all 10,000 games, including games they sit, so minutes still sum to the team budget. The player panel expected line uses only draws with minutes. The range under each stat is that player\'s own 10th to 90th percentile. It is not one box score.'
         : 'This box score is the simulated game nearest the median combined score. The range under each score is the 5th to 95th percentile.';
-  const upsideChecked = scenario === 'upside' ? ' checked' : '';
   return `<div class="box-view" data-event="${escapeHtml(eventId)}" style="${paletteStyle(game.away, game.home)}">
       <div class="toolbar">
         <button type="button" data-back>Back to slate</button>
@@ -488,7 +434,7 @@ export function renderBoxScore(
         <button type="button" class="ghost" data-lineup="${escapeHtml(game.event_id)}">Edit lineups</button>
       </div>
       ${lineupBanner(edits)}
-      <section class="hero">${scoreboard(game, shown, scenario, score.forecast)}</section>
+      <section class="hero">${scoreboard(game, shown, score.forecast)}</section>
       <p class="status-row">
         <span class="tip">${escapeHtml(formatTip(game.start_time))}</span>
         <span class="status">${escapeHtml(statusLabel(game, now))}</span>
@@ -496,17 +442,12 @@ export function renderBoxScore(
       </p>
       ${keyTiles(game, score)}
       ${chartsPanel(game, score)}
-      <div class="view-options">
-        <label class="color-choice"><input type="checkbox" data-probability-colors> Probability colors</label>
-        <label class="scenario-choice"><input type="checkbox" data-upside-scenario${upsideChecked}> ${UPSIDE_LABEL}</label>
-      </div>
       ${distributionPanel(score)}
       ${boxTable('away', game.away, shown.away, sort.away, expected)}
       ${boxTable('home', game.home, shown.home, sort.home, expected)}
       ${score.thin_rotation ? '<p class="note" role="status">Thin rotation: labelled replacement-level minutes fill remaining spots from league-average rates. Those lines are not invented player stats.</p>' : ''}
       <p class="note">${note}</p>
       <p class="note">The minutes column totals team-minutes: five players on the floor at once. Regulation is 240 (5 × 48). Overtime is 265 (5 × 53). It is not the length of the game.</p>
-      <p class="legend">Brighter blue means that number is further from this player's middle in the 10,000 games. The percent is the mid-CDF: the share below the displayed value plus half the share tied with it. Common discrete outcomes stay near the middle.</p>
     </div>`;
 }
 
@@ -556,7 +497,7 @@ function shockFor(score: Simulation, teamId: string): number | undefined {
   return undefined;
 }
 
-function whySentences(row: CardRow | null, scenario: BoxScenario): string[] {
+function whySentences(row: CardRow | null): string[] {
   const sentences: string[] = [];
   if (!row) sentences.push('This player is not on the rate card.');
   const games2026 = readNumber(row, 'games_2026');
@@ -603,13 +544,9 @@ function whySentences(row: CardRow | null, scenario: BoxScenario): string[] {
   const role=readString(row,'minutes_source');
   if(role)sentences.push(role);
   if (status === undefined) sentences.push('Injury status is not in the data.');
-  if (scenario === 'upside') {
-    sentences.push('This line is from the upside scenario: the 95th percentile of the combined score. Not the forecast.');
-  } else {
-    sentences.push(
-      'The table shows this player\'s average across all 10,000 games. A 40-point game can still happen in the tail. It is not the line from one draw.',
-    );
-  }
+  sentences.push(
+    'The table shows this player\'s average across all 10,000 games. A 40-point game can still happen in the tail. It is not the line from one draw.',
+  );
   return sentences;
 }
 
@@ -654,16 +591,16 @@ function expectedLine(line: SimulatedPlayer): string {
 function drawnLine(line: SimulatedPlayer): string {
   const held = heldLabel(line);
   const fg = `${line.fgm}–${line.fga}`;
-  const threes = `${toneSpan(line.tpm, readOf(line, 'tpm'), held)}–${line.tpa}`;
+  const threes = `${heldSpan(line.tpm, held)}–${line.tpa}`;
   const ft = `${line.ftm}–${line.fta}`;
   return `<dl class="line">
-    <dt>MIN</dt><dd>${toneSpan(line.min, readOf(line, 'min'), held)}</dd>
+    <dt>MIN</dt><dd>${heldSpan(line.min, held)}</dd>
     <dt>FG</dt><dd>${fg}</dd>
     <dt>3P</dt><dd>${threes}</dd>
     <dt>FT</dt><dd>${ft}</dd>
-    <dt>PTS</dt><dd>${toneSpan(line.pts, readOf(line, 'pts'), held)}</dd>
-    <dt>REB</dt><dd>${toneSpan(line.reb, readOf(line, 'reb'), held)}</dd>
-    <dt>AST</dt><dd>${toneSpan(line.ast, readOf(line, 'ast'), held)}</dd>
+    <dt>PTS</dt><dd>${heldSpan(line.pts, held)}</dd>
+    <dt>REB</dt><dd>${heldSpan(line.reb, held)}</dd>
+    <dt>AST</dt><dd>${heldSpan(line.ast, held)}</dd>
   </dl>`;
 }
 
@@ -848,17 +785,16 @@ export function renderPlayerPanel(
   rate: PanelRate | null,
   score: Simulation,
   athleteId: string,
-  scenario: BoxScenario = 'median',
   tab: PanelTab = 'forecast',
   form: PropFormState = DEFAULT_PROP_FORM,
 ): string {
-  const shown = presented(score, scenario);
+  const shown = score;
   const line = findLine(shown, athleteId);
   if (!line) {
     return `<button type="button" data-close>Close</button><p>This player is not in the data.</p>`;
   }
   const row = rate?.players.find((player) => player.athlete_id === athleteId) ?? null;
-  const sentences = whySentences(row, scenario).map((sentence) => `<p>${escapeHtml(sentence)}</p>`).join('');
+  const sentences = whySentences(row).map((sentence) => `<p>${escapeHtml(sentence)}</p>`).join('');
   const forecastHidden = tab === 'props' ? ' hidden' : '';
   const propsHidden = tab === 'forecast' ? ' hidden' : '';
   return `<button type="button" data-close>Close</button>
@@ -868,8 +804,8 @@ export function renderPlayerPanel(
       <button type="button" role="tab" id="props-tab" aria-controls="props-panel" tabindex="${tab==='props'?0:-1}" data-panel-tab="props" aria-selected="${tab === 'props' ? 'true' : 'false'}">Prop Analyzer</button>
     </div>
     <div role="tabpanel" id="forecast-panel" aria-labelledby="forecast-tab" data-panel-view="forecast"${forecastHidden}>
-      <h3>${scenario !== 'upside' && line.expectation ? 'Expected line' : 'One simulated draw'}</h3>
-      ${scenario !== 'upside' && line.expectation ? expectedLine(line) : drawnLine(line)}
+      <h3>${line.expectation ? 'Expected line' : 'One simulated draw'}</h3>
+      ${line.expectation ? expectedLine(line) : drawnLine(line)}
       <h3>Why</h3>
       <div class="why">${sentences}</div>
       <h3>Shrunk rates on the card</h3>

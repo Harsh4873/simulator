@@ -5,7 +5,6 @@ import {
   empiricalPercent,
   nextPanelAthlete,
   playerHeadshotUrl,
-  probabilityColorsOn,
   shownPercent,
   teamLogoUrl,
   themeFromStorage,
@@ -86,13 +85,6 @@ test('theme follows an exact stored value, then the light preference', () => {
   assert.ok(html.includes('simulator.theme'));
   assert.ok(html.includes('prefers-color-scheme'));
   assert.ok(html.includes('data-theme-toggle'));
-});
-
-test('probability colors are off unless the stored value is on', () => {
-  assert.equal(probabilityColorsOn(null), false);
-  assert.equal(probabilityColorsOn('off'), false);
-  assert.equal(probabilityColorsOn('on'), true);
-  assert.equal(probabilityColorsOn('yes'), false);
 });
 
 test('team logos prefer an ESPN url and otherwise derive a two- or three-letter mark', () => {

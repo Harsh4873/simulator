@@ -276,7 +276,7 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   assert.match(html, /<p class="score away">26<\/p>/);
   assert.match(html, /<p class="score home">11<\/p>/);
   assert.match(html, /Nearest the median combined score/);
-  assert.match(html, /Explore simulations: one high-total game from the 10,000\./);
+  assert.equal(html.includes('Explore simulations'), false);
   assert.equal(html.includes('95th percentile of 10,000 games'), false);
   assert.match(html, /5th to 95th percentile/);
   assert.match(html, /<p class="interval away">80–140<\/p>/);
@@ -289,18 +289,17 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   assert.match(html, /flex-grow: 2500/);
   assert.match(html, /flex-grow: 0/);
   assert.match(html, /flex-grow: 7500/);
-  assert.match(html, /class="team-pct away tone" data-bucket="1"[^>]*>64%</);
-  assert.match(html, /class="team-pct home tone" data-bucket="4"[^>]*>12%</);
+  // Percentile tails and probability colors were removed: one draw's percentiles were not decision information.
+  assert.equal(html.includes('team-pct'), false);
   const away = html.split('data-footer="away"')[1]?.split('</tr>')[0] ?? '';
   const sums = columnSums(model.away.players);
-  for (const key of ['min', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'reb', 'ast'] as const) {
+  for (const key of ['min', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'pts', 'reb', 'ast'] as const) {
     assert.match(away, new RegExp(`data-col="${key}">${sums[key]}<`));
   }
-  assert.match(away, new RegExp(`data-col="pts" data-bucket="1"><span class="stat">${sums.pts}</span><span class="pct">64%</span>`));
   const regular = rowFor(html, '1');
-  assert.match(regular, /data-col="min" data-bucket="0"><span class="stat">30<\/span><\/td>/);
+  assert.match(regular, /data-col="min">30<\/td>/);
   assert.match(regular, /data-col="fga">12</);
-  assert.match(regular, /data-col="pts" data-bucket="2"><span class="stat">17<\/span><span class="pct">71%<\/span>/);
+  assert.match(regular, /data-col="pts">17<\/td>/);
   assert.match(regular, /<button type="button" class="player-btn" data-athlete="1">/);
   const held = rowFor(html, '3');
   assert.equal(held.includes('data-bucket'), false);
@@ -313,7 +312,7 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   assert.equal(/data-col="(?:fgm|fga|tpa|ftm|fta)"[^>]*data-bucket/.test(regular), false);
   assert.equal(html.includes('undefined'), false);
   assert.equal(html.includes('<a '), false);
-  assert.ok(html.includes('Mid-CDF; tied mass'));
+  assert.equal(html.includes('Mid-CDF'), false);
   assert.match(html, /This box score is the simulated game nearest the median combined score\./);
   assert.equal(html.includes('This box score is the simulated game at the 95th percentile of the combined score.'), false);
   assert.match(html, /The minutes column totals team-minutes: five players on the floor at once\. Regulation is 240 \(5 × 48\)\. Overtime is 265 \(5 × 53\)\. It is not the length of the game\./);
@@ -324,30 +323,26 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   const tableAt = html.indexOf('<table');
   const noteAt = html.indexOf('This box score is the simulated game nearest the median combined score');
   assert.ok(tableAt >= 0 && noteAt > tableAt);
-  assert.match(html, /Brighter blue means that number is further from this player's middle in the 10,000 games\./);
-  assert.match(html, /<span class="pct">/);
-  assert.match(html, /data-bucket=/);
-  const colorsAt = html.indexOf('Probability colors');
-  assert.ok(colorsAt >= 0 && tableAt >= 0 && colorsAt < tableAt);
-  assert.match(html, /<input type="checkbox" data-probability-colors>/);
+  assert.equal(html.includes('Brighter blue'), false);
+  assert.equal(html.includes('data-bucket'), false);
+  assert.equal(html.includes('Probability colors'), false);
+  assert.equal(html.includes('data-probability-colors'), false);
   assert.equal(/<input\b[^>]*\bchecked\b/.test(html), false);
+  // Held players still say why they sit in a single drawn game.
+  assert.match(held, /<span class="pct">out<\/span>/);
   assert.equal(html.includes('>OT<'), false);
   assert.equal(html.includes('This line is one random draw'), false);
 });
 
-test('the upside control labels the 95th percentile scenario', () => {
+test('the single high-total game view is gone; the board and panel show forecasts only', () => {
   const model = score(false);
-  const html = renderBoxScore(game, null, model, now, undefined, 'upside');
-  assert.match(html, /Explore simulations: one high-total game from the 10,000\./);
-  assert.match(html, /<input type="checkbox" data-upside-scenario checked>/);
-  assert.equal(html.includes('Nearest the median combined score'), false);
-  assert.equal(html.includes('This box score is the simulated game nearest the median combined score.'), false);
-  assert.match(html, /<p class="score away">26<\/p>/);
-  assert.match(html, /<p class="score home">11<\/p>/);
-  assert.match(html, /Win rate in 10,000 games/);
-  const panel = renderPlayerPanel(game, rates(), model, '1', 'upside');
-  assert.match(panel, /This line is from the upside scenario: the 95th percentile of the combined score\. Not the forecast\./);
-  assert.equal(panel.includes('nearest the median combined score'), false);
+  const html = renderBoxScore(game, null, model, now);
+  assert.equal(html.includes('Explore simulations'), false);
+  assert.equal(html.includes('data-upside-scenario'), false);
+  assert.equal(html.includes('95th percentile of the combined score'), false);
+  const panel = renderPlayerPanel(game, rates(), model, '1');
+  assert.equal(panel.includes('upside scenario'), false);
+  assert.match(panel, /average across all 10,000 games/);
 });
 
 test('an empty abbreviation falls back to the team name', () => {
@@ -392,7 +387,7 @@ test('the panel opens, swaps, and closes from the player button', () => {
   const open = renderPlayerPanel(game, card, model, '1');
   assert.match(open, /type="button" data-close/);
   assert.match(open, /Regular Player/);
-  assert.match(open, /<span class="stat">17<\/span>/);
+  assert.match(open, /<dt>PTS<\/dt><dd>17<\/dd>/);
   assert.match(open, /Away Name/);
   assert.match(open, /PG/);
   assert.match(open, /Guard/);
@@ -493,7 +488,7 @@ test('missing optional fields do not throw', () => {
     html = renderPlayerPanel(game, card, model, '1');
   });
   assert.match(html, /Regular Player/);
-  assert.match(html, /<span class="stat">17<\/span>/);
+  assert.match(html, /<dt>PTS<\/dt><dd>17<\/dd>/);
   assert.match(html, /Injury status is not in the data\./);
   assert.match(html, /Position is not in the data\./);
   assert.match(html, /Shrunk minutes rate: not in the data\./);
@@ -506,17 +501,14 @@ test('missing optional fields do not throw', () => {
   assert.match(missing, /Regular Player/);
 });
 
-test('the layout colors stay on the blue scale', () => {
+test('the layout keeps its win-bar colors and drops the removed probability-color scale', () => {
   const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-  for (const hex of ['#1e3344', '#1a4d68', '#1a6a8c', '#2f8eb0', '#5eabc4', '#a9d4e4', '#e7f5fb', '#4da6ff', '#5a7085', '#00e5a0']) {
+  for (const hex of ['#4da6ff', '#5a7085', '#00e5a0']) {
     assert.ok(css.includes(hex), hex);
   }
-  for (const hex of ['#1e3344', '#1a4d68', '#1a6a8c', '#2f8eb0', '#5eabc4', '#a9d4e4', '#e7f5fb']) {
-    const at = css.indexOf(hex);
-    assert.match(css.slice(Math.max(0, at - 240), at), /\[data-colors="on"\]/);
-  }
+  assert.equal(css.includes('[data-colors="on"]'), false);
+  assert.equal(css.includes('.scenario-choice'), false);
   assert.match(css, /\.seg-away \{ background: #4da6ff; \}/);
-  assert.equal(css.includes('.desk[data-colors="on"] .seg-away'), false);
   assert.match(css, /90rem/);
   assert.match(css, /4\.5rem/);
   assert.match(css, /22rem/);

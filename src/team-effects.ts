@@ -29,14 +29,21 @@ export interface TeamEffects {
   level?:number;
   prior_season_shift?:number;
   season_shift_penalty?:number;
+  /** Exponential recency weighting of games, in days; null weights every game in a season equally. */
+  half_life_days?:number|null;
 }
-type Row = {x:[number,number][];y:number;current:boolean;eventIndex:number;pace:number;pts:number};
+export interface TeamEffectOptions {halfLives?:readonly (number|null)[]}
+/** Chosen on an 826-game walk-forward (January 2026 to November 2026): 90 days beat no decay, 45, 120 and 150 on margin and total error. */
+export const TEAM_HALF_LIFE_DAYS = 90;
+const DAY_MS=86400000;
+type Row = {x:[number,number][];y:number;current:boolean;eventIndex:number;pace:number;pts:number;time:number};
 const empty = (games:number):TeamEffects => ({
   offense:{},defense:{},home:0,rest:0,games,residual_sd:0,rest_samples:0,workload:0,travel:null,timezone:null,travel_samples:0,timezone_samples:0,
   team_penalty:DEFAULT_TEAM_PENALTY,prior_season_weight:DEFAULT_PRIOR_SEASON_WEIGHT,holdout_mae:null,holdout_games:0,
 });
-function solve(rows:Row[],n:number,teamPenalty:number,priorWeight:number,shiftPenalty:number=DEFAULT_SEASON_SHIFT_PENALTY):{beta:number[];residual:number[]} {
-  const weight = (r:Row) => r.current ? 1 : priorWeight;
+function solve(rows:Row[],n:number,teamPenalty:number,priorWeight:number,shiftPenalty:number=DEFAULT_SEASON_SHIFT_PENALTY,halfLife:number|null=null):{beta:number[];residual:number[]} {
+  const reference=rows.reduce((m,r)=>Math.max(m,r.time),-Infinity);
+  const weight = (r:Row) => (r.current ? 1 : priorWeight)*(halfLife===null?1:0.5**((reference-r.time)/(halfLife*DAY_MS)));
   const beta=new Array(7+2*n).fill(0);
   const weighted = rows.reduce((s,r)=>s+weight(r),0);
   beta[0]=rows.reduce((s,r)=>s+weight(r)*r.y,0)/Math.max(1e-9,weighted);
@@ -57,7 +64,8 @@ function predictedPpp(row:Row,beta:number[]):number {
 }
 // Ridge priors center team, venue and rest effects at zero. No market input.
 // Team penalty and prior-season weight are selected on a chronological holdout of events.
-export function fitTeamEffects(events:CompletedEvent[],possessions:(e:CompletedEvent,t:string)=>number):TeamEffects {
+export function fitTeamEffects(events:CompletedEvent[],possessions:(e:CompletedEvent,t:string)=>number,options:TeamEffectOptions={}):TeamEffects {
+  const halfLives=options.halfLives?.length?options.halfLives:[TEAM_HALF_LIFE_DAYS];
   if(!events.length)return empty(0);
   const ordered=[...events].sort((a,b)=>Date.parse(a.start_time)-Date.parse(b.start_time)||a.event_id.localeCompare(b.event_id));
   const teams=[...new Set(ordered.flatMap(e=>[e.home_team_id,e.away_team_id]))].sort();
@@ -74,22 +82,22 @@ export function fitTeamEffects(events:CompletedEvent[],possessions:(e:CompletedE
       const timezone=schedule.timezone_change_hours!==null&&against.timezone_change_hours!==null?schedule.timezone_change_hours-against.timezone_change_hours:0;if(schedule.timezone_change_hours!==null&&against.timezone_change_hours!==null)timezoneSamples++;
       const delta=rest!==null&&other!==null?Math.log1p(rest)-Math.log1p(other):0;if(rest!==null&&other!==null)restSamples++;
       // Earlier seasons get their own scoring-level shift, so the intercept tracks this season's league efficiency.
-      rows.push({x:[[0,1],[1+teams.indexOf(team),1],[1+n+teams.indexOf(opp),1],[1+2*n,e.neutral?0:venue],[2+2*n,delta],[3+2*n,workload],[4+2*n,travel],[5+2*n,timezone],[6+2*n,e.season===activeSeason?0:1]],y:Math.log(pts/pace),current:e.season===activeSeason,eventIndex,pace,pts});
+      rows.push({x:[[0,1],[1+teams.indexOf(team),1],[1+n+teams.indexOf(opp),1],[1+2*n,e.neutral?0:venue],[2+2*n,delta],[3+2*n,workload],[4+2*n,travel],[5+2*n,timezone],[6+2*n,e.season===activeSeason?0:1]],y:Math.log(pts/pace),current:e.season===activeSeason,eventIndex,pace,pts,time:Date.parse(e.start_time)});
     }
     last.set(`${e.season}:${e.home_team_id}`,e);last.set(`${e.season}:${e.away_team_id}`,e);
   });
   const split=ordered.length>=50?Math.floor(ordered.length*.8):ordered.length;
   const train=rows.filter(r=>r.eventIndex<split),hold=rows.filter(r=>r.eventIndex>=split);
-  let teamPenalty:number=DEFAULT_TEAM_PENALTY,priorWeight:number=DEFAULT_PRIOR_SEASON_WEIGHT,shiftPenalty:number=DEFAULT_SEASON_SHIFT_PENALTY,holdoutMae:number|null=null;
+  let teamPenalty:number=DEFAULT_TEAM_PENALTY,priorWeight:number=DEFAULT_PRIOR_SEASON_WEIGHT,shiftPenalty:number=DEFAULT_SEASON_SHIFT_PENALTY,halfLife:number|null=halfLives[0]??null,holdoutMae:number|null=null;
   if(hold.length>=20&&train.length>=40){
     let best=Infinity;
-    for(const penalty of TEAM_PENALTY_CANDIDATES)for(const weight of PRIOR_WEIGHT_CANDIDATES)for(const shift of SEASON_SHIFT_PENALTY_CANDIDATES){
-      const {beta}=solve(train,n,penalty,weight,shift);
+    for(const life of halfLives)for(const penalty of TEAM_PENALTY_CANDIDATES)for(const weight of PRIOR_WEIGHT_CANDIDATES)for(const shift of SEASON_SHIFT_PENALTY_CANDIDATES){
+      const {beta}=solve(train,n,penalty,weight,shift,life);
       const mae=hold.reduce((s,r)=>s+Math.abs(r.pts-predictedPpp(r,beta)*r.pace),0)/hold.length;
-      if(mae<best){best=mae;teamPenalty=penalty;priorWeight=weight;shiftPenalty=shift;holdoutMae=mae;}
+      if(mae<best){best=mae;teamPenalty=penalty;priorWeight=weight;shiftPenalty=shift;halfLife=life;holdoutMae=mae;}
     }
   }
-  const {beta,residual}=solve(rows,n,teamPenalty,priorWeight,shiftPenalty);
+  const {beta,residual}=solve(rows,n,teamPenalty,priorWeight,shiftPenalty,halfLife);
   return {
     offense:Object.fromEntries(teams.map((t,i)=>[t,Math.exp(beta[0]+beta[1+i])])),
     defense:Object.fromEntries(teams.map((t,i)=>[t,Math.exp(beta[0]+beta[1+n+i])])),
@@ -110,5 +118,6 @@ export function fitTeamEffects(events:CompletedEvent[],possessions:(e:CompletedE
     level:Math.exp(beta[0]),
     prior_season_shift:beta[6+2*n],
     season_shift_penalty:shiftPenalty,
+    half_life_days:halfLife,
   };
 }

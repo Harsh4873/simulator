@@ -54,10 +54,6 @@ export function nextPanelAthlete(current: string | null, clicked: string | null)
 
 const ESPN_CDN = 'https://a.espncdn.com/';
 
-export function probabilityColorsOn(value: string | null): boolean {
-  return value === 'on';
-}
-
 export function themeFromStorage(stored: string | null, prefersLight: boolean): 'light' | 'dark' {
   if (stored === 'light' || stored === 'dark') return stored;
   return prefersLight ? 'light' : 'dark';

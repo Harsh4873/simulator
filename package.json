@@ -16,7 +16,8 @@
     "sanity": "node --experimental-strip-types scripts/sanity.ts",
     "validate-artifact": "node scripts/validate-artifact.mjs",
     "validate-privacy": "node scripts/validate-privacy.mjs",
-    "replay": "node --experimental-strip-types scripts/archive-replay.ts"
+    "replay": "node --experimental-strip-types scripts/archive-replay.ts",
+    "walk-forward": "node --experimental-strip-types scripts/walk-forward.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

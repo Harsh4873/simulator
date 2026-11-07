@@ -5,6 +5,7 @@ import {scheduleContext} from './schedule-context.ts';
 import {historicalStints} from './play-history.ts';
 import {fitLineupEffects} from './lineup-effects.ts';
 import {fitFreeThrows} from './free-throw-model.ts';
+import {fitLeadEffect,runningMargins,type LeadEffectModel} from './lead-effect.ts';
 import {fitParticipation,participationProbability,participationFeatures,ParticipationTracker,calibrateHealthy,applyHealthyCalibration} from './participation-model.ts';
 import {fitAvailability,type AvailabilityObservation} from './model-evidence.ts';
 import { selectRolePrior } from './role-model.ts';
@@ -13,10 +14,12 @@ import { chicagoDate } from './date.ts';
 import type { CompletedEvent } from './parse-summary.ts';
 import type { MatchupContext, RatePlayer, SlateGame, TeamProfile } from './types.ts';
 
-export const MODEL_VERSION = 'possessions-v5';
+export const MODEL_VERSION = 'possessions-v6';
 // Shrinkage strengths are modeling priors, not fitted calibration coefficients.
 const TEAM_PRIOR_GAMES = 12;
-const PRIOR_SEASON_WEIGHT = 0.2;
+// Pace settles faster than efficiency; a six-game prior beat twelve on walk-forward total error.
+export const PACE_PRIOR_GAMES = 6;
+export const PRIOR_SEASON_WEIGHT = 0.2;
 export const FT_POSSESSION_EQUIVALENT = 0.44; // Conventional box-score possession estimator; trips are approximated.
 const sum = (xs: number[]) => xs.reduce((a,b) => a+b,0);
 const mean = (xs: number[]) => sum(xs)/xs.length;
@@ -29,12 +32,23 @@ export function eligibleEvents(events: CompletedEvent[], cutoff: string): Comple
   // No historical final timestamps: conservatively exclude the entire target Chicago date.
   return events.filter(e => e.season_type === 2 && Date.parse(e.start_time) < Date.parse(cutoff) && chicagoDate(new Date(e.start_time)) < chicagoDate(new Date(cutoff)));
 }
-const fitCache=new WeakMap<CompletedEvent[],{cutoff:string;rotation:ReturnType<typeof fitRotationState>;fouls:ReturnType<typeof fitFouls>;residual:ReturnType<typeof fitResidualDiagnostics>;usage:ReturnType<typeof fitUsageEffects>;effects:ReturnType<typeof fitTeamEffects>;freeThrows:ReturnType<typeof fitFreeThrows>;lineups:ReturnType<typeof fitLineupEffects>}>();
+const fitCache=new WeakMap<CompletedEvent[],{cutoff:string;rotation:ReturnType<typeof fitRotationState>;fouls:ReturnType<typeof fitFouls>;residual:ReturnType<typeof fitResidualDiagnostics>;usage:ReturnType<typeof fitUsageEffects>;effects:ReturnType<typeof fitTeamEffects>;freeThrows:ReturnType<typeof fitFreeThrows>;lineups:ReturnType<typeof fitLineupEffects>;lead:LeadEffectModel}>();
+
+/** Lead give-back fitted on the same history, with an out-of-sample running rating as the strength control. */
+export function fitGameLeadEffect(history:CompletedEvent[]):LeadEffectModel{
+  const paces=history.map(e=>(eventPossessions(e,e.home_team_id)+eventPossessions(e,e.away_team_id))/2*48/(48+5*(e.periods-4)));
+  const pace=paces.length?mean(paces):100;
+  const possessions=sum(history.flatMap(e=>[eventPossessions(e,e.home_team_id),eventPossessions(e,e.away_team_id)]));
+  const fgPoints=sum(history.flatMap(e=>e.players.map(p=>2*(p.fgm-p.tpm)+3*p.tpm)));
+  // The strength control is out-of-sample: a running points rating that has not seen the game.
+  const prior=runningMargins(history);
+  return fitLeadEffect(history,e=>prior.get(e.event_id)??null,possessions>0?fgPoints/possessions:0.88,pace/4);
+}
 export function fitMatchup(events: CompletedEvent[], game: SlateGame, cutoff: string): MatchupContext {
   const history = eligibleEvents(events,cutoff).filter(e => e.players.every(p => p.tov !== undefined && p.orb !== undefined));
   if (!history.length) throw new Error('No completed possession history');
   let cached=fitCache.get(events);
-  if(!cached||cached.cutoff!==cutoff){cached={cutoff,rotation:fitRotationState(history),fouls:fitFouls(history),residual:fitResidualDiagnostics(history,eventPossessions),usage:fitUsageEffects(history),effects:fitTeamEffects(history,eventPossessions),freeThrows:fitFreeThrows(history),lineups:fitLineupEffects(history)};fitCache.set(events,cached);}
+  if(!cached||cached.cutoff!==cutoff){const effects=fitTeamEffects(history,eventPossessions);cached={cutoff,rotation:fitRotationState(history),fouls:fitFouls(history),residual:fitResidualDiagnostics(history,eventPossessions),usage:fitUsageEffects(history),effects,freeThrows:fitFreeThrows(history),lineups:fitLineupEffects(history),lead:fitGameLeadEffect(history)};fitCache.set(events,cached);}
   const effects=cached.effects;
   const samples = history.flatMap(e => [e.away_team_id,e.home_team_id].map(team => {
     const rows = e.players.filter(p => p.team_id === team);
@@ -56,7 +70,8 @@ export function fitMatchup(events: CompletedEvent[], game: SlateGame, cutoff: st
     const n = sum(xs.map(x => x.weight));
     const shrink = (values: number[], prior: number) => (sum(values.map((v,i) => v*xs[i].weight)) + TEAM_PRIOR_GAMES*prior)/(n+TEAM_PRIOR_GAMES);
     const last = xs.map(x=>Date.parse(x.e.start_time)).sort((a,b)=>b-a)[0];
-    return { pace:shrink(xs.map(x=>x.pace),pace), offense:effects.offense[team]??league,
+    const pacePrior = (sum(xs.map(x=>x.pace*x.weight)) + PACE_PRIOR_GAMES*pace)/(n+PACE_PRIOR_GAMES);
+    return { pace:pacePrior, offense:effects.offense[team]??league,
       defense:effects.defense[team]??league,
       turnover_rate:shrink(xs.map(x=>sum(x.rows.map(p=>p.tov!))/x.poss),leagueTov),
       offensive_rebound_rate:shrink(xs.map(x=>sum(x.rows.map(p=>p.orb!))/Math.max(1,sum(x.rows.map(p=>p.fga-p.fgm)))),leagueOrb),
@@ -65,7 +80,7 @@ export function fitMatchup(events: CompletedEvent[], game: SlateGame, cutoff: st
       schedule:scheduleContext(xs.at(-1)?.e??null,game.start_time,game.venue),games:xs.length, rest_days:Number.isFinite(last)?restDays(new Date(last).toISOString(),game.start_time):null };
   };
   const paceSD = Math.sqrt(mean(samples.map(x => (x.pace-pace)**2)));
-  return {rotation_state:cached.rotation,fouls:cached.fouls,residual_diagnostics:cached.residual,usage_effects:cached.usage,free_throws:cached.freeThrows,lineup_effects:cached.lineups,away:profile(game.away.team_id),home:profile(game.home.team_id),league_efficiency:league,pace_sd:paceSD,home_log_advantage:effects.home,rest_coefficient:effects.rest,workload_coefficient:effects.workload,travel_coefficient:effects.travel,timezone_coefficient:effects.timezone,neutral:game.neutral_site===true,training_games:history.length};
+  return {lead_effect:cached.lead,rotation_state:cached.rotation,fouls:cached.fouls,residual_diagnostics:cached.residual,usage_effects:cached.usage,free_throws:cached.freeThrows,lineup_effects:cached.lineups,away:profile(game.away.team_id),home:profile(game.home.team_id),league_efficiency:league,pace_sd:paceSD,home_log_advantage:effects.home,rest_coefficient:effects.rest,workload_coefficient:effects.workload,travel_coefficient:effects.travel,timezone_coefficient:effects.timezone,neutral:game.neutral_site===true,training_games:history.length};
 }
 
 /** Minutes in a player's first appearances when no earlier NBA appearance exists in the permitted history. */
