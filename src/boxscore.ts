@@ -1,7 +1,8 @@
 import {marginalRead} from './simulate.ts';
 import { formatTip } from './date.ts';
-import { playerHeadshotUrl } from './display.ts';
-import { escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
+import { paletteStyle, playerHeadshotUrl } from './display.ts';
+import { avatarMarkup, escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
+import { histogramSvg } from './charts.ts';
 import {
   decideVerdict,
   formatFairPrice,
@@ -227,7 +228,7 @@ function playerRow(player: SimulatedPlayer, expected: boolean): string {
   }).join('');
   const id = escapeHtml(player.athlete_id);
   return `<tr>
-    <th scope="row"><button type="button" class="player-btn" data-athlete="${id}">${escapeHtml(player.name)}</button></th>
+    <th scope="row"><span class="who-cell">${avatarMarkup(player.name, player.athlete_id)}<button type="button" class="player-btn" data-athlete="${id}">${escapeHtml(player.name)}</button></span></th>
     ${cells}
   </tr>`;
 }
@@ -386,7 +387,7 @@ function scoreboard(game: SlateGame, score: Simulation, scenario: BoxScenario, f
 
 function distributionPanel(score:Simulation):string{
   if(!score.distributions)return '';
-  return `<section aria-label="Game distributions"><h3>Game distributions</h3><p>Includes overtime. Margin = home points minus away points; a positive margin favors home. Enter a margin threshold (the negative of a home spread).</p>${(['total','margin'] as const).map(kind=>{
+  return `<section class="dist-panel" aria-label="Game distributions"><h3>Check a line</h3><p>Includes overtime. Margin = home points minus away points; a positive margin favors home. Enter a margin threshold (the negative of a home spread).</p>${(['total','margin'] as const).map(kind=>{
     const d=score.distributions![kind];return `<p>${kind==='total'?'Total':'Home margin'}: mean ${d.mean.toFixed(1)}; median ${d.median.toFixed(1)}; 10–90% ${d.p10.toFixed(1)} to ${d.p90.toFixed(1)}; 5–95% ${d.p05.toFixed(1)} to ${d.p95.toFixed(1)}. Monte Carlo SE of mean ${d.standardError.toFixed(2)} (sampling noise only).</p><label>${kind} line <input type="number" step="0.5" data-game-line="${kind}"></label><p data-line-result="${kind}" role="status">Enter a line.</p>`;
   }).join('')}</section>`;
 }
@@ -407,6 +408,60 @@ function boxTable(side: 'away' | 'home', slateSide: TeamSide, team: SimulatedTea
   </section>`;
 }
 
+function signed(value: number): string {
+  return `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toFixed(1)}`;
+}
+
+export interface LineupNote {
+  ruledOut: string[];
+  ruledIn: string[];
+}
+
+function lineupBanner(edits: LineupNote | undefined): string {
+  if (!edits || (!edits.ruledOut.length && !edits.ruledIn.length)) return '';
+  const parts = [
+    edits.ruledOut.length ? `Ruled out: ${edits.ruledOut.map(escapeHtml).join(', ')}` : '',
+    edits.ruledIn.length ? `Ruled in: ${edits.ruledIn.map(escapeHtml).join(', ')}` : '',
+  ].filter(Boolean);
+  return `<div class="edit-banner" role="note"><p><strong>Your lineups.</strong> ${parts.join('. ')}.</p><button type="button" class="ghost" data-lineup-clear>Use the model</button></div>`;
+}
+
+function keyTiles(game: SlateGame, score: Simulation): string {
+  const forecast = score.forecast;
+  const wins = score.wins ?? { away: 0, tie: 0, home: 0 };
+  const total = wins.away + wins.tie + wins.home;
+  if (!forecast || !(total > 0)) return '';
+  const homeFav = wins.home >= wins.away;
+  const favorite = homeFav ? game.home : game.away;
+  const share = (homeFav ? wins.home : wins.away) / total;
+  const margin = forecast.marginMean;
+  const leader = margin >= 0 ? game.home : game.away;
+  const totals = score.distributions?.total;
+  const expectedTotal = totals ? totals.mean : forecast.awayMean + forecast.homeMean;
+  const scorers = [...score.away.players, ...score.home.players]
+    .filter((p) => p.expectation)
+    .sort((a, b) => (b.expectation!.ptsMean - a.expectation!.ptsMean) || (a.name < b.name ? -1 : 1));
+  const top = scorers[0];
+  const tile = (label: string, value: string, sub: string) => `<div class="tile"><p class="tile-label">${label}</p><p class="tile-value">${value}</p><p class="tile-sub">${sub}</p></div>`;
+  return `<div class="tiles" aria-label="Key numbers">
+    ${tile('Win chance', `${escapeHtml(teamAbbr(favorite))} ${(share * 100).toFixed(0)}%`, 'share of 10,000 games')}
+    ${tile('Projected margin', `${escapeHtml(teamAbbr(leader))} by ${Math.abs(margin).toFixed(1)}`, `median home margin ${signed(forecast.marginMedian)}`)}
+    ${tile('Projected total', expectedTotal.toFixed(1), totals ? `80% between ${totals.p10.toFixed(0)} and ${totals.p90.toFixed(0)}` : 'mean of 10,000 games')}
+    ${top ? tile('Top scorer', `${top.expectation!.ptsMean.toFixed(1)}`, escapeHtml(top.name)) : ''}
+  </div>`;
+}
+
+function chartsPanel(game: SlateGame, score: Simulation): string {
+  if (!score.homeTotals?.length || !score.awayTotals?.length) return '';
+  const margins = score.homeTotals.map((h, i) => h - score.awayTotals[i]);
+  const away = escapeHtml(teamAbbr(game.away));
+  const home = escapeHtml(teamAbbr(game.home));
+  return `<div class="charts">
+    <figure class="chart"><figcaption><span>Home margin</span><span class="legend-pair"><i class="key away"></i>${away} wins<i class="key home"></i>${home} wins</span></figcaption>${histogramSvg(margins, { label: `${home} margin (home minus away)`, binWidth: 2, split: 0, format: (v) => (v > 0 ? `+${v.toFixed(0)}` : v.toFixed(0)) })}</figure>
+    <figure class="chart"><figcaption><span>Total points</span><span class="legend-pair">shaded: middle 80%</span></figcaption>${histogramSvg(score.combinedTotals, { label: 'Total points', binWidth: 4 })}</figure>
+  </div>`;
+}
+
 export function renderBoxScore(
   game: SlateGame,
   rate: PanelRate | null,
@@ -414,6 +469,7 @@ export function renderBoxScore(
   now: Date,
   sort: SideSorts = DEFAULT_SIDE_SORTS,
   scenario: BoxScenario = 'median',
+  edits?: LineupNote,
 ): string {
   const shown = presented(score, scenario);
   const expected = scenario !== 'upside' && shown.away.players.some((player) => player.expectation);
@@ -425,16 +481,25 @@ export function renderBoxScore(
         ? 'Each row is that player\'s average across all 10,000 games, including games they sit, so minutes still sum to the team budget. The player panel expected line uses only draws with minutes. The range under each stat is that player\'s own 10th to 90th percentile. It is not one box score.'
         : 'This box score is the simulated game nearest the median combined score. The range under each score is the 5th to 95th percentile.';
   const upsideChecked = scenario === 'upside' ? ' checked' : '';
-  return `<div data-event="${escapeHtml(eventId)}">
-      <button type="button" data-back>Back to slate</button>
-      ${scoreboard(game, shown, scenario, score.forecast)}
+  return `<div class="box-view" data-event="${escapeHtml(eventId)}" style="${paletteStyle(game.away, game.home)}">
+      <div class="toolbar">
+        <button type="button" data-back>Back to slate</button>
+        <div class="toolbar-title"><h2>${escapeHtml(teamAbbr(game.away))} @ ${escapeHtml(teamAbbr(game.home))}</h2><p class="toolbar-sub">${escapeHtml(formatTip(game.start_time))}</p></div>
+        <button type="button" class="ghost" data-lineup="${escapeHtml(game.event_id)}">Edit lineups</button>
+      </div>
+      ${lineupBanner(edits)}
+      <section class="hero">${scoreboard(game, shown, scenario, score.forecast)}</section>
       <p class="status-row">
         <span class="tip">${escapeHtml(formatTip(game.start_time))}</span>
         <span class="status">${escapeHtml(statusLabel(game, now))}</span>
         ${minutesMarkup(shown)}
       </p>
-      <label class="color-choice"><input type="checkbox" data-probability-colors> Probability colors</label>
-      <label class="scenario-choice"><input type="checkbox" data-upside-scenario${upsideChecked}> ${UPSIDE_LABEL}</label>
+      ${keyTiles(game, score)}
+      ${chartsPanel(game, score)}
+      <div class="view-options">
+        <label class="color-choice"><input type="checkbox" data-probability-colors> Probability colors</label>
+        <label class="scenario-choice"><input type="checkbox" data-upside-scenario${upsideChecked}> ${UPSIDE_LABEL}</label>
+      </div>
       ${distributionPanel(score)}
       ${boxTable('away', game.away, shown.away, sort.away, expected)}
       ${boxTable('home', game.home, shown.home, sort.home, expected)}

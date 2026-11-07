@@ -10,6 +10,8 @@ The page lists today's NBA games in America/Chicago. Simulate draws 10,000 indep
 - `data/shooting-cache.json` stays off the site. It is not under `public/` and is not copied into `dist/`.
 - `.github/workflows/refresh-rate-card.yml` rebuilds those files. Its concurrency group is `simulator-rate-card`. Do not join `pick-cache-writer`.
 - After a data push, that job dispatches `deploy-pages.yml`. A token push does not emit `push`, so the site would otherwise keep the previous artifact.
+- GitHub drops or delays many cron slots, so every refresh run ends (with `if: always()`) by arming `.github/workflows/refresh-timer.yml`. The timer waits until the time from `src/refresh-window.ts` (every 45 minutes within four hours of a tip, about 30 minutes before each tip, just after Chicago midnight, at least every 3.5 hours otherwise), then dispatches the refresh with `trigger=timer`. Its concurrency group is `simulator-refresh-timer`, and a newer timer cancels the waiting one. The cron schedule stays as a backstop.
+- Forecast archives keep only games tipping within two hours. `npm run replay` scores archived pre-tip inputs with the current code.
 - The job may call the ESPN scoreboard, team index, roster, injuries, and box-score summary endpoints, and it may read PickLedger's public outcome gzip. It does not call `stats.nba.com`. It does not scrape CBS or Rotowire. It does not call the player gamelog URL. Summary requests are limited to event ids already in the 2026 and 2027 outcome rows, at most 400 new events a run.
 - The rate card is not published until the shooting cache contains some free-throw attempts.
 - Scheduled data commits may use `github-actions[bot]`. Human and agent commits use `Harsh4873` only.

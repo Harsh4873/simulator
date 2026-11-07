@@ -1,12 +1,14 @@
 import type {RateCard,Slate} from './types.ts';
 import {validateGeneration} from './validate-card.ts';
 export interface ForecastArchive {slate:Slate;card:RateCard;source_lineage?:{input_hash:string;model_hash:string;maximum_event_start:string|null;training_event_ids:string[];roster?:import("./fit.ts").RosterPlayer[];injuries?:import("./fit.ts").InjuryInput[]}}
+/** ESPN boxes and scoreboards format the same tip as 2026-11-07T00:00Z and 2026-11-07T00:00:00Z. */
+export function sameInstant(a:string,b:string):boolean{const x=Date.parse(a),y=Date.parse(b);return Number.isFinite(x)&&x===y;}
 export function archivedForecast(archives:ForecastArchive[],eventId:string,tip:string,version:string):ForecastArchive|null{
  const valid=archives.filter(a=>{
   try{validateGeneration(a.slate,a.card);}catch{return false;}
   const cutoff=a.card.generated_at;
   const game=a.slate.games.find(g=>g.event_id===eventId);
-  if(!cutoff||!game||game.start_time!==tip||Date.parse(cutoff)>=Date.parse(tip)||a.card.model_version!==version)return false;
+  if(!cutoff||!game||!sameInstant(game.start_time,tip)||Date.parse(cutoff)>=Date.parse(tip)||a.card.model_version!==version)return false;
   const lineage=a.source_lineage;
   return !!lineage&&a.card.input_hash===lineage.input_hash&&a.card.model_hash===lineage.model_hash&&!lineage.training_event_ids.includes(eventId)&&(!lineage.maximum_event_start||Date.parse(lineage.maximum_event_start)<Date.parse(cutoff));
  });

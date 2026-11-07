@@ -29,6 +29,7 @@ const SUMMARY_CONCURRENCY = 8;
 const SUMMARY_TIMEOUT_MS = 20_000;
 const JSON_TIMEOUT_MS = 20_000;
 const GZIP_TIMEOUT_MS = 60_000;
+export const ARCHIVE_LEAD_MS = 2 * 3600_000;
 const SIGNED_NUMBER = /[+-]\d+(?:\.\d+)?/;
 const SEASON_TYPES: Record<number, SeasonType> = {
   1: 'preseason',
@@ -217,6 +218,12 @@ function espnCdnUrl(value: unknown): string | null {
   return trimmed.startsWith('https://a.espncdn.com/') ? trimmed : null;
 }
 
+export function hexColor(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim().replace(/^#/, '');
+  return /^[0-9a-fA-F]{6}$/.test(trimmed) ? `#${trimmed.toLowerCase()}` : null;
+}
+
 function teamSide(competitor: Record<string, unknown>): TeamSide | null {
   const team = isRecord(competitor.team) ? competitor.team : {};
   const teamId = String(team.id ?? competitor.id ?? '').trim();
@@ -228,6 +235,10 @@ function teamSide(competitor: Record<string, unknown>): TeamSide | null {
   };
   const logo = espnCdnUrl(team.logo);
   if (logo) side.logo_url = logo;
+  const color = hexColor(team.color);
+  if (color) side.color = color;
+  const alternate = hexColor(team.alternateColor);
+  if (alternate) side.alternate_color = alternate;
   return side;
 }
 
@@ -669,7 +680,8 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
       renameSync(`${SLATE_PATH}.tmp`, SLATE_PATH);
       writeFileSync(join(outputRoot,'public/data/manifest.json'),serialize({schema_version:1,input_hash:inputHash,model_hash:modelHash,generated_at:generatedAt,slate_hash:hash(serialize(slate)),card_hash:hash(serialize(rateCard))}));
       writeFileSync(join(outputRoot,'.refresh-status.json'),serialize({checked_at:stamp(now),input_hash:inputHash,model_hash:modelHash,expected_date:date,completed_at:stamp(new Date())}));
-      const upcoming = new Set(games.filter(g => Date.parse(g.start_time)>now.getTime() && g.status_state==='pre').map(g=>g.event_id));
+      // Archive only games tipping soon: the last pre-tip card is the forecast that gets evaluated, and earlier refreshes would only add repository weight.
+      const upcoming = new Set(games.filter(g => Date.parse(g.start_time)>now.getTime() && Date.parse(g.start_time)-now.getTime()<=ARCHIVE_LEAD_MS && g.status_state==='pre').map(g=>g.event_id));
       if(upcoming.size){
         const archive=join(outputRoot,'data/forecast-archive',date);
         mkdirSync(archive,{recursive:true});

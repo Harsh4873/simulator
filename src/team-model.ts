@@ -5,7 +5,7 @@ import {scheduleContext} from './schedule-context.ts';
 import {historicalStints} from './play-history.ts';
 import {fitLineupEffects} from './lineup-effects.ts';
 import {fitFreeThrows} from './free-throw-model.ts';
-import {fitParticipation,participationProbability,participationFeatures} from './participation-model.ts';
+import {fitParticipation,participationProbability,participationFeatures,ParticipationTracker,calibrateHealthy,applyHealthyCalibration} from './participation-model.ts';
 import {fitAvailability,type AvailabilityObservation} from './model-evidence.ts';
 import { selectRolePrior } from './role-model.ts';
 import { fitTeamEffects, restDays } from './team-effects.ts';
@@ -13,7 +13,7 @@ import { chicagoDate } from './date.ts';
 import type { CompletedEvent } from './parse-summary.ts';
 import type { MatchupContext, RatePlayer, SlateGame, TeamProfile } from './types.ts';
 
-export const MODEL_VERSION = 'possessions-v4';
+export const MODEL_VERSION = 'possessions-v5';
 // Shrinkage strengths are modeling priors, not fitted calibration coefficients.
 const TEAM_PRIOR_GAMES = 12;
 const PRIOR_SEASON_WEIGHT = 0.2;
@@ -43,7 +43,9 @@ export function fitMatchup(events: CompletedEvent[], game: SlateGame, cutoff: st
     return {e,team,rows,other,poss,pace:poss*48/(48+5*(e.periods-4)),weight:e.season===game.season?1:PRIOR_SEASON_WEIGHT};
   }));
   const possessions = sum(samples.map(x => x.poss*x.weight));
-  const league = sum(samples.map(x => sum(x.rows.map(p => p.pts))*x.weight))/possessions;
+  // The fitted intercept is this season's level; a pooled average would keep last season's scoring environment.
+  const pooled = sum(samples.map(x => sum(x.rows.map(p => p.pts))*x.weight))/possessions;
+  const league = effects.level !== undefined && Number.isFinite(effects.level) && effects.level > 0 ? effects.level : pooled;
   const pace = sum(samples.map(x => x.pace*x.weight))/sum(samples.map(x => x.weight));
   const leagueTov = sum(samples.map(x => sum(x.rows.map(p => p.tov!))*x.weight))/possessions;
   const leagueOrb = sum(samples.map(x => sum(x.rows.map(p => p.orb!))*x.weight))/sum(samples.map(x => sum(x.rows.map(p => p.fga-p.fgm))*x.weight));
@@ -66,18 +68,52 @@ export function fitMatchup(events: CompletedEvent[], game: SlateGame, cutoff: st
   return {rotation_state:cached.rotation,fouls:cached.fouls,residual_diagnostics:cached.residual,usage_effects:cached.usage,free_throws:cached.freeThrows,lineup_effects:cached.lineups,away:profile(game.away.team_id),home:profile(game.home.team_id),league_efficiency:league,pace_sd:paceSD,home_log_advantage:effects.home,rest_coefficient:effects.rest,workload_coefficient:effects.workload,travel_coefficient:effects.travel,timezone_coefficient:effects.timezone,neutral:game.neutral_site===true,training_games:history.length};
 }
 
+/** Minutes in a player's first appearances when no earlier NBA appearance exists in the permitted history. */
+export function newcomerMinutes(events: CompletedEvent[], season: number): number {
+  const earlier = new Set(events.filter(e => e.season < season).flatMap(e => e.players.filter(p => p.minutes > 0).map(p => p.athlete_id)));
+  const seen = new Map<string, number>();
+  const minutes: number[] = [];
+  for (const e of [...events].filter(e => e.season === season).sort((a, b) => a.start_time.localeCompare(b.start_time))) {
+    for (const p of e.players) {
+      if (!(p.minutes > 0) || earlier.has(p.athlete_id)) continue;
+      const count = seen.get(p.athlete_id) ?? 0;
+      if (count < 3) minutes.push(p.minutes);
+      seen.set(p.athlete_id, count + 1);
+    }
+  }
+  return minutes.length >= 20 ? mean(minutes) : NEWCOMER_MINUTES_PRIOR;
+}
+// Labelled prior for a rostered player with no NBA appearance in the permitted history, until 20 newcomer appearances exist.
+export const NEWCOMER_MINUTES_PRIOR = 10;
+
 export function fitCurrentRoles(players: RatePlayer[], events: CompletedEvent[], season: number, availability:AvailabilityObservation[]=[], cutoff:string=new Date().toISOString()): void {
   events=eligibleEvents(events,cutoff);
   const selection=selectRolePrior(events,season);
   const ROLE_PRIOR_GAMES=selection.prior_games;
   const participationFit=fitParticipation(events);
+  const tracker=new ParticipationTracker();
+  // Score each archived healthy pre-tip row with the tracker state just before that game, then calibrate.
+  const archived=new Map<string,AvailabilityObservation[]>();
+  for(const row of availability)if(row.designation==='healthy'&&row.event_id&&row.team_id){const xs=archived.get(row.event_id)??[];xs.push(row);archived.set(row.event_id,xs);}
+  const calibrationRows:{tip:string;p:number;y:number}[]=[];
+  for(const e of [...events].sort((a,b)=>a.start_time.localeCompare(b.start_time)||a.event_id.localeCompare(b.event_id))){
+    for(const row of archived.get(e.event_id)??[]){
+      const history=tracker.history(row.team_id!,row.athlete_id,e.season);
+      const p=history?participationProbability(participationFit,participationFeatures(history)):null;
+      if(p!==null)calibrationRows.push({tip:e.start_time,p,y:Number(row.played&&row.minutes>0)});
+    }
+    tracker.observe(e);
+  }
+  const healthyCalibration=calibrateHealthy(calibrationRows);
+  const newcomer=newcomerMinutes(events,season);
   const closing=events.map(e=>({e,stint:historicalStints(e).stints.filter(s=>s.period===4&&s.end_seconds===0).at(-1)})).filter(x=>x.stint);
   for (const p of players) {
     p.active_season=season;p.role_prior_games=ROLE_PRIOR_GAMES;
     const teamEvents = events.filter(e => e.season===season && [e.home_team_id,e.away_team_id].includes(p.team_id));
     const current = teamEvents.flatMap(e => e.players.filter(r=>r.athlete_id===p.athlete_id&&r.team_id===p.team_id&&r.minutes>0).map(r=>({r,date:e.start_time})) ).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
     const prior = events.filter(e=>e.season===season-1).flatMap(e=>e.players.filter(r=>r.athlete_id===p.athlete_id&&r.minutes>0));
-    const priorMean = prior.length ? mean(prior.map(r=>r.minutes)) : p.minutes_mean;
+    const everPlayed = prior.length>0 || events.some(e=>e.players.some(r=>r.athlete_id===p.athlete_id&&r.minutes>0));
+    const priorMean = prior.length ? mean(prior.map(r=>r.minutes)) : everPlayed ? p.minutes_mean : Math.min(p.minutes_mean,newcomer);
     const recent = current.slice(0,selection.window);
     const weights = recent.map((_,i)=>selection.half_life===null?1:2**(-i/selection.half_life));
     p.minutes_mean = !recent.length ? priorMean : (sum(recent.map((x,i)=>x.r.minutes*weights[i]))+ROLE_PRIOR_GAMES*priorMean)/(sum(weights)+ROLE_PRIOR_GAMES);
@@ -94,17 +130,21 @@ export function fitCurrentRoles(players: RatePlayer[], events: CompletedEvent[],
     // A positive box establishes participation; absence from a legacy box does not establish a DNP.
     const priorPlay=priorKnown.length?(1+priorKnown.filter(r=>r.played).length)/(2+priorKnown.length):.5;
     let play=known.length?(known.filter(r=>r.played).length+2*priorPlay)/(known.length+2):priorPlay;
-    p.participation_coverage={known:known.length,unknown:teamEvents.length-known.length,source:known.length?'explicit-DNP':'scenario-prior'};
-    const lastKnown=known.slice(-5),recentPlayed=lastKnown.length?lastKnown.filter(x=>x.played).length/lastKnown.length:priorPlay;
-    const predicted=participationProbability(participationFit,participationFeatures(p.minutes_mean,recentPlayed,p.starter_rate));
-    if(predicted!==null&&known.length>=2)play=predicted;
-    p.participation_model={...participationFit,applied:predicted!==null&&known.length>=2};
+    const history=tracker.history(p.team_id,p.athlete_id,season);
+    const raw=history?participationProbability(participationFit,participationFeatures(history)):null;
+    // The calibration describes players listed healthy; uncertain designations are scaled from that baseline below.
+    const predicted=raw===null?null:applyHealthyCalibration(healthyCalibration,raw);
+    if(predicted!==null)play=predicted;
+    p.participation_coverage={known:known.length,unknown:teamEvents.length-known.length,absent:history?.filter(s=>s.absent).length??0,source:predicted!==null?'team-boxes':known.length?'explicit-DNP':'scenario-prior'};
+    p.participation_model={...participationFit,applied:predicted!==null,healthy_calibration:healthyCalibration};
+    p.typical_minutes=teamEvents.length?sum(teamEvents.map(e=>e.players.find(r=>r.athlete_id===p.athlete_id&&r.team_id===p.team_id)?.minutes??0))/teamEvents.length:null;
     p.role_context={window:selection.window,half_life:selection.half_life,team_changed:events.some(e=>e.season===season&&e.players.some(r=>r.athlete_id===p.athlete_id&&r.team_id!==p.team_id)),return_from_injury:'unknown'};
     const status = p.injury_status;
-    const fittedAvailability=fitAvailability(availability,status,cutoff);
+    // A designation-level rate never replaces a healthy player's own history; it calibrates uncertain designations only.
+    const fittedAvailability=p.minutes_weight!==0&&status!=='healthy'?fitAvailability(availability,status,cutoff):null;
     p.availability_calibration_n=fittedAvailability?.n??0;
     if (p.minutes_weight===0) play=0;
-    else if(fittedAvailability)play=fittedAvailability.probability;
+    else if(fittedAvailability)play*=fittedAvailability.probability;
     else if (status==='doubtful') play*=0.1;
     else if (status==='probable') play*=0.9;
     else if (p.questionable_widen) play*=0.5;

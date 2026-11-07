@@ -5,6 +5,9 @@ export const TEAM_PENALTY_CANDIDATES = [4, 8, 12] as const;
 export const PRIOR_WEIGHT_CANDIDATES = [0.2, 0.5, 1] as const;
 export const DEFAULT_TEAM_PENALTY = 12;
 export const DEFAULT_PRIOR_SEASON_WEIGHT = 0.2;
+/** Ridge strength on last season's scoring-level shift: larger values pull this season's level toward last season's. */
+export const SEASON_SHIFT_PENALTY_CANDIDATES = [50, 200, 800] as const;
+export const DEFAULT_SEASON_SHIFT_PENALTY = 200;
 export interface TeamEffects {
   offense:Record<string,number>;
   defense:Record<string,number>;
@@ -22,21 +25,25 @@ export interface TeamEffects {
   prior_season_weight:number;
   holdout_mae:number|null;
   holdout_games:number;
+  /** Current-season points per possession implied by the intercept; earlier seasons get their own level shift. */
+  level?:number;
+  prior_season_shift?:number;
+  season_shift_penalty?:number;
 }
 type Row = {x:[number,number][];y:number;current:boolean;eventIndex:number;pace:number;pts:number};
 const empty = (games:number):TeamEffects => ({
   offense:{},defense:{},home:0,rest:0,games,residual_sd:0,rest_samples:0,workload:0,travel:null,timezone:null,travel_samples:0,timezone_samples:0,
   team_penalty:DEFAULT_TEAM_PENALTY,prior_season_weight:DEFAULT_PRIOR_SEASON_WEIGHT,holdout_mae:null,holdout_games:0,
 });
-function solve(rows:Row[],n:number,teamPenalty:number,priorWeight:number):{beta:number[];residual:number[]} {
+function solve(rows:Row[],n:number,teamPenalty:number,priorWeight:number,shiftPenalty:number=DEFAULT_SEASON_SHIFT_PENALTY):{beta:number[];residual:number[]} {
   const weight = (r:Row) => r.current ? 1 : priorWeight;
-  const beta=new Array(6+2*n).fill(0);
+  const beta=new Array(7+2*n).fill(0);
   const weighted = rows.reduce((s,r)=>s+weight(r),0);
   beta[0]=rows.reduce((s,r)=>s+weight(r)*r.y,0)/Math.max(1e-9,weighted);
   const residual=rows.map(r=>r.y-beta[0]);
   const columns=beta.map((_,j)=>rows.flatMap((r,i)=>{const x=r.x.find(([k])=>k===j)?.[1]??0;return x?[{i,x}]:[];}));
   for(let sweep=0;sweep<30;sweep++)for(let j=0;j<beta.length;j++){
-    const penalty=j===0?0:j<=2*n?teamPenalty:50;let xy=0,xx=penalty;
+    const penalty=j===0?0:j<=2*n?teamPenalty:j===6+2*n?shiftPenalty:50;let xy=0,xx=penalty;
     for(const {i,x} of columns[j]){const w=weight(rows[i]);xy+=w*x*(residual[i]+x*beta[j]);xx+=w*x*x;}
     const next=xx?xy/xx:0,delta=next-beta[j];beta[j]=next;
     for(const {i,x} of columns[j])residual[i]-=x*delta;
@@ -66,22 +73,23 @@ export function fitTeamEffects(events:CompletedEvent[],possessions:(e:CompletedE
       const travel=schedule.travel_km!==null&&against.travel_km!==null?(schedule.travel_km-against.travel_km)/1000:0;if(schedule.travel_km!==null&&against.travel_km!==null)travelSamples++;
       const timezone=schedule.timezone_change_hours!==null&&against.timezone_change_hours!==null?schedule.timezone_change_hours-against.timezone_change_hours:0;if(schedule.timezone_change_hours!==null&&against.timezone_change_hours!==null)timezoneSamples++;
       const delta=rest!==null&&other!==null?Math.log1p(rest)-Math.log1p(other):0;if(rest!==null&&other!==null)restSamples++;
-      rows.push({x:[[0,1],[1+teams.indexOf(team),1],[1+n+teams.indexOf(opp),1],[1+2*n,e.neutral?0:venue],[2+2*n,delta],[3+2*n,workload],[4+2*n,travel],[5+2*n,timezone]],y:Math.log(pts/pace),current:e.season===activeSeason,eventIndex,pace,pts});
+      // Earlier seasons get their own scoring-level shift, so the intercept tracks this season's league efficiency.
+      rows.push({x:[[0,1],[1+teams.indexOf(team),1],[1+n+teams.indexOf(opp),1],[1+2*n,e.neutral?0:venue],[2+2*n,delta],[3+2*n,workload],[4+2*n,travel],[5+2*n,timezone],[6+2*n,e.season===activeSeason?0:1]],y:Math.log(pts/pace),current:e.season===activeSeason,eventIndex,pace,pts});
     }
     last.set(`${e.season}:${e.home_team_id}`,e);last.set(`${e.season}:${e.away_team_id}`,e);
   });
   const split=ordered.length>=50?Math.floor(ordered.length*.8):ordered.length;
   const train=rows.filter(r=>r.eventIndex<split),hold=rows.filter(r=>r.eventIndex>=split);
-  let teamPenalty:number=DEFAULT_TEAM_PENALTY,priorWeight:number=DEFAULT_PRIOR_SEASON_WEIGHT,holdoutMae:number|null=null;
+  let teamPenalty:number=DEFAULT_TEAM_PENALTY,priorWeight:number=DEFAULT_PRIOR_SEASON_WEIGHT,shiftPenalty:number=DEFAULT_SEASON_SHIFT_PENALTY,holdoutMae:number|null=null;
   if(hold.length>=20&&train.length>=40){
     let best=Infinity;
-    for(const penalty of TEAM_PENALTY_CANDIDATES)for(const weight of PRIOR_WEIGHT_CANDIDATES){
-      const {beta}=solve(train,n,penalty,weight);
+    for(const penalty of TEAM_PENALTY_CANDIDATES)for(const weight of PRIOR_WEIGHT_CANDIDATES)for(const shift of SEASON_SHIFT_PENALTY_CANDIDATES){
+      const {beta}=solve(train,n,penalty,weight,shift);
       const mae=hold.reduce((s,r)=>s+Math.abs(r.pts-predictedPpp(r,beta)*r.pace),0)/hold.length;
-      if(mae<best){best=mae;teamPenalty=penalty;priorWeight=weight;holdoutMae=mae;}
+      if(mae<best){best=mae;teamPenalty=penalty;priorWeight=weight;shiftPenalty=shift;holdoutMae=mae;}
     }
   }
-  const {beta,residual}=solve(rows,n,teamPenalty,priorWeight);
+  const {beta,residual}=solve(rows,n,teamPenalty,priorWeight,shiftPenalty);
   return {
     offense:Object.fromEntries(teams.map((t,i)=>[t,Math.exp(beta[0]+beta[1+i])])),
     defense:Object.fromEntries(teams.map((t,i)=>[t,Math.exp(beta[0]+beta[1+n+i])])),
@@ -99,5 +107,8 @@ export function fitTeamEffects(events:CompletedEvent[],possessions:(e:CompletedE
     prior_season_weight:priorWeight,
     holdout_mae:holdoutMae,
     holdout_games:new Set(hold.map(r=>r.eventIndex)).size,
+    level:Math.exp(beta[0]),
+    prior_season_shift:beta[6+2*n],
+    season_shift_penalty:shiftPenalty,
   };
 }

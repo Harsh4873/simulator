@@ -35,7 +35,7 @@ export function addEvidence(players: RatePlayer[], history: CompletedEvent[], cu
     p.evidence={minutes:stat('minutes'),shooting:stat('shooting'),reb:stat('reb'),ast:stat('ast'),stl:stat('stl'),blk:stat('blk'),role_changed:recent.some(x=>x.r.team_id!==p.team_id),availability:(p.availability_calibration_n??0)>0?'observed':'scenario-prior',historical_roster_coverage:p.participation_coverage?.unknown===0?'complete':'unknown'};
   }
 }
-export interface AvailabilityObservation { event_id?:string;expected_minutes?:number;athlete_id:string; report_at:string; tip:string; settled_at:string; designation:string; played:boolean; minutes:number; roster_known:boolean }
+export interface AvailabilityObservation { event_id?:string;team_id?:string;expected_minutes?:number;athlete_id:string; report_at:string; tip:string; settled_at:string; designation:string; played:boolean; minutes:number; roster_known:boolean }
 export function fitAvailability(rows: AvailabilityObservation[], designation:string, cutoff:string): {probability:number; conditional_minutes:number|null;minutes_multiplier:number|null; n:number} | null {
   const unique=[...new Map(rows.map(r=>[`${r.athlete_id}:${r.event_id??r.tip}`,r])).values()];
   const xs=unique.filter(r=>r.designation===designation && r.roster_known && Date.parse(r.report_at)<Date.parse(r.tip) && Date.parse(r.tip)<Date.parse(r.settled_at) && Date.parse(r.settled_at)<Date.parse(cutoff) && Number.isFinite(r.minutes)&&r.minutes>=0&&r.played===(r.minutes>0));

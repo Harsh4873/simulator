@@ -22,6 +22,9 @@ export interface TeamSide {
   name: string;
   abbreviation: string;
   logo_url?: string;
+  /** ESPN team colors as #rrggbb, decorative only. */
+  color?: string;
+  alternate_color?: string;
 }
 
 export interface SlateGame {
@@ -94,11 +97,15 @@ export interface RatePlayer {
   starter_rate?: number | null;
   closing_rate?: number | null;
   minutes_residual_sd?:number|null;
-  participation_model?: import('./participation-model.ts').ParticipationFit & {applied:boolean};
+  participation_model?: import('./participation-model.ts').ParticipationFit & {applied:boolean;healthy_calibration?:import('./participation-model.ts').HealthyCalibration};
   role_context?:{window:number;half_life:number|null;team_changed:boolean;return_from_injury:'unknown'|'observed'};
-  participation_coverage?: {known:number;unknown:number;source:"explicit-DNP"|"scenario-prior"};
+  participation_coverage?: {known:number;unknown:number;absent?:number;source:"explicit-DNP"|"scenario-prior"|"team-boxes"};
+  /** Average minutes per team game this season, zeros included: the lineup behind the fitted team rating. */
+  typical_minutes?: number|null;
   availability_calibration_n?:number;
   replacement_level?: true;
+  /** Set only in the browser when the viewer rules a player in or out. Never published. */
+  manual_status?: 'in' | 'out';
 }
 
 export interface RateGame {

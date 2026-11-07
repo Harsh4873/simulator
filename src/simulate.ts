@@ -14,6 +14,7 @@ export const DIRICHLET_KAPPA = 80;
 export const STARTER_MINUTE_SD = 2;
 export const ROTATION_MINUTE_SD = 4;
 export const BENCH_MINUTE_SD = 6;
+export const MAX_MINUTES_CV = 1;
 export const PLAY_PRIOR_STRENGTH = 6;
 export const CAMEO_MINUTE_CAP = 12;
 export const QUESTIONABLE_SIGMA = 0.35;
@@ -416,7 +417,10 @@ function rawMinutes(players: RatePlayer[], budget: number, rng: Rng): number[] {
     const baseline = total>0 ? targets[i]*budget/total : budget/players.length;
     // Smooth exposure noise; no 24-minute branch or athlete-ordered residual dumping.
     const sd = (p.minutes_residual_sd??(2 + 4*Math.exp(-baseline/12)))*Math.sqrt(budget/240);
-    let value = Math.max(0,baseline + normal(rng)*sd);
+    // Mean-preserving nonnegative noise: a gamma multiplier with the fitted residual SD.
+    // A truncated normal would add minutes to low-minute players before the team budget is rescaled.
+    const cv = baseline > 0 ? Math.min(MAX_MINUTES_CV, sd / baseline) : 0;
+    let value = cv > 0 ? baseline * gammaMean1(1 / (cv * cv), rng) : baseline;
     if(p.questionable_widen)value*=Math.exp(normal(rng)*QUESTIONABLE_SIGMA-QUESTIONABLE_SIGMA**2/2);
     return value;
   });

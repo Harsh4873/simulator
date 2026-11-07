@@ -52,7 +52,10 @@ export function impliedPointsPerPossession(
 }
 
 export function fullStrengthMinutes(players: RatePlayer[], tonightMinutes: number[]): number[] {
-  const typical = players.map(p => Math.max(0, p.minutes_mean));
+  // The fitted team rating came from the minutes teams actually played, so compare tonight with that lineup.
+  // Older cards without typical minutes fall back to role minutes.
+  const observed = players.some(p => p.typical_minutes != null && p.typical_minutes > 0);
+  const typical = players.map(p => Math.max(0, observed ? p.typical_minutes ?? 0 : p.minutes_mean));
   const budget = sum(tonightMinutes);
   const total = sum(typical);
   if (!(total > 0) || !(budget > 0)) return tonightMinutes.slice();

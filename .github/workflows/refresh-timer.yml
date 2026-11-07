@@ -1,0 +1,47 @@
+name: Wait for the next simulator refresh
+run-name: Next refresh ${{ inputs.at }}
+
+# GitHub drops or delays most scheduled runs, so each refresh arms this timer for the next one.
+# A newer timer cancels an older waiting one. The cron schedule in refresh-rate-card.yml stays as a backstop.
+
+on:
+  workflow_dispatch:
+    inputs:
+      at:
+        description: UTC time to start the next refresh (YYYY-MM-DDTHH:MM:SSZ)
+        required: true
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: simulator-refresh-timer
+  cancel-in-progress: true
+
+jobs:
+  wait:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - name: Wait until the scheduled time, then start the refresh
+        env:
+          AT: ${{ inputs.at }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$AT" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2})?Z$ ]]; then
+            echo "::error::Invalid refresh time"
+            exit 1
+          fi
+          wait=$(( $(date -u -d "$AT" +%s) - $(date -u +%s) ))
+          # Stay under the job timeout. The refresh schedules the next timer either way.
+          if [ "$wait" -gt 19200 ]; then wait=19200; fi
+          if [ "$wait" -gt 0 ]; then
+            echo "Waiting ${wait}s until $AT"
+            sleep "$wait"
+          fi
+          gh workflow run refresh-rate-card.yml --repo "$REPO" --ref main -f trigger=timer

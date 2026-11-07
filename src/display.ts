@@ -84,3 +84,75 @@ export function playerHeadshotUrl(player: { athlete_id?: string | null; headshot
   if (!/^\d+$/.test(athleteId)) return null;
   return `${ESPN_CDN}i/headshots/nba/players/full/${athleteId}.png`;
 }
+
+type Rgb = [number, number, number];
+const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const FALLBACK_AWAY = '#4da6ff';
+const FALLBACK_HOME = '#00e5a0';
+
+function rgbOf(hex: string): Rgb {
+  return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as Rgb;
+}
+
+function hexOf(color: Rgb): string {
+  return `#${color.map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('')}`;
+}
+
+function channel(v: number): number {
+  const s = v / 255;
+  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+}
+
+function luminance([r, g, b]: Rgb): number {
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+function mix(color: Rgb, target: Rgb, t: number): Rgb {
+  return color.map((v, i) => v + (target[i] - v) * t) as Rgb;
+}
+
+/** Team colors are decorative. Lift near-black and deepen near-white so a bar or stripe stays visible in both themes. */
+export function displayColor(hex: string): string {
+  let color = rgbOf(hex);
+  for (let i = 0; i < 10 && luminance(color) < 0.07; i += 1) color = mix(color, [255, 255, 255], 0.18);
+  for (let i = 0; i < 10 && luminance(color) > 0.5; i += 1) color = mix(color, [0, 0, 0], 0.18);
+  return hexOf(color);
+}
+
+function distance(a: string, b: string): number {
+  const x = rgbOf(a);
+  const y = rgbOf(b);
+  return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+}
+
+function teamColor(side: { color?: string; alternate_color?: string }): string | null {
+  const primary = side.color && HEX_COLOR.test(side.color) ? side.color : null;
+  const alternate = side.alternate_color && HEX_COLOR.test(side.alternate_color) ? side.alternate_color : null;
+  if (!primary) return alternate ? displayColor(alternate) : null;
+  const l = luminance(rgbOf(primary));
+  // A black or near-white primary reads poorly as an accent; a mid-tone alternate reads better.
+  if (alternate && (l < 0.02 || l > 0.6)) {
+    const a = luminance(rgbOf(alternate));
+    if (a >= 0.02 && a <= 0.6) return displayColor(alternate);
+  }
+  return displayColor(primary);
+}
+
+/** Accent colors for one matchup, kept apart when both teams wear similar colors. */
+export function teamPalette(
+  away: { color?: string; alternate_color?: string },
+  home: { color?: string; alternate_color?: string },
+): { away: string; home: string } {
+  const a = teamColor(away) ?? FALLBACK_AWAY;
+  let h = teamColor(home) ?? FALLBACK_HOME;
+  if (distance(a, h) < 90) {
+    const alternate = home.alternate_color && HEX_COLOR.test(home.alternate_color) ? displayColor(home.alternate_color) : null;
+    h = alternate && distance(a, alternate) >= 90 ? alternate : distance(a, FALLBACK_HOME) >= 90 ? FALLBACK_HOME : FALLBACK_AWAY;
+  }
+  return { away: a, home: h };
+}
+
+export function paletteStyle(away: { color?: string; alternate_color?: string }, home: { color?: string; alternate_color?: string }): string {
+  const palette = teamPalette(away, home);
+  return `--away: ${palette.away}; --home: ${palette.home};`;
+}
