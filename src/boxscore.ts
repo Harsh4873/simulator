@@ -497,61 +497,83 @@ function shockFor(score: Simulation, teamId: string): number | undefined {
   return undefined;
 }
 
-function whySentences(row: CardRow | null): string[] {
-  const sentences: string[] = [];
-  if (!row) sentences.push('This player is not on the rate card.');
+interface WhyNote {
+  text: string;
+  kind: string;
+  kicker: string;
+}
+
+function whyNotes(row: CardRow | null): WhyNote[] {
+  const notes: WhyNote[] = [];
+  const push = (text: string, kind: string, kicker: string) => notes.push({ text, kind, kicker });
+  if (!row) push('This player is not on the rate card.', 'sample', 'Rate card');
   const games2026 = readNumber(row, 'games_2026');
   const games2027 = readNumber(row, 'games_2027');
   if (games2026 !== undefined && games2027 !== undefined) {
-    sentences.push(`Prior season (2026): ${games2026} games. This season (2027): ${games2027} games.`);
+    push(`Prior season (2026): ${games2026} games. This season (2027): ${games2027} games.`, 'sample', 'Seasons');
   }
   const scale=readNumber(row,'points_scale');
-  if(scale!==undefined)sentences.push(`Attempts scale: ${scale.toFixed(3)} from the exposure-weighted points blend.`);
+  if(scale!==undefined)push(`Attempts scale: ${scale.toFixed(3)} from the exposure-weighted points blend.`, 'usage', 'Shot volume');
   const conditional=readNumber(row,'minutes_mean');
-  if(conditional!==undefined)sentences.push(`Conditional minute target: ${conditional.toFixed(1)} before the team-minute allocation.`);
+  if(conditional!==undefined)push(`Conditional minute target: ${conditional.toFixed(1)} before the team-minute allocation.`, 'minutes', 'Minute target');
   const restriction=readNumber(row,'minutes_restriction');
-  if(restriction!==undefined)sentences.push(`Reported full-game minute cap: ${restriction}.`);
+  if(restriction!==undefined)push(`Reported full-game minute cap: ${restriction}.`, 'minutes', 'Minute cap');
   if(row&&'evidence' in row&&row.evidence){
     const evidence=row.evidence as import('./model-evidence.ts').PlayerEvidence;
-    for(const key of ['minutes','shooting','reb','ast'] as const){const e=evidence[key];sentences.push(`${key}: ${e.state}; weighted exposure ${e.exposure.toFixed(1)}, prior contribution ${(100*e.prior_fraction).toFixed(1)}%, last observation ${e.last_observed??'unknown'}.`);}
+    const kickers = { minutes: 'Minutes evidence', shooting: 'Shooting evidence', reb: 'Rebound evidence', ast: 'Assist evidence' } as const;
+    for(const key of ['minutes','shooting','reb','ast'] as const){const e=evidence[key];push(`${key}: ${e.state}; weighted exposure ${e.exposure.toFixed(1)}, prior contribution ${(100*e.prior_fraction).toFixed(1)}%, last observation ${e.last_observed??'unknown'}.`, 'evidence', kickers[key]);}
   }
   const games = readNumber(row, 'games');
   const shooting = readNumber(row, 'shooting_games');
   const missing = readBoolean(row, 'missing_shooting');
   if (games !== undefined && shooting !== undefined && shooting !== games) {
-    sentences.push(`Shooting sample: ${shooting} games.`);
+    push(`Shooting sample: ${shooting} games.`, 'shooting', 'Shooting sample');
   }
   if (shooting === 0 || missing === true) {
-    sentences.push('Missing shooting: shot mix and accuracy use team/position priors. Counting-game points, including zeros, blend continuously with the shooting prior according to exposure.');
+    push('Missing shooting: shot mix and accuracy use team/position priors. Counting-game points, including zeros, blend continuously with the shooting prior according to exposure.', 'shooting', 'Shooting prior');
   }
   if (games2026 === 0 && games2027 !== undefined && games2027 < 8) {
-    sentences.push('Thin sample: no games in 2026 and fewer than 8 in 2027.');
+    push('Thin sample: no games in 2026 and fewer than 8 in 2027.', 'sample', 'Thin sample');
   }
   const weight = readWeight(row);
   const status = readString(row, 'injury_status');
   const questionable = readBoolean(row, 'questionable_widen');
   if (weight === 0 && status !== undefined) {
-    sentences.push(
+    push(
       `Out of the rotation (${status}). This player's line is fixed at zero because the card gives them no minutes.`,
+      'out',
+      'Out of rotation',
     );
   }
   if (questionable === true) {
-    sentences.push('Uncertain availability reduces participation and widens minutes conditional on playing. These status probabilities are uncalibrated scenario priors.');
+    push('Uncertain availability reduces participation and widens minutes conditional on playing. These status probabilities are uncalibrated scenario priors.', 'availability', 'Uncertain availability');
   }
-  if (weight === 1 && questionable === false) sentences.push('No absence flag on the card.');
+  if (weight === 1 && questionable === false) push('No absence flag on the card.', 'availability', 'No absence flag');
   const participation=readNumber(row,'play_probability');
-  if(participation!==undefined)sentences.push(`Input P(play): ${(participation*100).toFixed(1)}%. Joint draws are conditioned on a feasible rotation; the simulated play share can differ.`);
+  if(participation!==undefined)push(`Input P(play): ${(participation*100).toFixed(1)}%. Joint draws are conditioned on a feasible rotation; the simulated play share can differ.`, 'availability', 'Chance of playing');
   const role=readString(row,'minutes_source');
-  if(role)sentences.push(role);
-  if (status === undefined) sentences.push('Injury status is not in the data.');
-  sentences.push(
+  if(role)push(role, 'role', 'Minutes fit');
+  if (status === undefined) push('Injury status is not in the data.', 'availability', 'Injury status');
+  push(
     'The table shows this player\'s average across all 10,000 games. A 40-point game can still happen in the tail. It is not the line from one draw.',
+    'read',
+    'Across 10,000 games',
   );
-  return sentences;
+  return notes;
+}
+
+function whyMarkup(notes: WhyNote[]): string {
+  const legend = notes.some((note) => note.kind === 'evidence')
+    ? '<p class="why-legend">Each evidence line is one stat family. The state says whether this player\'s games or the prior is in charge. Exposure is the weighted game count, the prior percentage is how hard the baseline still pulls, and the timestamp is the last game counted.</p>'
+    : '';
+  const items = notes
+    .map((note) => `<p class="why-item why-${note.kind}"><span class="why-kicker">${escapeHtml(note.kicker)}</span>${escapeHtml(note.text)}</p>`)
+    .join('');
+  return `<div class="why">${legend}${items}</div>`;
 }
 
 function rateItem(label: string, value: string): string {
-  return `<li>${escapeHtml(`${label}: ${value}`)}</li>`;
+  return `<li class="rate-row">${escapeHtml(`${label}: ${value}`)}</li>`;
 }
 
 function samplingList(row: CardRow | null, score: Simulation, shock: number | undefined): string {
@@ -562,7 +584,7 @@ function samplingList(row: CardRow | null, score: Simulation, shock: number | un
   const minutes = readNumber(row, 'minutes_mean');
   const minutesLabel = minutes === undefined ? 'not in the data' : minutes.toFixed(1);
   const items = [
-    `<li>${escapeHtml(`Shrunk minutes rate: ${minutesLabel}. Active rates are ${scaled}, and this line is one share of that budget.`)}</li>`,
+    `<li class="rate-row">${escapeHtml(`Shrunk minutes rate: ${minutesLabel}. Active rates are ${scaled}, and this line is one share of that budget.`)}</li>`,
   ];
   for (const line of RATE_LINES) {
     const value = readNumber(row, line.key);
@@ -570,22 +592,54 @@ function samplingList(row: CardRow | null, score: Simulation, shock: number | un
   }
   if (typeof shock === 'number' && Number.isFinite(shock)) {
     items.push(
-      `<li>${escapeHtml(`Team volume shock this draw: ${shock.toFixed(2)}. Legacy volume multiplier; possession-model cards instead use shared pace and opponent-adjusted efficiency.`)}</li>`,
+      `<li class="rate-row">${escapeHtml(`Team volume shock this draw: ${shock.toFixed(2)}. Legacy volume multiplier; possession-model cards instead use shared pace and opponent-adjusted efficiency.`)}</li>`,
     );
   } else {
-    items.push('<li>Team volume shock is not in the data.</li>');
+    items.push('<li class="rate-row">Team volume shock is not in the data.</li>');
   }
   if (score.overtime) {
-    items.push(`<li>${escapeHtml(`This draw used ${teamMinutes} team-minutes (5 × ${playerMinutes}).`)}</li>`);
+    items.push(`<li class="rate-row">${escapeHtml(`This draw used ${teamMinutes} team-minutes (5 × ${playerMinutes}).`)}</li>`);
   }
   return `<ul class="rates">${items.join('')}</ul>`;
+}
+
+function statCell(label: string, value: string, tone: '' | 'hero' | 'lead', name: string): string {
+  const cls = tone ? `stat-tile stat-${tone}` : 'stat-tile';
+  return `<div class="${cls}"><dt>${label}</dt><dd>${value}</dd><span class="stat-name">${escapeHtml(name)}</span></div>`;
+}
+
+function meanText(value: number | undefined): string {
+  return value === undefined ? '—' : value.toFixed(1);
 }
 
 function expectedLine(line: SimulatedPlayer): string {
   const e=line.expectation!;
   const shown=e.played??e;
-  const fields=[['MIN',shown.minMean],['FGM',shown.counts?.fgm??e.counts?.fgm],['FGA',shown.counts?.fga??e.counts?.fga],['3PM',shown.counts?.tpm??e.counts?.tpm],['FTM',shown.counts?.ftm??e.counts?.ftm],['FTA',shown.counts?.fta??e.counts?.fta],['PTS',shown.ptsMean],['REB',shown.rebMean],['AST',shown.astMean],['STL',shown.counts?.stl??e.counts?.stl],['BLK',shown.counts?.blk??e.counts?.blk]] as const;
-  return `<dl class="line">${fields.map(([k,v])=>`<dt>${k}</dt><dd>${v===undefined?'—':v.toFixed(1)}</dd>`).join('')}</dl><p>Averages in the draws this player appeared (minutes greater than 0). Plays in ${(e.playRate*100).toFixed(1)}% of draws. The roster table still counts sit-outs so team minutes sum to 240. Prop probabilities below exclude DNPs and pushes.</p>`;
+  const share=(e.playRate*100).toFixed(1);
+  const hero=[
+    statCell('PTS', meanText(shown.ptsMean), 'hero', 'Points when playing'),
+    statCell('MIN', meanText(shown.minMean), 'lead', 'Minutes'),
+    statCell('REB', meanText(shown.rebMean), 'lead', 'Rebounds'),
+    statCell('AST', meanText(shown.astMean), 'lead', 'Assists'),
+  ].join('');
+  const shooting=[
+    statCell('FGM', meanText(shown.counts?.fgm??e.counts?.fgm), '', 'Field goals'),
+    statCell('FGA', meanText(shown.counts?.fga??e.counts?.fga), '', 'Attempts'),
+    statCell('3PM', meanText(shown.counts?.tpm??e.counts?.tpm), '', 'Threes'),
+    statCell('FTM', meanText(shown.counts?.ftm??e.counts?.ftm), '', 'Free throws'),
+    statCell('FTA', meanText(shown.counts?.fta??e.counts?.fta), '', 'FT attempts'),
+  ].join('');
+  const stocks=[
+    statCell('STL', meanText(shown.counts?.stl??e.counts?.stl), '', 'Steals'),
+    statCell('BLK', meanText(shown.counts?.blk??e.counts?.blk), '', 'Blocks'),
+  ].join('');
+  return `<dl class="line line-hero">${hero}</dl>
+    <div class="play-meter"><p class="play-meter-label"><span>Share of draws played</span><span class="play-meter-value">${share}%</span></p><span class="play-track" aria-hidden="true"><span class="play-fill" style="width:${share}%"></span></span></div>
+    <p class="stat-group-label">Shooting</p>
+    <dl class="line line-compact">${shooting}</dl>
+    <p class="stat-group-label">Steals and blocks</p>
+    <dl class="line line-pair">${stocks}</dl>
+    <p class="line-read">Averages in the draws this player appeared (minutes greater than 0). Plays in ${share}% of draws. The roster table still counts sit-outs so team minutes sum to 240. Prop probabilities below exclude DNPs and pushes.</p>`;
 }
 
 function drawnLine(line: SimulatedPlayer): string {
@@ -593,14 +647,14 @@ function drawnLine(line: SimulatedPlayer): string {
   const fg = `${line.fgm}–${line.fga}`;
   const threes = `${heldSpan(line.tpm, held)}–${line.tpa}`;
   const ft = `${line.ftm}–${line.fta}`;
-  return `<dl class="line">
-    <dt>MIN</dt><dd>${heldSpan(line.min, held)}</dd>
-    <dt>FG</dt><dd>${fg}</dd>
-    <dt>3P</dt><dd>${threes}</dd>
-    <dt>FT</dt><dd>${ft}</dd>
-    <dt>PTS</dt><dd>${heldSpan(line.pts, held)}</dd>
-    <dt>REB</dt><dd>${heldSpan(line.reb, held)}</dd>
-    <dt>AST</dt><dd>${heldSpan(line.ast, held)}</dd>
+  return `<dl class="line line-compact">
+    ${statCell('MIN', heldSpan(line.min, held), '', 'Minutes')}
+    ${statCell('FG', fg, '', 'Field goals')}
+    ${statCell('3P', threes, '', 'Threes')}
+    ${statCell('FT', ft, '', 'Free throws')}
+    ${statCell('PTS', heldSpan(line.pts, held), 'lead', 'Points')}
+    ${statCell('REB', heldSpan(line.reb, held), '', 'Rebounds')}
+    ${statCell('AST', heldSpan(line.ast, held), '', 'Assists')}
   </dl>`;
 }
 
@@ -613,9 +667,9 @@ function monogramLetter(name: string): string {
 function photoMarkup(name: string, url: string | null): string {
   const letter = escapeHtml(monogramLetter(name));
   if (!url) {
-    return `<div class="photo"><span class="mono">${letter}</span></div><p class="photo-note">Photo is not in the data.</p>`;
+    return `<div class="photo"><span class="mono">${letter}</span></div>`;
   }
-  return `<div class="photo"><img referrerpolicy="no-referrer" class="headshot" alt="${escapeHtml(name)}" src="${escapeHtml(url)}" width="56" height="56"><span class="mono" hidden>${letter}</span></div><p class="photo-note" hidden>Photo is not in the data.</p>`;
+  return `<div class="photo"><img referrerpolicy="no-referrer" class="headshot" alt="${escapeHtml(name)}" src="${escapeHtml(url)}" width="64" height="64"><span class="mono" hidden>${letter}</span></div>`;
 }
 
 function whoBlock(game: SlateGame, line: SimulatedPlayer, row: CardRow | null): string {
@@ -623,17 +677,21 @@ function whoBlock(game: SlateGame, line: SimulatedPlayer, row: CardRow | null): 
   const position = readString(row, 'position');
   const group = readString(row, 'position_group');
   const positionHtml = position
-    ? `${escapeHtml(position)}${group ? ` <span class="pos-group">${escapeHtml(group)}</span>` : ''}`
+    ? `<span class="chip">${escapeHtml(position)}</span>${group ? `<span class="chip">${escapeHtml(group)}</span>` : ''}`
     : 'Position is not in the data.';
   const url = playerHeadshotUrl({
     athlete_id: line.athlete_id,
     headshot_url: readString(row, 'headshot_url'),
   });
+  const note = url ? '' : '<p class="photo-note">Photo is not in the data.</p>';
   return `<div class="who">
     ${photoMarkup(line.name, url)}
-    <h2 class="who-name">${escapeHtml(line.name)}</h2>
-    <p class="who-team">${escapeHtml(team ?? 'not in the data')}</p>
-    <p class="who-pos">${positionHtml}</p>
+    <div class="who-copy">
+      <h2 class="who-name">${escapeHtml(line.name)}</h2>
+      <p class="who-team">${escapeHtml(team ?? 'not in the data')}</p>
+      <p class="who-pos">${positionHtml}</p>
+      ${note}
+    </div>
   </div>`;
 }
 
@@ -684,30 +742,33 @@ export function renderPropResults(
   player: Parameters<typeof propContextFromPlayer>[0] = null,
 ): string {
   const sample = score.playerDraws?.get(athleteId) ?? null;
-  if (!sample) return '<p class="prop-note">This player\'s simulations are not in the data.</p>';
+  if (!sample) return propPrompt('This player\'s simulations are not in the data.');
   if (form.line.trim() === '' || form.odds.trim() === '') {
-    return '<p class="prop-note">Enter a line and a price: American -110, multiplier 1.91, or percent 52.4. The book is not used in the simulation.</p>';
+    return propPrompt('Enter a line and a price: American -110, multiplier 1.91, or percent 52.4. The book is not used in the simulation.', 'Add a line and a price');
   }
   const line = Number(form.line);
-  if(!Number.isFinite(line)||line<0||!Number.isInteger(line*2))return '<p class="prop-note">Enter a nonnegative whole or half-point line.</p>';
-  if((form.market==='stl'||form.market==='blk'||form.market==='tov')&&!sample[form.market])return '<p class="prop-note">This stat is missing from the older card.</p>';
+  if(!Number.isFinite(line)||line<0||!Number.isInteger(line*2))return propPrompt('Enter a nonnegative whole or half-point line.');
+  if((form.market==='stl'||form.market==='blk'||form.market==='tov')&&!sample[form.market])return propPrompt('This stat is missing from the older card.');
   const price = parseBookPrice(form.odds, form.style);
-  if (!price) return `<p class="prop-note">${escapeHtml(priceError(form.odds, form.style))}</p>`;
+  if (!price) return propPrompt(priceError(form.odds, form.style));
   const opposite = form.opposite.trim() === '' ? null : parseBookPrice(form.opposite, form.style);
-  if(form.opposite.trim()!==''&&!opposite)return '<p class="prop-note">The opposite-side price is invalid.</p>';
+  if(form.opposite.trim()!==''&&!opposite)return propPrompt('The opposite-side price is invalid.');
   const quote = quoteProp(sample as PlayerSample, form.market, form.side, line, price, opposite);
   if (!quote || quote.breakEven === null || quote.expectedReturn === null) {
-    return `<p class="prop-note">${escapeHtml(priceError(form.odds, form.style))}</p>`;
+    return propPrompt(priceError(form.odds, form.style));
   }
   const verdict = decideVerdict(quote, propContextFromPlayer(player), form.market);
-  if (!verdict) return `<p class="prop-note">${escapeHtml(priceError(form.odds, form.style))}</p>`;
+  if (!verdict) return propPrompt(priceError(form.odds, form.style));
+  const edgeAttr = quote.edge !== null && quote.edge > 0 ? ' class="edge-up"' : quote.edge !== null && quote.edge < 0 ? ' class="edge-down"' : '';
+  const modelPct = quote.modelProbability === null ? '—' : percent(quote.modelProbability);
+  const bookPct = percent(quote.breakEven);
   const stats =
     quote.modelProbability === null || quote.edge === null
       ? ''
       : `<dl class="verdict-stats">
           <div><dt>Model chance</dt><dd>${percent(quote.modelProbability)}</dd></div>
-          <div><dt>Book break-even</dt><dd>${percent(quote.breakEven)}</dd></div>
-          <div><dt>Estimated edge</dt><dd>${signedPoints(quote.edge)}</dd></div>
+          <div><dt>Book break-even</dt><dd>${bookPct}</dd></div>
+          <div><dt>Estimated edge</dt><dd${edgeAttr}>${signedPoints(quote.edge)}</dd></div>
         </dl>`;
   const side = form.side === 'over' ? 'Over' : 'Under';
   const caption = `${side} ${form.line} ${MARKET_LABEL[form.market]}`;
@@ -720,21 +781,22 @@ export function renderPropResults(
       ? '<p>The opposite price was not valid in this format, so the no-vig price is left out.</p>'
       : '';
   const noVig = quote.noVig === null ? '' : `<p>No-vig price on this side: ${percent(quote.noVig)}. That is not the break-even of the price you would bet.</p>`;
-  return `<div class="prop-results">
+  return `<div class="prop-results" data-verdict="${verdict.verdict.toLowerCase()}">
     <p class="prop-caption">${escapeHtml(caption)}</p>
     <p class="verdict-mark ${verdict.verdict.toLowerCase()}">${verdict.verdict}</p>
     ${stats}
-    <p class="verdict-why">Why: ${escapeHtml(verdict.text)}</p>
+    <p class="verdict-why"><span class="why-kicker">Why this call</span>${escapeHtml(verdict.text)}</p>
+    <p class="stat-group-label">Model against the book</p>
+    <div class="prop-compare" role="img" aria-label="Model ${quote.modelProbability === null ? 'not graded' : percent(quote.modelProbability)} versus book ${percent(quote.breakEven)}">
+      <div class="prop-row"><span>Model</span><span class="prop-track"><span class="prop-fill model" style="width:${modelWidth}%"></span></span><span class="prop-pct">${modelPct}</span></div>
+      <div class="prop-row"><span>Book</span><span class="prop-track"><span class="prop-fill book" style="width:${bookWidth}%"></span></span><span class="prop-pct">${bookPct}</span></div>
+    </div>
     <details class="prop-advanced">
-      <summary>Advanced details</summary>
+      <summary>Grade, fair price, and sampling noise</summary>
       <p>Expected return per $1 risked ${(quote.expectedReturn * 100).toFixed(1)}%</p>
       <p>Read as ${escapeHtml(price.label)}</p>
       <p>Model fair price ${escapeHtml(fair)}</p>
       <p>${quote.grade.wins} wins, ${quote.grade.losses} losses, ${quote.grade.pushes} pushes, ${quote.grade.voids} did not play, out of ${sample.min.length}.${error}</p>
-      <div class="prop-compare" role="img" aria-label="Model ${quote.modelProbability === null ? 'not graded' : percent(quote.modelProbability)} versus book ${percent(quote.breakEven)}">
-        <div class="prop-row"><span>Model</span><span class="prop-track"><span class="prop-fill model" style="width:${modelWidth}%"></span></span></div>
-        <div class="prop-row"><span>Book</span><span class="prop-track"><span class="prop-fill book" style="width:${bookWidth}%"></span></span></div>
-      </div>
       ${oppositeNote}
       ${noVig}
     </details>
@@ -766,18 +828,25 @@ function propFormMarkup(form: PropFormState): string {
   const priceLabel = form.style === 'multiplier' ? 'Multiplier' : form.style === 'percent' ? 'Percent' : 'American odds';
   const placeholder = form.style === 'multiplier' ? '1.91' : form.style === 'percent' ? '52.4' : '-110';
   return `<form class="prop-form" data-prop-form>
-    <label>Market <select data-prop-market>${options}</select></label>
-    <fieldset>
-      <legend>Bet direction</legend>
-      <label><input type="radio" name="prop-side" value="over" data-prop-side${form.side === 'over' ? ' checked' : ''}> Over</label>
-      <label><input type="radio" name="prop-side" value="under" data-prop-side${form.side === 'under' ? ' checked' : ''}> Under</label>
+    <label class="field"><span class="field-label">Market</span><select data-prop-market>${options}</select></label>
+    <fieldset class="side-toggle">
+      <legend class="field-label">Bet direction</legend>
+      <div class="side-options">
+        <label class="side-opt"><input type="radio" name="prop-side" value="over" data-prop-side${form.side === 'over' ? ' checked' : ''}><span>Over</span></label>
+        <label class="side-opt"><input type="radio" name="prop-side" value="under" data-prop-side${form.side === 'under' ? ' checked' : ''}><span>Under</span></label>
+      </div>
     </fieldset>
-    <label>Prop line <input data-prop-line inputmode="decimal" value="${escapeHtml(form.line)}"></label>
-    <label>Price format <select data-prop-style>${styleOptions}</select></label>
-    <label>${priceLabel} <input data-prop-odds inputmode="decimal" placeholder="${placeholder}" value="${escapeHtml(form.odds)}"></label>
-    <label>Opposite side, same format, optional <input data-prop-opposite inputmode="decimal" placeholder="${placeholder}" value="${escapeHtml(form.opposite)}"></label>
+    <label class="field"><span class="field-label">Prop line</span><span class="field-hint">Whole or half point.</span><input data-prop-line inputmode="decimal" value="${escapeHtml(form.line)}"></label>
+    <label class="field"><span class="field-label">Price format</span><select data-prop-style>${styleOptions}</select></label>
+    <label class="field"><span class="field-label">${priceLabel}</span><input data-prop-odds inputmode="decimal" placeholder="${placeholder}" value="${escapeHtml(form.odds)}"></label>
+    <label class="field"><span class="field-label">Opposite side, same format, optional</span><input data-prop-opposite inputmode="decimal" placeholder="${placeholder}" value="${escapeHtml(form.opposite)}"></label>
     <p class="prop-note">The same price three ways: -110, 1.91x, or 52.4%. A trailing x or % sets the format for that box.</p>
   </form>`;
+}
+
+function propPrompt(message: string, title?: string): string {
+  const heading = title ? `<p class="prop-prompt-title">${escapeHtml(title)}</p>` : '';
+  return `<div class="prop-prompt">${heading}<p class="prop-note">${escapeHtml(message)}</p></div>`;
 }
 
 export function renderPlayerPanel(
@@ -791,30 +860,50 @@ export function renderPlayerPanel(
   const shown = score;
   const line = findLine(shown, athleteId);
   if (!line) {
-    return `<button type="button" data-close>Close</button><p>This player is not in the data.</p>`;
+    return `<div class="panel-fallback"><button type="button" data-close>Close</button><p>This player is not in the data.</p></div>`;
   }
   const row = rate?.players.find((player) => player.athlete_id === athleteId) ?? null;
-  const sentences = whySentences(row).map((sentence) => `<p>${escapeHtml(sentence)}</p>`).join('');
   const forecastHidden = tab === 'props' ? ' hidden' : '';
   const propsHidden = tab === 'forecast' ? ' hidden' : '';
-  return `<button type="button" data-close>Close</button>
-    ${whoBlock(game, line, row)}
-    <div class="panel-tabs" role="tablist">
-      <button type="button" role="tab" id="forecast-tab" aria-controls="forecast-panel" tabindex="${tab==='forecast'?0:-1}" data-panel-tab="forecast" aria-selected="${tab === 'forecast' ? 'true' : 'false'}">Player Forecast</button>
-      <button type="button" role="tab" id="props-tab" aria-controls="props-panel" tabindex="${tab==='props'?0:-1}" data-panel-tab="props" aria-selected="${tab === 'props' ? 'true' : 'false'}">Prop Analyzer</button>
+  const side = line.team_id === game.away.team_id ? 'away' : line.team_id === game.home.team_id ? 'home' : '';
+  const lineLede = line.expectation
+    ? 'Means from the draws this player actually played.'
+    : 'The single game on the board, not an average across the 10,000.';
+  return `<div class="panel-sheet"${side ? ` data-side="${side}"` : ''} style="${paletteStyle(game.away, game.home)}">
+    <div class="panel-head">
+      <div class="panel-top"><button type="button" data-close>Close</button></div>
+      ${whoBlock(game, line, row)}
+      <div class="panel-tabs" role="tablist">
+        <button type="button" role="tab" id="forecast-tab" aria-controls="forecast-panel" tabindex="${tab==='forecast'?0:-1}" data-panel-tab="forecast" aria-selected="${tab === 'forecast' ? 'true' : 'false'}">Player Forecast</button>
+        <button type="button" role="tab" id="props-tab" aria-controls="props-panel" tabindex="${tab==='props'?0:-1}" data-panel-tab="props" aria-selected="${tab === 'props' ? 'true' : 'false'}">Prop Analyzer</button>
+      </div>
     </div>
-    <div role="tabpanel" id="forecast-panel" aria-labelledby="forecast-tab" data-panel-view="forecast"${forecastHidden}>
-      <h3>${line.expectation ? 'Expected line' : 'One simulated draw'}</h3>
-      ${line.expectation ? expectedLine(line) : drawnLine(line)}
-      <h3>Why</h3>
-      <div class="why">${sentences}</div>
-      <h3>Shrunk rates on the card</h3>
-      ${samplingList(row, shown, shockFor(shown, line.team_id))}
+    <div class="panel-scroll">
+      <div role="tabpanel" id="forecast-panel" aria-labelledby="forecast-tab" data-panel-view="forecast"${forecastHidden}>
+        <section class="panel-section">
+          <h3>${line.expectation ? 'Expected line' : 'One simulated draw'}</h3>
+          <p class="panel-lede">${lineLede}</p>
+          ${line.expectation ? expectedLine(line) : drawnLine(line)}
+        </section>
+        <section class="panel-section">
+          <h3>Why</h3>
+          <p class="panel-lede">Games in the sample, how hard the prior still pulls, and the chance of playing.</p>
+          ${whyMarkup(whyNotes(row))}
+        </section>
+        <section class="panel-section">
+          <h3>Shrunk rates on the card</h3>
+          <p class="panel-lede">Per-minute rates after the prior is blended in. The simulator then gives this player a share of the team minute budget.</p>
+          ${samplingList(row, shown, shockFor(shown, line.team_id))}
+        </section>
+      </div>
+      <div role="tabpanel" id="props-panel" aria-labelledby="props-tab" data-panel-view="props"${propsHidden}>
+        <section class="panel-section">
+          <h3>Price a prop</h3>
+          <p class="panel-lede">The sportsbook is compared after the 10,000 games. It does not change them.</p>
+          ${propFormMarkup(form)}
+          <div data-prop-results aria-live="polite">${renderPropResults(score, athleteId, form, row)}</div>
+        </section>
+      </div>
     </div>
-    <div role="tabpanel" id="props-panel" aria-labelledby="props-tab" data-panel-view="props"${propsHidden}>
-      <h3>Prop Analyzer</h3>
-      <p class="prop-note">The sportsbook is compared after the 10,000 games. It does not change them.</p>
-      ${propFormMarkup(form)}
-      <div data-prop-results aria-live="polite">${renderPropResults(score, athleteId, form, row)}</div>
-    </div>`;
+  </div>`;
 }
