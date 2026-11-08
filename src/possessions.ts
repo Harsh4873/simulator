@@ -21,6 +21,15 @@ function pick(weights: number[], rng: Rng): number {
 const sum = (xs: number[]) => xs.reduce((a,b)=>a+b,0);
 const bound = (v:number) => Math.max(0,Math.min(1,v));
 
+
+/** Largest share of a lineup's makes a player is credited with when turning an assist rate into a per-teammate-make propensity. */
+export const MAX_OWN_MAKE_SHARE=0.6;
+/** Minute average of a lineup's summed rates over the planned stints; dividing by it keeps team totals where the team model put them. */
+export function plannedLineupMean(values:number[],stints:number[][]):number{
+ if(!stints.length)return 0;
+ return stints.reduce((n,on)=>n+on.reduce((m,i)=>m+values[i],0),0)/stints.length;
+}
+
 /** Aggregate possession model: shared pace, competitive rebounds, one assister per make.
  * Synthetic five-player stints realize minute targets and observed opening/closing roles.
  */
@@ -112,6 +121,15 @@ export function drawPossessions(
     const rescale=(xs:number[],total:number)=>{const s=sum(xs);return s>0?xs.map(x=>x*total/s):xs;};
     shots=rescale(p.map((x,i)=>mins[i]*concentrate(x.fga_per_min,shotExponent)),fga);
     fts=rescale(p.map((x,i)=>mins[i]*concentrate(x.fta_per_min,tripExponent)),fta);
+    // Lineup intensity: a unit's assists, offensive boards and free-throw trips scale with its players' summed rates,
+    // normalized over the planned stints so team totals stay with the team model. Splitting a fixed number of events
+    // each minute instead gave stars, who play beside other high-rate starters, less than their rate and bench units more.
+    const assistBase=p.map(x=>concentrate(x.ast_per_min,assistExponent)),tripBase=p.map(x=>concentrate(x.fta_per_min,tripExponent));
+    const offBoardBase=p.map(x=>concentrate(x.reb_per_min,reboundExponent)),defBoardBase=q.map(x=>concentrate(x.reb_per_min,reboundExponent));
+    const assistMean=plannedLineupMean(assistBase,offStints),tripLineupMean=plannedLineupMean(tripBase,offStints);
+    const offBoardMean=plannedLineupMean(offBoardBase,offStints),defBoardMean=plannedLineupMean(defBoardBase,defStints);
+    const makeRate=p.map(x=>(1-x.tpa_given_fga)*x.fg2_pct+x.tpa_given_fga*x.tp_pct);
+    let tripScale=1,boardOdds=1;
     const ftModel=context.free_throws?.status==='fitted'?context.free_throws:null;
     const tripMean=ftModel?2*ftModel.trip_weights[0]+3*ftModel.trip_weights[1]:2;
     const andOne=ftModel?.and_one_per_make??0,technical=ftModel?.technical_per_possession??0;
@@ -145,10 +163,15 @@ export function drawPossessions(
       lastMinute=minute;
       const on=new Set(offStints[minute]),against=new Set(defStints[minute]);
       const active=[...on],activeWeights=usageWeights(context.usage_effects,off[0].team_id,active.map(i=>off[i].athlete_id),active.map(i=>p[i].fga_per_min));
-      shots=p.map(()=>0);active.forEach((i,j)=>shots[i]=concentrate(activeWeights[j],shotExponent));fts=p.map((x,i)=>on.has(i)?concentrate(x.fta_per_min,tripExponent):0);
-      creators=p.map((x,i)=>on.has(i)?concentrate(x.ast_per_min,assistExponent):0);offensiveBoards=p.map((x,i)=>on.has(i)?concentrate(x.reb_per_min,reboundExponent):0);
+      shots=p.map(()=>0);active.forEach((i,j)=>shots[i]=concentrate(activeWeights[j],shotExponent));fts=p.map((_,i)=>on.has(i)?tripBase[i]:0);
+      // An assist rate counts only teammates' baskets, so divide out the player's own share of the unit's makes:
+      // with the shooter skipped on each make, expected assists then follow the rate instead of losing that share twice.
+      const makes=p.map((_,i)=>shots[i]*makeRate[i]),unitMakes=sum(makes);
+      creators=p.map((_,i)=>on.has(i)?assistBase[i]/(1-Math.min(MAX_OWN_MAKE_SHARE,unitMakes>0?makes[i]/unitMakes:0)):0);offensiveBoards=p.map((_,i)=>on.has(i)?offBoardBase[i]:0);
+      tripScale=tripLineupMean>0?sum(fts)/tripLineupMean:1;
       turnovers=p.map((x,i)=>on.has(i)?x.tov_per_min??0:0);
-      defensiveBoards=q.map((x,i)=>against.has(i)?concentrate(x.reb_per_min,reboundExponent):0);steals=q.map((x,i)=>against.has(i)?x.stl_per_min??0:0);blocks=q.map((x,i)=>against.has(i)?x.blk_per_min??0:0);
+      defensiveBoards=q.map((_,i)=>against.has(i)?defBoardBase[i]:0);
+      boardOdds=offBoardMean>0&&defBoardMean>0&&sum(defensiveBoards)>0?(sum(offensiveBoards)/offBoardMean)/(sum(defensiveBoards)/defBoardMean):1;steals=q.map((x,i)=>against.has(i)?x.stl_per_min??0:0);blocks=q.map((x,i)=>against.has(i)?x.blk_per_min??0:0);
       lineupEffect=context.lineup_effects?.status==='fitted'?lineupLogEffect(context.lineup_effects,off[0].team_id,[...on].map(i=>off[i].athlete_id),'offense')+lineupLogEffect(context.lineup_effects,def[0].team_id,[...against].map(i=>def[i].athlete_id),'defense'):0;
       }
       if(technical>0&&rng()<technical){const who=pick(fts,rng);if(who>=0){off[who].fta++;off[who].ft_technical=(off[who].ft_technical??0)+1;if(rng()<p[who].ft_pct){off[who].ftm++;off[who].pts++;}}}
@@ -169,7 +192,8 @@ export function drawPossessions(
         const margin=late?.status==='fitted'&&minute>=periodLength-2?sum(off.map(x=>x.pts))-sum(def.map(x=>x.pts)):0;
         const inLate=late?.status==='fitted'&&lateFoulState(periodLength===48?Math.floor(minute/12)+1:5,(periodLength-minute)*60,margin);
         const odds=inLate?(late.share/(1-late.share))/(late.baseline_share/(1-late.baseline_share)):1;
-        const free=rng()<(ftShare*odds/(1-ftShare+ftShare*odds));
+        const tripOdds=odds*tripScale;
+        const free=rng()<(ftShare*tripOdds/(1-ftShare+ftShare*tripOdds));
         const shooter=pick(free?fts:shots,rng);
         if(shooter<0)throw new Error('No active shooting exposure');
         const line=off[shooter],rate=p[shooter];
@@ -194,8 +218,11 @@ export function drawPossessions(
           if(made) {
             line.fgm++;if(three)line.tpm++;line.pts+=three?3:2;
             if(andOne>0&&rng()<andOne){line.fta++;line.ft_and_one=(line.ft_and_one??0)+1;if(rng()<rate.ft_pct){line.ftm++;line.pts++;}else miss=true;}
-            if(rng()<bound(profile.assist_rate)) {
-              const helper=pick(creators.map((v,i)=>i===shooter?0:v),rng);
+            // Averaged over shooters, the teammates' propensities sum to the unit's assist rates, so this keeps the
+            // team's assisted share on its fitted rate while a unit of playmakers assists more of its makes.
+            const helpers=creators.map((v,i)=>i===shooter?0:v);
+            if(rng()<bound(profile.assist_rate*(assistMean>0?sum(helpers)/assistMean:1))) {
+              const helper=pick(helpers,rng);
               if(helper>=0)off[helper].ast++;
             }
           } else {
@@ -204,7 +231,8 @@ export function drawPossessions(
           }
         }
         if(miss) {
-          if(rng()<orb) {
+          const unitOrb=boardOdds===1?orb:(orb*boardOdds)/(1-orb+orb*boardOdds);
+          if(rng()<unitOrb) {
             const who=pick(offensiveBoards,rng);
             if(who>=0){off[who].reb++;off[who].orb=(off[who].orb??0)+1;live=true;}
           } else if(defensiveCredit>=1||rng()<defensiveCredit) {

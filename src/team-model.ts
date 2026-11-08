@@ -16,7 +16,7 @@ import { chicagoDate } from './date.ts';
 import type { CompletedEvent } from './parse-summary.ts';
 import type { MatchupContext, RatePlayer, SlateGame, TeamProfile } from './types.ts';
 
-export const MODEL_VERSION = 'possessions-v7';
+export const MODEL_VERSION = 'possessions-v8';
 // Shrinkage strengths are modeling priors, not fitted calibration coefficients.
 const TEAM_PRIOR_GAMES = 12;
 // Pace settles faster than efficiency; a six-game prior beat twelve on walk-forward total error.
