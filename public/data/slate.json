@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-08T00:30:23Z",
+  "generated_at": "2026-11-08T01:00:24Z",
   "date": "2026-11-07",
   "timezone": "America/Chicago",
   "games": [
@@ -10,8 +10,8 @@
       "start_time": "2026-11-07T22:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "7",
         "name": "Denver Nuggets",
@@ -43,7 +43,7 @@
       "start_time": "2026-11-08T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "17",
