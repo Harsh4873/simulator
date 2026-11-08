@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-08T01:28:23Z",
+  "generated_at": "2026-11-08T02:18:53Z",
   "date": "2026-11-07",
   "timezone": "America/Chicago",
   "games": [
@@ -142,7 +142,7 @@
       "start_time": "2026-11-08T01:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "19",
@@ -175,7 +175,7 @@
       "start_time": "2026-11-08T02:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "10",
