@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-11T02:18:34Z",
+  "generated_at": "2026-11-11T03:22:57Z",
   "date": "2026-11-10",
   "timezone": "America/Chicago",
   "games": [
@@ -10,8 +10,8 @@
       "start_time": "2026-11-11T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "15",
         "name": "Milwaukee Bucks",
@@ -142,7 +142,7 @@
       "start_time": "2026-11-11T03:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "19",
