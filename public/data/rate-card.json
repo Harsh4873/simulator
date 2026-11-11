@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-11T00:41:23Z",
+  "generated_at": "2026-11-11T01:29:51Z",
   "date": "2026-11-10",
   "iterations": 10000,
   "model_version": "possessions-v8",
@@ -10,9 +10,9 @@
     "residual_covariance",
     "travel"
   ],
-  "source_cutoff": "2026-11-11T00:41:23Z",
-  "generator_sha": "e84984a22c6108c5e88e3537f18e29caee90843c",
-  "input_hash": "e8918b2068427eb3d669550fb80e8d1c8f4df22fb9cb5341475850aaa7911c04",
+  "source_cutoff": "2026-11-11T01:29:51Z",
+  "generator_sha": "106f7f6ad961a78e926bf89af6d793e51b58a138",
+  "input_hash": "b0a651f1507ce646d3912fc74b727622a2d3c53c25eb5c68eeac192975891b32",
   "model_hash": "fb27349f6971be3fb2e1fa93765f90223fb8c158b867e7b2b16e4104a9e2ae13",
   "columns": [
     "min",
@@ -211,12 +211,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9677477352503686,
+          "points_scale": 0.9677468395963436,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "perimeter",
@@ -251,8 +251,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 26.795065446817418,
-          "fga_per_min": 0.31578472067681274,
-          "fta_per_min": 0.07499519132748027,
+          "fga_per_min": 0.3157855203410855,
+          "fta_per_min": 0.07499525952087546,
           "shooting_posterior": {
             "share": [
               125.53360967706962,
@@ -268,14 +268,14 @@
             ]
           },
           "tpa_given_fga": 0.5888067996110208,
-          "fg2_pct": 0.5251132563145724,
+          "fg2_pct": 0.5251131887781871,
           "tp_pct": 0.3578607302990494,
           "ft_pct": 0.778473061141181,
-          "reb_per_min": 0.20012000593637913,
-          "stl_per_min": 0.024370244103505388,
-          "blk_per_min": 0.06511368132588564,
-          "tov_per_min": 0.04887376938578377,
-          "ast_per_min": 0.0677081642966745,
+          "reb_per_min": 0.20011992105380175,
+          "stl_per_min": 0.02437002640020817,
+          "blk_per_min": 0.06511358492204865,
+          "tov_per_min": 0.04887392278900177,
+          "ast_per_min": 0.06770839343720815,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3133628.png",
           "role_prior_games": 1,
           "closing_rate": 0.32432432432432434,
@@ -393,7 +393,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -575,7 +575,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -757,12 +757,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9857162854343869,
+          "points_scale": 0.985713666139515,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "interior",
@@ -797,8 +797,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 11.978334280892923,
-          "fga_per_min": 0.15370045699638368,
-          "fta_per_min": 0.05339692740346974,
+          "fga_per_min": 0.1537019227513391,
+          "fta_per_min": 0.05339702169366224,
           "shooting_posterior": {
             "share": [
               1.0974898153274757,
@@ -814,14 +814,14 @@
             ]
           },
           "tpa_given_fga": 0.022582094965585917,
-          "fg2_pct": 0.6402786439854904,
+          "fg2_pct": 0.6402785450336144,
           "tp_pct": 0.34967543615144453,
           "ft_pct": 0.6449621525952328,
-          "reb_per_min": 0.25751447640662567,
-          "stl_per_min": 0.01537489092013622,
-          "blk_per_min": 0.012227138887757229,
-          "tov_per_min": 0.05600731362900849,
-          "ast_per_min": 0.07720519385434346,
+          "reb_per_min": 0.2575143333699768,
+          "stl_per_min": 0.015374524065699936,
+          "blk_per_min": 0.012226976436495693,
+          "tov_per_min": 0.05600757213061036,
+          "ast_per_min": 0.077205579981804,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4277922.png",
           "role_prior_games": 1,
           "closing_rate": 0.2972972972972973,
@@ -939,7 +939,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -1121,7 +1121,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -1303,7 +1303,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -1485,7 +1485,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -1667,7 +1667,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -1849,7 +1849,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -2031,7 +2031,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -2213,7 +2213,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -2395,7 +2395,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -2577,12 +2577,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0133712197368445,
+          "points_scale": 1.0133702180362247,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -2617,8 +2617,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 16.296110854621855,
-          "fga_per_min": 0.39490293012444677,
-          "fta_per_min": 0.06834620283445551,
+          "fga_per_min": 0.3949038795870014,
+          "fta_per_min": 0.06834630411602419,
           "shooting_posterior": {
             "share": [
               79.42217974828368,
@@ -2634,14 +2634,14 @@
             ]
           },
           "tpa_given_fga": 0.3619971729639183,
-          "fg2_pct": 0.5633566786236283,
+          "fg2_pct": 0.5633566288416535,
           "tp_pct": 0.3372770227182247,
           "ft_pct": 0.744984472437724,
-          "reb_per_min": 0.3920783212025918,
-          "stl_per_min": 0.03359554943507411,
-          "blk_per_min": 0.04743966872726316,
-          "tov_per_min": 0.04581727076904942,
-          "ast_per_min": 0.038111536541865956,
+          "reb_per_min": 0.39207822173871953,
+          "stl_per_min": 0.03359529433427966,
+          "blk_per_min": 0.047439555762986925,
+          "tov_per_min": 0.04581745052417156,
+          "ast_per_min": 0.03811180504460763,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5105623.png",
           "role_prior_games": 1,
           "closing_rate": 0,
@@ -2759,7 +2759,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -2941,7 +2941,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -3123,7 +3123,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -3305,7 +3305,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -3487,7 +3487,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -3669,12 +3669,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0099424155154209,
+          "points_scale": 1.0099418363250205,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -3709,8 +3709,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 31.319132144304767,
-          "fga_per_min": 0.4452020188061885,
-          "fta_per_min": 0.17004619984623864,
+          "fga_per_min": 0.44520273675223676,
+          "fta_per_min": 0.17004622497517005,
           "shooting_posterior": {
             "share": [
               101.48617949252434,
@@ -3726,14 +3726,14 @@
             ]
           },
           "tpa_given_fga": 0.30772037444670813,
-          "fg2_pct": 0.57063541822954,
+          "fg2_pct": 0.5706353839093441,
           "tp_pct": 0.35999109420102415,
           "ft_pct": 0.8312505768282857,
-          "reb_per_min": 0.3863082147250113,
-          "stl_per_min": 0.02797284136671251,
-          "blk_per_min": 0.017201516113225287,
-          "tov_per_min": 0.08318640946323022,
-          "ast_per_min": 0.09779130404708,
+          "reb_per_min": 0.38630814222763804,
+          "stl_per_min": 0.027972655428470678,
+          "blk_per_min": 0.01720143377565767,
+          "tov_per_min": 0.08318654048340773,
+          "ast_per_min": 0.09779149975375283,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3136195.png",
           "role_prior_games": 1,
           "closing_rate": 0.17647058823529413,
@@ -3851,7 +3851,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -4033,7 +4033,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -4215,7 +4215,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -4397,7 +4397,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -4579,7 +4579,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -4761,7 +4761,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -4943,12 +4943,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9852171664221594,
+          "points_scale": 0.9852141418601952,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -4983,8 +4983,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 9.029043545121112,
-          "fga_per_min": 0.33880829002591767,
-          "fta_per_min": 0.06544520300950449,
+          "fga_per_min": 0.3388188562572605,
+          "fta_per_min": 0.06544646470179295,
           "shooting_posterior": {
             "share": [
               4.019902401685478,
@@ -5000,14 +5000,14 @@
             ]
           },
           "tpa_given_fga": 0.182722836440249,
-          "fg2_pct": 0.5302334262471183,
+          "fg2_pct": 0.530233292112353,
           "tp_pct": 0.34244030933244723,
           "ft_pct": 0.7502430930370815,
-          "reb_per_min": 0.25711470653636276,
-          "stl_per_min": 0.01950473425838354,
-          "blk_per_min": 0.05109608473106013,
-          "tov_per_min": 0.07813590343826328,
-          "ast_per_min": 0.07708145151430466,
+          "reb_per_min": 0.25711382029296287,
+          "stl_per_min": 0.019502461258243627,
+          "blk_per_min": 0.05109507819630498,
+          "tov_per_min": 0.07813750509308634,
+          "ast_per_min": 0.07708384392852942,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4432808.png",
           "role_prior_games": 1,
           "closing_rate": 0,
@@ -5125,7 +5125,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -5307,7 +5307,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -5489,7 +5489,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -5671,7 +5671,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -5853,7 +5853,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -6035,7 +6035,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -6217,12 +6217,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9929198677590948,
+          "points_scale": 0.9929183561450087,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -6257,8 +6257,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 14.723855143679044,
-          "fga_per_min": 0.29772058386002176,
-          "fta_per_min": 0.0751937650567728,
+          "fga_per_min": 0.2977219501633707,
+          "fta_per_min": 0.07519387987786488,
           "shooting_posterior": {
             "share": [
               22.22776885463739,
@@ -6274,14 +6274,14 @@
             ]
           },
           "tpa_given_fga": 0.18616221821304346,
-          "fg2_pct": 0.5038148590594744,
+          "fg2_pct": 0.5038147951857765,
           "tp_pct": 0.3414513922369755,
           "ft_pct": 0.6842244729808189,
-          "reb_per_min": 0.437455938477085,
-          "stl_per_min": 0.028430895170351723,
-          "blk_per_min": 0.03969431159308554,
-          "tov_per_min": 0.05024971196341238,
-          "ast_per_min": 0.06976822579111407,
+          "reb_per_min": 0.43745580061700057,
+          "stl_per_min": 0.028430541592552185,
+          "blk_per_min": 0.03969415502101252,
+          "tov_per_min": 0.05024996110971819,
+          "ast_per_min": 0.0697685979444379,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/6585.png",
           "role_prior_games": 1,
           "closing_rate": 0,
@@ -6399,7 +6399,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         }
       ],
@@ -8320,7 +8320,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -8502,7 +8502,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -8684,7 +8684,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -8866,7 +8866,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -9048,7 +9048,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -9230,12 +9230,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0335721017439643,
+          "points_scale": 1.0335704485520694,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -9270,8 +9270,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 14.883784712108502,
-          "fga_per_min": 0.3441819156813784,
-          "fta_per_min": 0.11653062581811346,
+          "fga_per_min": 0.3441834210738293,
+          "fta_per_min": 0.11653069850897209,
           "shooting_posterior": {
             "share": [
               50.02250354787806,
@@ -9287,14 +9287,14 @@
             ]
           },
           "tpa_given_fga": 0.4073493774257171,
-          "fg2_pct": 0.5527373966429552,
+          "fg2_pct": 0.5527373204781042,
           "tp_pct": 0.3621777405056324,
           "ft_pct": 0.7246088410409068,
-          "reb_per_min": 0.26039429667459457,
-          "stl_per_min": 0.02378791175502273,
-          "blk_per_min": 0.02611341936331041,
-          "tov_per_min": 0.04395685604756189,
-          "ast_per_min": 0.07230255524554847,
+          "reb_per_min": 0.2603941470332211,
+          "stl_per_min": 0.02378752796106389,
+          "blk_per_min": 0.026113249410853474,
+          "tov_per_min": 0.043957126485488586,
+          "ast_per_min": 0.07230295920246443,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4277951.png",
           "role_prior_games": 1,
           "closing_rate": 0.35294117647058826,
@@ -9412,12 +9412,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0093911943658556,
+          "points_scale": 1.009388919956609,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "interior",
@@ -9452,8 +9452,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 18.149786485125517,
-          "fga_per_min": 0.2061887448986462,
-          "fta_per_min": 0.09414840437645948,
+          "fga_per_min": 0.20619006106866894,
+          "fta_per_min": 0.0941484166444588,
           "shooting_posterior": {
             "share": [
               0.10008061521414162,
@@ -9469,14 +9469,14 @@
             ]
           },
           "tpa_given_fga": 0.0011583404538673798,
-          "fg2_pct": 0.6428673159408118,
+          "fg2_pct": 0.6428672451365367,
           "tp_pct": 0.3467419173911302,
           "ft_pct": 0.4988666737834233,
-          "reb_per_min": 0.40759909808975353,
-          "stl_per_min": 0.04615908310301833,
-          "blk_per_min": 0.053722843212813814,
-          "tov_per_min": 0.0389861846729904,
-          "ast_per_min": 0.04701161837487215,
+          "reb_per_min": 0.407598965369929,
+          "stl_per_min": 0.046158742708743095,
+          "blk_per_min": 0.053722692478697064,
+          "tov_per_min": 0.038986424529611215,
+          "ast_per_min": 0.047011976652063504,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4351852.png",
           "role_prior_games": 1,
           "closing_rate": 0,
@@ -9594,7 +9594,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -9776,12 +9776,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.010361256364046,
+          "points_scale": 1.0103600091813922,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "interior",
@@ -9816,8 +9816,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 22.70658797428621,
-          "fga_per_min": 0.2713923528455977,
-          "fta_per_min": 0.09568422878512844,
+          "fga_per_min": 0.27139325296727657,
+          "fta_per_min": 0.09568426632093498,
           "shooting_posterior": {
             "share": [
               3.6920915544757285,
@@ -9833,14 +9833,14 @@
             ]
           },
           "tpa_given_fga": 0.023133405729797794,
-          "fg2_pct": 0.6062480674481879,
+          "fg2_pct": 0.606248020566134,
           "tp_pct": 0.35231565037681833,
           "ft_pct": 0.6523762626299392,
-          "reb_per_min": 0.3074257198114514,
-          "stl_per_min": 0.02732581954957136,
-          "blk_per_min": 0.04823827678787099,
-          "tov_per_min": 0.039721049608222064,
-          "ast_per_min": 0.06984794903061874,
+          "reb_per_min": 0.3074256278463379,
+          "stl_per_min": 0.02732558368128069,
+          "blk_per_min": 0.048238172340172976,
+          "tov_per_min": 0.03972121581128502,
+          "ast_per_min": 0.06984819729045993,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4397424.png",
           "role_prior_games": 1,
           "closing_rate": 0.17647058823529413,
@@ -9958,7 +9958,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -10140,7 +10140,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -10322,7 +10322,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -10504,7 +10504,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -10686,7 +10686,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -10868,7 +10868,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -11050,7 +11050,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -11232,7 +11232,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -11414,7 +11414,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -11596,12 +11596,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9769821204662748,
+          "points_scale": 0.9769814524636624,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -11636,8 +11636,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 30.07710947976206,
-          "fga_per_min": 0.5214006051041837,
-          "fta_per_min": 0.23944881309028854,
+          "fga_per_min": 0.5214017164801258,
+          "fta_per_min": 0.23944883434798672,
           "shooting_posterior": {
             "share": [
               64.89374345485216,
@@ -11653,14 +11653,14 @@
             ]
           },
           "tpa_given_fga": 0.2265842997725285,
-          "fg2_pct": 0.5072003138845561,
+          "fg2_pct": 0.5072002787144791,
           "tp_pct": 0.32335763257427874,
           "ft_pct": 0.8583214174277807,
-          "reb_per_min": 0.25959622795768905,
-          "stl_per_min": 0.020948220048899634,
-          "blk_per_min": 0.033382536605671524,
-          "tov_per_min": 0.09012110330654868,
-          "ast_per_min": 0.12429453367323949,
+          "reb_per_min": 0.25959611492820805,
+          "stl_per_min": 0.020947930155597046,
+          "blk_per_min": 0.033382408234502864,
+          "tov_per_min": 0.0901213075779863,
+          "ast_per_min": 0.12429483879634468,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3059318.png",
           "role_prior_games": 1,
           "closing_rate": 0.36363636363636365,
@@ -11778,7 +11778,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -11817,9 +11817,9 @@
           "shooting_games": 1,
           "missing_shooting": false,
           "thin_sample": true,
-          "minutes_mean": 12.002055490348466,
-          "fga_per_min": 0.3424310615937113,
-          "fta_per_min": 0.09992337312781656,
+          "minutes_mean": 12.005562992044116,
+          "fga_per_min": 0.34244929364265125,
+          "fta_per_min": 0.09992567068773686,
           "shooting_posterior": {
             "share": [
               4.018873194664049,
@@ -11835,14 +11835,14 @@
             ]
           },
           "tpa_given_fga": 0.4018873194664049,
-          "fg2_pct": 0.5446201032116517,
+          "fg2_pct": 0.5446199422499333,
           "tp_pct": 0.34244030933244723,
           "ft_pct": 0.7535369191473618,
-          "reb_per_min": 0.2159253455559018,
-          "stl_per_min": 0.03359955585856538,
-          "blk_per_min": 0.02646059499676283,
-          "tov_per_min": 0.052068201614615575,
-          "ast_per_min": 0.09467819991213498,
+          "reb_per_min": 0.2159239536992802,
+          "stl_per_min": 0.03359598608270463,
+          "blk_per_min": 0.026459014221025576,
+          "tov_per_min": 0.052070717034049224,
+          "ast_per_min": 0.09468195722934694,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3904625.png",
           "role_prior_games": 1,
           "closing_rate": 0,
@@ -11960,7 +11960,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -12142,7 +12142,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -12324,7 +12324,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -12506,7 +12506,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -12688,7 +12688,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -12870,7 +12870,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -13052,7 +13052,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -13234,7 +13234,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -13416,12 +13416,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9670224635023789,
+          "points_scale": 0.9670197099470622,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -13456,8 +13456,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 9.333333333333334,
-          "fga_per_min": 0.19844467970938232,
-          "fta_per_min": 0.07218425149599787,
+          "fga_per_min": 0.19844838229701128,
+          "fta_per_min": 0.07218458375367923,
           "shooting_posterior": {
             "share": [
               3.8852912253475003,
@@ -13473,14 +13473,14 @@
             ]
           },
           "tpa_given_fga": 0.14943427789798078,
-          "fg2_pct": 0.5515585929880199,
+          "fg2_pct": 0.551558464561117,
           "tp_pct": 0.34927616755008584,
           "ft_pct": 0.7866254129535716,
-          "reb_per_min": 0.29156629037724874,
-          "stl_per_min": 0.023305092834764833,
-          "blk_per_min": 0.04606705324081804,
-          "tov_per_min": 0.06134960160837925,
-          "ast_per_min": 0.06692629844998939,
+          "reb_per_min": 0.29156595837475185,
+          "stl_per_min": 0.02330424132859621,
+          "blk_per_min": 0.046066676175045854,
+          "tov_per_min": 0.06135020161668453,
+          "ast_per_min": 0.06692719469079224,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4871141.png",
           "role_prior_games": 1,
           "closing_rate": 0.030303030303030304,
@@ -13598,7 +13598,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -13780,7 +13780,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -13962,12 +13962,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9612321558926828,
+          "points_scale": 0.9612302803534247,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -14002,8 +14002,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 15.667437740380691,
-          "fga_per_min": 0.18468002133221761,
-          "fta_per_min": 0.08329796012391047,
+          "fga_per_min": 0.18468136827010737,
+          "fta_per_min": 0.0832980127420962,
           "shooting_posterior": {
             "share": [
               8.231444265435666,
@@ -14019,14 +14019,14 @@
             ]
           },
           "tpa_given_fga": 0.11093590654225964,
-          "fg2_pct": 0.5506433849391592,
+          "fg2_pct": 0.5506433044583,
           "tp_pct": 0.3382272505532782,
           "ft_pct": 0.6996237176158455,
-          "reb_per_min": 0.24903652548105887,
-          "stl_per_min": 0.026610172747037662,
-          "blk_per_min": 0.06346329404276616,
-          "tov_per_min": 0.04930623966269541,
-          "ast_per_min": 0.03678141488387265,
+          "reb_per_min": 0.2490363918628232,
+          "stl_per_min": 0.02660983004855503,
+          "blk_per_min": 0.06346314228829539,
+          "tov_per_min": 0.04930648114296103,
+          "ast_per_min": 0.036781775586325,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5105637.png",
           "role_prior_games": 1,
           "closing_rate": 0.24242424242424243,
@@ -14144,7 +14144,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -14326,7 +14326,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         }
       ],
@@ -16247,12 +16247,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0198751819052432,
+          "points_scale": 1.0198739919393291,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "perimeter",
@@ -16287,8 +16287,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 24.85463305123724,
-          "fga_per_min": 0.35658507941553214,
-          "fta_per_min": 0.062031356411065566,
+          "fga_per_min": 0.3565860223601921,
+          "fta_per_min": 0.06203145529229653,
           "shooting_posterior": {
             "share": [
               95.73834597143437,
@@ -16304,14 +16304,14 @@
             ]
           },
           "tpa_given_fga": 0.4720825738236408,
-          "fg2_pct": 0.585416281421463,
+          "fg2_pct": 0.5854162219528477,
           "tp_pct": 0.37196769890682185,
           "ft_pct": 0.7575691001826751,
-          "reb_per_min": 0.18161774605420625,
-          "stl_per_min": 0.025991681921515377,
-          "blk_per_min": 0.0484128212144734,
-          "tov_per_min": 0.039180536988273215,
-          "ast_per_min": 0.059757702772098804,
+          "reb_per_min": 0.181617645809685,
+          "stl_per_min": 0.025991424818544797,
+          "blk_per_min": 0.048412707363589276,
+          "tov_per_min": 0.039180718154215796,
+          "ast_per_min": 0.059757973382202706,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3448.png",
           "role_prior_games": 1,
           "closing_rate": 0.11363636363636363,
@@ -16429,7 +16429,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -16611,7 +16611,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -16793,7 +16793,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -16975,7 +16975,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -17157,7 +17157,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -17339,7 +17339,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -17521,7 +17521,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -17703,7 +17703,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -17885,7 +17885,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -18067,7 +18067,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -18249,7 +18249,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -18431,7 +18431,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -18613,7 +18613,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -18795,7 +18795,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -18977,12 +18977,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0059593802786106,
+          "points_scale": 1.0059566406276161,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -19017,8 +19017,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 10.81578947368421,
-          "fga_per_min": 0.26235918537136577,
-          "fta_per_min": 0.13940253554129334,
+          "fga_per_min": 0.26236364630137055,
+          "fta_per_min": 0.13940280808683497,
           "shooting_posterior": {
             "share": [
               4.826093698181703,
@@ -19034,14 +19034,14 @@
             ]
           },
           "tpa_given_fga": 0.16641702407523112,
-          "fg2_pct": 0.5865934028496878,
+          "fg2_pct": 0.5865932793496479,
           "tp_pct": 0.34215275219441493,
           "ft_pct": 0.7547835077741464,
-          "reb_per_min": 0.25558652041606184,
-          "stl_per_min": 0.0183564760106993,
-          "blk_per_min": 0.05857784447513259,
-          "tov_per_min": 0.05501790216862704,
-          "ast_per_min": 0.04712154047124064,
+          "reb_per_min": 0.25558613337571784,
+          "stl_per_min": 0.018355483345754056,
+          "blk_per_min": 0.058577404901130795,
+          "tov_per_min": 0.05501860164354977,
+          "ast_per_min": 0.04712258528672204,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5108024.png",
           "role_prior_games": 1,
           "closing_rate": 0.4090909090909091,
@@ -19159,7 +19159,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -19341,7 +19341,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -19523,7 +19523,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -19705,7 +19705,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -19887,7 +19887,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -20069,12 +20069,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.028678777469747,
+          "points_scale": 1.028674719454312,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -20109,8 +20109,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 5.95121085179572,
-          "fga_per_min": 0.33041195214890456,
-          "fta_per_min": 0.051270426776279146,
+          "fga_per_min": 0.3304169124135528,
+          "fta_per_min": 0.051271013857346524,
           "shooting_posterior": {
             "share": [
               23.012795258428643,
@@ -20126,14 +20126,14 @@
             ]
           },
           "tpa_given_fga": 0.6253476972399088,
-          "fg2_pct": 0.5751100113109112,
+          "fg2_pct": 0.5751098688669125,
           "tp_pct": 0.3464445579893959,
           "ft_pct": 0.7711942523224459,
-          "reb_per_min": 0.17117096811864752,
-          "stl_per_min": 0.021962000989699772,
-          "blk_per_min": 0.02885490173755204,
-          "tov_per_min": 0.04098548875891615,
-          "ast_per_min": 0.05254449200415514,
+          "reb_per_min": 0.17117051003925307,
+          "stl_per_min": 0.021960826126758252,
+          "blk_per_min": 0.02885438148224611,
+          "tov_per_min": 0.040986316618476584,
+          "ast_per_min": 0.05254572858956667,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4066268.png",
           "role_prior_games": 1,
           "closing_rate": 0.058823529411764705,
@@ -20251,7 +20251,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -20433,7 +20433,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -20615,7 +20615,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -20797,7 +20797,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -20979,7 +20979,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -21161,7 +21161,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -21343,7 +21343,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -21525,7 +21525,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -21707,12 +21707,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0142794004817484,
+          "points_scale": 1.014278128309098,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "interior",
@@ -21747,8 +21747,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 23.583333333333332,
-          "fga_per_min": 0.31902745778494573,
-          "fta_per_min": 0.1222479891648133,
+          "fga_per_min": 0.31902892821081225,
+          "fta_per_min": 0.12224807155857881,
           "shooting_posterior": {
             "share": [
               0.30155254144289595,
@@ -21764,14 +21764,14 @@
             ]
           },
           "tpa_given_fga": 0.003089677678718196,
-          "fg2_pct": 0.6051048763017624,
+          "fg2_pct": 0.6051048107813884,
           "tp_pct": 0.3390212015129587,
           "ft_pct": 0.7151955545401436,
-          "reb_per_min": 0.3246869258071814,
-          "stl_per_min": 0.03860063160965987,
-          "blk_per_min": 0.03749343349750777,
-          "tov_per_min": 0.04691828860813179,
-          "ast_per_min": 0.04658536051755242,
+          "reb_per_min": 0.32468678706620185,
+          "stl_per_min": 0.03860027577257726,
+          "blk_per_min": 0.03749327592497422,
+          "tov_per_min": 0.04691853934642677,
+          "ast_per_min": 0.04658573504885278,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4701232.png",
           "role_prior_games": 1,
           "closing_rate": 0.08823529411764706,
@@ -21889,7 +21889,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -22071,7 +22071,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -22253,7 +22253,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -22435,12 +22435,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.997508441771365,
+          "points_scale": 0.9975053008310201,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -22475,8 +22475,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 16.717420023067948,
-          "fga_per_min": 0.2789583797862247,
-          "fta_per_min": 0.08252630195433834,
+          "fga_per_min": 0.2789606932373908,
+          "fta_per_min": 0.08252644432377278,
           "shooting_posterior": {
             "share": [
               14.223666690997653,
@@ -22492,14 +22492,14 @@
             ]
           },
           "tpa_given_fga": 0.1828234793187359,
-          "fg2_pct": 0.5866705677455764,
+          "fg2_pct": 0.5866704856222507,
           "tp_pct": 0.34056590927435354,
           "ft_pct": 0.7529703019936345,
-          "reb_per_min": 0.30391911184948883,
-          "stl_per_min": 0.02484477657330121,
-          "blk_per_min": 0.06061776432771581,
-          "tov_per_min": 0.059231842208122235,
-          "ast_per_min": 0.04756772639686201,
+          "reb_per_min": 0.30391887112927485,
+          "stl_per_min": 0.024844159184127954,
+          "blk_per_min": 0.06061749093412933,
+          "tov_per_min": 0.05923227724740344,
+          "ast_per_min": 0.047568376221124836,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5203685.png",
           "role_prior_games": 1,
           "closing_rate": 0.5882352941176471,
@@ -22617,7 +22617,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         }
       ],
@@ -24538,7 +24538,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -24561,23 +24561,23 @@
             },
             "older_history": "observed"
           },
-          "injury_reported_at": "2026-11-11T00:24Z",
+          "injury_reported_at": null,
           "minutes_restriction": null,
           "athlete_id": "3032977",
           "name": "Giannis Antetokounmpo",
           "team_id": "14",
           "position": "F",
           "position_group": "Forward",
-          "injury_status": "day-to-day",
+          "injury_status": "healthy",
           "minutes_weight": 1,
-          "questionable_widen": true,
+          "questionable_widen": false,
           "games_2026": 36,
           "games_2027": 10,
           "games": 46,
           "shooting_games": 46,
           "missing_shooting": false,
           "thin_sample": false,
-          "minutes_mean": 28.460022587987286,
+          "minutes_mean": 32.73469840740381,
           "fga_per_min": 0.5612559698523836,
           "fta_per_min": 0.3002322948900365,
           "shooting_posterior": {
@@ -24663,8 +24663,8 @@
             "team_changed": false,
             "return_from_injury": "unknown"
           },
-          "availability_calibration_n": 57,
-          "play_probability": 0.5082350090732336,
+          "availability_calibration_n": 0,
+          "play_probability": 0.9656465172391439,
           "minutes_source": "recent regular-season appearances (10/10); window 10, half-life 2; 1-game prior (chronological-validation, 15581 validation appearances)",
           "evidence": {
             "minutes": {
@@ -24716,11 +24716,11 @@
               "standard_error": 0.003721226952526937
             },
             "role_changed": false,
-            "availability": "observed",
+            "availability": "scenario-prior",
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -24902,7 +24902,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -25084,7 +25084,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -25266,12 +25266,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9827977484132137,
+          "points_scale": 0.982797233932787,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -25306,8 +25306,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 33.742799602470804,
-          "fga_per_min": 0.45349196449164947,
-          "fta_per_min": 0.16738671875805883,
+          "fga_per_min": 0.45349263888588714,
+          "fta_per_min": 0.16738674603525228,
           "shooting_posterior": {
             "share": [
               113.88041384382639,
@@ -25323,14 +25323,14 @@
             ]
           },
           "tpa_given_fga": 0.31183026791847307,
-          "fg2_pct": 0.5622762257416318,
+          "fg2_pct": 0.5622761940146177,
           "tp_pct": 0.32746530111843214,
           "ft_pct": 0.7731332546574179,
-          "reb_per_min": 0.2933341681526939,
-          "stl_per_min": 0.04210716694619058,
-          "blk_per_min": 0.02079520808787949,
-          "tov_per_min": 0.05188839934649877,
-          "ast_per_min": 0.09921542461319822,
+          "reb_per_min": 0.2933340983585335,
+          "stl_per_min": 0.042106987941036525,
+          "blk_per_min": 0.02079512882043654,
+          "tov_per_min": 0.051888525481320905,
+          "ast_per_min": 0.09921561302254733,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4066261.png",
           "role_prior_games": 1,
           "closing_rate": 0.5142857142857142,
@@ -25448,7 +25448,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -25630,7 +25630,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -25812,12 +25812,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9933496135538754,
+          "points_scale": 0.9933474482371475,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -25852,8 +25852,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 4.734813953388882,
-          "fga_per_min": 0.3024860812367327,
-          "fta_per_min": 0.11855198337328567,
+          "fga_per_min": 0.30248945426641416,
+          "fta_per_min": 0.11855223310475663,
           "shooting_posterior": {
             "share": [
               7.628000171933271,
@@ -25869,14 +25869,14 @@
             ]
           },
           "tpa_given_fga": 0.1733636402712107,
-          "fg2_pct": 0.5636823353512468,
+          "fg2_pct": 0.5636822285182478,
           "tp_pct": 0.34400576607272165,
           "ft_pct": 0.730976628505022,
-          "reb_per_min": 0.31162109300004337,
-          "stl_per_min": 0.015464692502952045,
-          "blk_per_min": 0.04035709192882292,
-          "tov_per_min": 0.07935978954565073,
-          "ast_per_min": 0.04593415748475343,
+          "reb_per_min": 0.3116207876137804,
+          "stl_per_min": 0.015463909260991034,
+          "blk_per_min": 0.04035674509195229,
+          "tov_per_min": 0.07936034145202436,
+          "ast_per_min": 0.045934981875027786,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4278076.png",
           "role_prior_games": 1,
           "closing_rate": 0.02857142857142857,
@@ -25994,7 +25994,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -26176,7 +26176,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -26358,7 +26358,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -26540,12 +26540,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9911169888923833,
+          "points_scale": 0.9911167055773131,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -26580,8 +26580,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 2,
-          "fga_per_min": 0.34335314835094655,
-          "fta_per_min": 0.10063286786394683,
+          "fga_per_min": 0.34337028268926595,
+          "fta_per_min": 0.1006350106951207,
           "shooting_posterior": {
             "share": [
               4.0190446777893065,
@@ -26597,14 +26597,14 @@
             ]
           },
           "tpa_given_fga": 0.3864466036335871,
-          "fg2_pct": 0.56220005158531,
+          "fg2_pct": 0.5621998916895631,
           "tp_pct": 0.34244030933244723,
           "ft_pct": 0.7551484887050375,
-          "reb_per_min": 0.24435299471705335,
-          "stl_per_min": 0.030092749214451233,
-          "blk_per_min": 0.0343005563939343,
-          "tov_per_min": 0.0688241588370944,
-          "ast_per_min": 0.11240473476903427,
+          "reb_per_min": 0.24435168670721616,
+          "stl_per_min": 0.03008939448532907,
+          "blk_per_min": 0.03429907084565109,
+          "tov_per_min": 0.06882652272523686,
+          "ast_per_min": 0.11240826574183585,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4700818.png",
           "role_prior_games": 1,
           "closing_rate": 0.14285714285714285,
@@ -26722,7 +26722,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -26904,7 +26904,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -27086,7 +27086,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -27268,7 +27268,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -27450,12 +27450,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9894453469018365,
+          "points_scale": 0.9894440085112497,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -27490,8 +27490,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 26.4390243902439,
-          "fga_per_min": 0.3306201907745761,
-          "fta_per_min": 0.10332792779205789,
+          "fga_per_min": 0.33062205778966,
+          "fta_per_min": 0.10332807965808574,
           "shooting_posterior": {
             "share": [
               17.2900172017658,
@@ -27507,14 +27507,14 @@
             ]
           },
           "tpa_given_fga": 0.2118874657079142,
-          "fg2_pct": 0.5444813742219595,
+          "fg2_pct": 0.5444812919587303,
           "tp_pct": 0.3496443823748171,
           "ft_pct": 0.6847912050869048,
-          "reb_per_min": 0.370251302287895,
-          "stl_per_min": 0.04617553267764426,
-          "blk_per_min": 0.020751649725164766,
-          "tov_per_min": 0.08936136170017486,
-          "ast_per_min": 0.17217355892575992,
+          "reb_per_min": 0.3702511263319525,
+          "stl_per_min": 0.04617508139317564,
+          "blk_per_min": 0.020751449886416782,
+          "tov_per_min": 0.08936167969485205,
+          "ast_per_min": 0.17217403391885963,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/3102530.png",
           "role_prior_games": 1,
           "closing_rate": 0.09090909090909091,
@@ -27632,7 +27632,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -27814,7 +27814,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -27996,12 +27996,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9808406372877734,
+          "points_scale": 0.9808381760185028,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -28036,8 +28036,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 5.593954422371496,
-          "fga_per_min": 0.27589994125527995,
-          "fta_per_min": 0.0972591788301742,
+          "fga_per_min": 0.27590371411067854,
+          "fta_per_min": 0.09725949746515627,
           "shooting_posterior": {
             "share": [
               4.826479838590154,
@@ -28053,14 +28053,14 @@
             ]
           },
           "tpa_given_fga": 0.12974408168253102,
-          "fg2_pct": 0.5453948302506718,
+          "fg2_pct": 0.5453947184717006,
           "tp_pct": 0.3429651986188868,
           "ft_pct": 0.7145075396076451,
-          "reb_per_min": 0.2506153107622435,
-          "stl_per_min": 0.02047414404450003,
-          "blk_per_min": 0.01673112896033647,
-          "tov_per_min": 0.0493247954858293,
-          "ast_per_min": 0.06066588598483869,
+          "reb_per_min": 0.2506149682864818,
+          "stl_per_min": 0.020473265676938076,
+          "blk_per_min": 0.01673073999974497,
+          "tov_per_min": 0.04932541442184136,
+          "ast_per_min": 0.060666810498222076,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4065673.png",
           "role_prior_games": 1,
           "closing_rate": 0.030303030303030304,
@@ -28178,7 +28178,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -28360,12 +28360,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0044386572031578,
+          "points_scale": 1.00443284407705,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -28400,8 +28400,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 15.20330357540537,
-          "fga_per_min": 0.2952391412459341,
-          "fta_per_min": 0.0837860356924389,
+          "fga_per_min": 0.29524457302682194,
+          "fta_per_min": 0.08378645060982905,
           "shooting_posterior": {
             "share": [
               4.022133878151793,
@@ -28417,14 +28417,14 @@
             ]
           },
           "tpa_given_fga": 0.10260545607530085,
-          "fg2_pct": 0.6045079970141036,
+          "fg2_pct": 0.6045078887438894,
           "tp_pct": 0.34244030933244723,
           "ft_pct": 0.7335406743393482,
-          "reb_per_min": 0.3100741552297103,
-          "stl_per_min": 0.02211972247343108,
-          "blk_per_min": 0.0655358023666338,
-          "tov_per_min": 0.04254167570939846,
-          "ast_per_min": 0.06271470865612741,
+          "reb_per_min": 0.3100736204276587,
+          "stl_per_min": 0.022118350835415617,
+          "blk_per_min": 0.0655351949749712,
+          "tov_per_min": 0.04254264222523996,
+          "ast_per_min": 0.06271615235436648,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4277919.png",
           "role_prior_games": 1,
           "closing_rate": 0.030303030303030304,
@@ -28542,7 +28542,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -28724,12 +28724,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0046681647356916,
+          "points_scale": 1.0046662523673413,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "interior",
@@ -28764,8 +28764,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 24.225475044566586,
-          "fga_per_min": 0.22414835922527776,
-          "fta_per_min": 0.12016515504068953,
+          "fga_per_min": 0.22414957731605864,
+          "fta_per_min": 0.12016513357634934,
           "shooting_posterior": {
             "share": [
               1.6960172435108856,
@@ -28781,14 +28781,14 @@
             ]
           },
           "tpa_given_fga": 0.01609124519460043,
-          "fg2_pct": 0.6418863025595452,
+          "fg2_pct": 0.6418862397656367,
           "tp_pct": 0.33454092472097435,
           "ft_pct": 0.6837213681886088,
-          "reb_per_min": 0.23136137664393785,
-          "stl_per_min": 0.02778253393318946,
-          "blk_per_min": 0.04685623128806201,
-          "tov_per_min": 0.038157640577433795,
-          "ast_per_min": 0.06038693801156422,
+          "reb_per_min": 0.23136125348475858,
+          "stl_per_min": 0.027782218059658956,
+          "blk_per_min": 0.04685609141227358,
+          "tov_per_min": 0.03815786315567069,
+          "ast_per_min": 0.06038727047979171,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4397077.png",
           "role_prior_games": 1,
           "closing_rate": 0.030303030303030304,
@@ -28906,7 +28906,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -29088,7 +29088,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -29270,7 +29270,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -29452,7 +29452,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -29634,7 +29634,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -29816,7 +29816,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -29998,7 +29998,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -30180,7 +30180,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -30362,7 +30362,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -30544,7 +30544,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -30726,7 +30726,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         }
       ],
@@ -32647,7 +32647,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -32829,7 +32829,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -33011,12 +33011,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0043141749884288,
+          "points_scale": 1.0043132388867342,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -33051,8 +33051,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 34.18425698276894,
-          "fga_per_min": 0.27614035606432663,
-          "fta_per_min": 0.1142166601571764,
+          "fga_per_min": 0.27614106105681546,
+          "fta_per_min": 0.11421667497460436,
           "shooting_posterior": {
             "share": [
               70.88214980091323,
@@ -33068,14 +33068,14 @@
             ]
           },
           "tpa_given_fga": 0.33947389751395224,
-          "fg2_pct": 0.6178468071557006,
+          "fg2_pct": 0.6178467565918101,
           "tp_pct": 0.35442936518999035,
           "ft_pct": 0.771265484025786,
-          "reb_per_min": 0.2571131523025948,
-          "stl_per_min": 0.027846471531886883,
-          "blk_per_min": 0.021153778186361515,
-          "tov_per_min": 0.04740473805194766,
-          "ast_per_min": 0.06192686864721024,
+          "reb_per_min": 0.25711308021440327,
+          "stl_per_min": 0.027846286643097285,
+          "blk_per_min": 0.021153696313514565,
+          "tov_per_min": 0.047404868332635464,
+          "ast_per_min": 0.06192706324929691,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4277847.png",
           "role_prior_games": 1,
           "closing_rate": 0.5641025641025641,
@@ -33193,7 +33193,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -33375,12 +33375,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0113824537208536,
+          "points_scale": 1.0113803558284185,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -33415,8 +33415,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 9.425216070314484,
-          "fga_per_min": 0.2505005257577612,
-          "fta_per_min": 0.11695579666589291,
+          "fga_per_min": 0.25050239101707333,
+          "fta_per_min": 0.1169558546020487,
           "shooting_posterior": {
             "share": [
               6.235594690902579,
@@ -33432,14 +33432,14 @@
             ]
           },
           "tpa_given_fga": 0.09037093754931273,
-          "fg2_pct": 0.6045268849892022,
+          "fg2_pct": 0.604526802303388,
           "tp_pct": 0.34105623127622264,
           "ft_pct": 0.7190490179206441,
-          "reb_per_min": 0.322242495698869,
-          "stl_per_min": 0.03502742831212688,
-          "blk_per_min": 0.05287187900107915,
-          "tov_per_min": 0.046391397886001925,
-          "ast_per_min": 0.08539520291290624,
+          "reb_per_min": 0.322242318305378,
+          "stl_per_min": 0.03502697334069365,
+          "blk_per_min": 0.05287167752966166,
+          "tov_per_min": 0.04639171847867484,
+          "ast_per_min": 0.08539568178666854,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4348700.png",
           "role_prior_games": 1,
           "closing_rate": 0.15384615384615385,
@@ -33557,12 +33557,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0164397056163168,
+          "points_scale": 1.0164364691379564,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -33597,8 +33597,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 4.42758799039809,
-          "fga_per_min": 0.36200689491606636,
-          "fta_per_min": 0.11115202026610989,
+          "fga_per_min": 0.3620206339723145,
+          "fta_per_min": 0.11115354296468173,
           "shooting_posterior": {
             "share": [
               4.019559248242568,
@@ -33614,14 +33614,14 @@
             ]
           },
           "tpa_given_fga": 0.23644466166132752,
-          "fg2_pct": 0.5613244801005793,
+          "fg2_pct": 0.5613243359557568,
           "tp_pct": 0.34244030933244723,
           "ft_pct": 0.7393405843427493,
-          "reb_per_min": 0.24073510017977473,
-          "stl_per_min": 0.029815087583976153,
-          "blk_per_min": 0.029011065468633936,
-          "tov_per_min": 0.06488868534246882,
-          "ast_per_min": 0.10418136226089962,
+          "reb_per_min": 0.2407339979988967,
+          "stl_per_min": 0.02981226075639098,
+          "blk_per_min": 0.029009813686831844,
+          "tov_per_min": 0.06489067724821322,
+          "ast_per_min": 0.10418433759838724,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4397204.png",
           "role_prior_games": 1,
           "closing_rate": 0.02564102564102564,
@@ -33739,7 +33739,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -33921,7 +33921,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -34103,7 +34103,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -34285,7 +34285,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -34467,7 +34467,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -34649,7 +34649,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -34831,7 +34831,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -35013,7 +35013,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -35195,7 +35195,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -35377,12 +35377,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9912514241806244,
+          "points_scale": 0.9912503650153355,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -35417,8 +35417,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 12.505646609588418,
-          "fga_per_min": 0.40943567456860497,
-          "fta_per_min": 0.04979391671829835,
+          "fga_per_min": 0.40943693700906314,
+          "fta_per_min": 0.049794077733754,
           "shooting_posterior": {
             "share": [
               57.21862497408807,
@@ -35434,14 +35434,14 @@
             ]
           },
           "tpa_given_fga": 0.37446744092989576,
-          "fg2_pct": 0.5548712577990562,
+          "fg2_pct": 0.5548711932422171,
           "tp_pct": 0.3418916805187704,
           "ft_pct": 0.7590533434549052,
-          "reb_per_min": 0.2777331044179534,
-          "stl_per_min": 0.018938545605492157,
-          "blk_per_min": 0.025974557277077176,
-          "tov_per_min": 0.04443438562832226,
-          "ast_per_min": 0.11676989207688487,
+          "reb_per_min": 0.2777329754045054,
+          "stl_per_min": 0.01893821471717708,
+          "blk_per_min": 0.025974410752409905,
+          "tov_per_min": 0.04443461878662983,
+          "ast_per_min": 0.116770240348712,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/6478.png",
           "role_prior_games": 1,
           "closing_rate": 0,
@@ -35559,7 +35559,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -35741,7 +35741,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -35923,7 +35923,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -36105,7 +36105,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -36287,7 +36287,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -36469,7 +36469,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -36651,7 +36651,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -36833,7 +36833,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -37015,12 +37015,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9869907457096493,
+          "points_scale": 0.9869882919216825,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "interior",
@@ -37055,8 +37055,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 17.34996396442569,
-          "fga_per_min": 0.22193509168192146,
-          "fta_per_min": 0.07084887012596669,
+          "fga_per_min": 0.2219371678534002,
+          "fta_per_min": 0.07084902515211532,
           "shooting_posterior": {
             "share": [
               0.6958276619722267,
@@ -37072,14 +37072,14 @@
             ]
           },
           "tpa_given_fga": 0.01260557358645338,
-          "fg2_pct": 0.5585001504611876,
+          "fg2_pct": 0.5585000581313301,
           "tp_pct": 0.34278886894578264,
           "ft_pct": 0.5958845306523911,
-          "reb_per_min": 0.34400435524104106,
-          "stl_per_min": 0.03296675505287215,
-          "blk_per_min": 0.06418849487714609,
-          "tov_per_min": 0.04679854218690771,
-          "ast_per_min": 0.07754320897895055,
+          "reb_per_min": 0.3440041549369516,
+          "stl_per_min": 0.03296624132129072,
+          "blk_per_min": 0.06418826738543483,
+          "tov_per_min": 0.04679890418453838,
+          "ast_per_min": 0.07754374969987773,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4433174.png",
           "role_prior_games": 1,
           "closing_rate": 0.16666666666666666,
@@ -37197,7 +37197,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -37379,7 +37379,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -37561,12 +37561,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.004848502935675,
+          "points_scale": 1.0048475173466043,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -37601,8 +37601,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 26.314285714285713,
-          "fga_per_min": 0.33835379214181166,
-          "fta_per_min": 0.08666942292339906,
+          "fga_per_min": 0.3383549162084209,
+          "fta_per_min": 0.08666952138867297,
           "shooting_posterior": {
             "share": [
               17.097705104824044,
@@ -37618,14 +37618,14 @@
             ]
           },
           "tpa_given_fga": 0.12816870393421323,
-          "fg2_pct": 0.5880703408396707,
+          "fg2_pct": 0.5880702838284364,
           "tp_pct": 0.3492304772388541,
           "ft_pct": 0.7816691798508147,
-          "reb_per_min": 0.2720385145990404,
-          "stl_per_min": 0.020449780360097095,
-          "blk_per_min": 0.019367634762463032,
-          "tov_per_min": 0.04755502998524496,
-          "ast_per_min": 0.0547474089022,
+          "reb_per_min": 0.2720384055982207,
+          "stl_per_min": 0.020449500799336915,
+          "blk_per_min": 0.019367510966772764,
+          "tov_per_min": 0.047555226975923494,
+          "ast_per_min": 0.05474770314993346,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4898371.png",
           "role_prior_games": 1,
           "closing_rate": 0.4583333333333333,
@@ -37743,7 +37743,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -37925,7 +37925,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -38107,7 +38107,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -38289,7 +38289,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -38471,7 +38471,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         }
       ],
@@ -40392,7 +40392,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -40574,12 +40574,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9758725020429407,
+          "points_scale": 0.9758708821934176,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -40614,8 +40614,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 23.746633682473334,
-          "fga_per_min": 0.26075265261147457,
-          "fta_per_min": 0.08110123878691729,
+          "fga_per_min": 0.2607538488167644,
+          "fta_per_min": 0.08110130945338696,
           "shooting_posterior": {
             "share": [
               6.496919739631872,
@@ -40631,14 +40631,14 @@
             ]
           },
           "tpa_given_fga": 0.050208035082162844,
-          "fg2_pct": 0.5504476142594616,
+          "fg2_pct": 0.5504475593861486,
           "tp_pct": 0.34483346265636755,
           "ft_pct": 0.7532278426625522,
-          "reb_per_min": 0.3818039304784284,
-          "stl_per_min": 0.04187334882466288,
-          "blk_per_min": 0.025533337207467106,
-          "tov_per_min": 0.06808429979494503,
-          "ast_per_min": 0.13647213160512225,
+          "reb_per_min": 0.38180380489737986,
+          "stl_per_min": 0.0418730267396228,
+          "blk_per_min": 0.0255331945810848,
+          "tov_per_min": 0.0680845267500819,
+          "ast_per_min": 0.13647247061118647,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4222252.png",
           "role_prior_games": 1,
           "closing_rate": 0.025,
@@ -40756,7 +40756,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -40938,7 +40938,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -41120,7 +41120,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -41302,12 +41302,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0029695474733413,
+          "points_scale": 1.0029687306160235,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -41342,8 +41342,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 29.661349422867897,
-          "fga_per_min": 0.38780933485900615,
-          "fta_per_min": 0.13589243383509858,
+          "fga_per_min": 0.3878103499548343,
+          "fta_per_min": 0.13589249088130814,
           "shooting_posterior": {
             "share": [
               55.284757461926176,
@@ -41359,14 +41359,14 @@
             ]
           },
           "tpa_given_fga": 0.3011152367207308,
-          "fg2_pct": 0.5958036389727964,
+          "fg2_pct": 0.5958035857329776,
           "tp_pct": 0.35139558390372483,
           "ft_pct": 0.8153184509099992,
-          "reb_per_min": 0.29293746933204723,
-          "stl_per_min": 0.023171963272571088,
-          "blk_per_min": 0.06443546668124626,
-          "tov_per_min": 0.05504264567607354,
-          "ast_per_min": 0.058832328986324775,
+          "reb_per_min": 0.29293736950233096,
+          "stl_per_min": 0.023171707233474868,
+          "blk_per_min": 0.06443535330146925,
+          "tov_per_min": 0.05504282609236396,
+          "ast_per_min": 0.05883259847666273,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4433255.png",
           "role_prior_games": 1,
           "closing_rate": 0.175,
@@ -41484,7 +41484,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -41666,7 +41666,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -41848,7 +41848,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -42030,7 +42030,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -42212,7 +42212,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -42394,7 +42394,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -42576,7 +42576,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -42616,8 +42616,8 @@
           "missing_shooting": true,
           "thin_sample": true,
           "minutes_mean": 13.952380952380953,
-          "fga_per_min": 0.3599196645150911,
-          "fta_per_min": 0.09793963227114133,
+          "fga_per_min": 0.3599389060627015,
+          "fta_per_min": 0.09794205704570944,
           "shooting_posterior": {
             "share": [
               4.141086106648956,
@@ -42633,14 +42633,14 @@
             ]
           },
           "tpa_given_fga": 0.41410861066489557,
-          "fg2_pct": 0.5613130018277543,
+          "fg2_pct": 0.561312840866036,
           "tp_pct": 0.3358166788971283,
           "ft_pct": 0.7614264663382908,
-          "reb_per_min": 0.21425997198135174,
-          "stl_per_min": 0.03599346745228074,
-          "blk_per_min": 0.027647600211404194,
-          "tov_per_min": 0.05145169563639969,
-          "ast_per_min": 0.0997354369683758,
+          "reb_per_min": 0.2142585244504652,
+          "stl_per_min": 0.035989754885385555,
+          "blk_per_min": 0.027645956204637456,
+          "tov_per_min": 0.05145431167261067,
+          "ast_per_min": 0.09973934457827624,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5061603.png",
           "role_prior_games": 1,
           "closing_rate": 0,
@@ -42758,7 +42758,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -42940,7 +42940,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -43122,12 +43122,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9919094656876408,
+          "points_scale": 0.9919043555423176,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -43161,9 +43161,9 @@
           "shooting_games": 10,
           "missing_shooting": false,
           "thin_sample": false,
-          "minutes_mean": 22.19579981115344,
-          "fga_per_min": 0.3015476528845451,
-          "fta_per_min": 0.0884560605874296,
+          "minutes_mean": 22.19669551272021,
+          "fga_per_min": 0.30155134270814865,
+          "fta_per_min": 0.08845626563113698,
           "shooting_posterior": {
             "share": [
               4.0853290753292395,
@@ -43179,14 +43179,14 @@
             ]
           },
           "tpa_given_fga": 0.06189892538377636,
-          "fg2_pct": 0.5885111313883936,
+          "fg2_pct": 0.5885110474083666,
           "tp_pct": 0.3523058010791539,
           "ft_pct": 0.7147441143576047,
-          "reb_per_min": 0.2749798457824226,
-          "stl_per_min": 0.013551318897146725,
-          "blk_per_min": 0.07719256416064217,
-          "tov_per_min": 0.07640614348985339,
-          "ast_per_min": 0.07501889294002999,
+          "reb_per_min": 0.2749794481091022,
+          "stl_per_min": 0.013550298961186508,
+          "blk_per_min": 0.07719211251043154,
+          "tov_per_min": 0.07640686218112014,
+          "ast_per_min": 0.0750199664592334,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5174983.png",
           "role_prior_games": 1,
           "closing_rate": 0,
@@ -43304,7 +43304,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -43486,7 +43486,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -43668,12 +43668,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0192108080486844,
+          "points_scale": 1.019208674659633,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "bench",
@@ -43708,8 +43708,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 16.333899721514054,
-          "fga_per_min": 0.27592722776629547,
-          "fta_per_min": 0.06565305763171846,
+          "fga_per_min": 0.27592876803666727,
+          "fta_per_min": 0.06565318709280737,
           "shooting_posterior": {
             "share": [
               8.638087884571837,
@@ -43725,14 +43725,14 @@
             ]
           },
           "tpa_given_fga": 0.08998008213095664,
-          "fg2_pct": 0.6428459951555543,
+          "fg2_pct": 0.6428459268549667,
           "tp_pct": 0.34330069767715404,
           "ft_pct": 0.7171453718341849,
-          "reb_per_min": 0.39150838681922856,
-          "stl_per_min": 0.03874466426021466,
-          "blk_per_min": 0.07855482475580874,
-          "tov_per_min": 0.05097322140822034,
-          "ast_per_min": 0.06553115626169322,
+          "reb_per_min": 0.39150823049839845,
+          "stl_per_min": 0.03874426333506399,
+          "blk_per_min": 0.07855464721728102,
+          "tov_per_min": 0.05097350391753039,
+          "ast_per_min": 0.06553157824980342,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4066211.png",
           "role_prior_games": 1,
           "closing_rate": 0.03333333333333333,
@@ -43850,12 +43850,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0142917821298008,
+          "points_scale": 1.0142900128743781,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "perimeter",
@@ -43890,8 +43890,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 11.22380511333144,
-          "fga_per_min": 0.32781373942363307,
-          "fta_per_min": 0.11606379135223362,
+          "fga_per_min": 0.3278157955059002,
+          "fta_per_min": 0.11606392006046204,
           "shooting_posterior": {
             "share": [
               42.53804803306978,
@@ -43907,14 +43907,14 @@
             ]
           },
           "tpa_given_fga": 0.5467615428415138,
-          "fg2_pct": 0.5949053390176092,
+          "fg2_pct": 0.5949052324204447,
           "tp_pct": 0.3754079813636965,
           "ft_pct": 0.8215257093283924,
-          "reb_per_min": 0.24758092396042056,
-          "stl_per_min": 0.025867449423194043,
-          "blk_per_min": 0.01895211093879564,
-          "tov_per_min": 0.05637504895513291,
-          "ast_per_min": 0.07632206108392449,
+          "reb_per_min": 0.24758072905051656,
+          "stl_per_min": 0.02586694952639487,
+          "blk_per_min": 0.018951889573432072,
+          "tov_per_min": 0.056375401204173885,
+          "ast_per_min": 0.07632258724324681,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4066399.png",
           "role_prior_games": 1,
           "closing_rate": 0.13333333333333333,
@@ -44032,7 +44032,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -44214,7 +44214,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -44396,7 +44396,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -44578,12 +44578,12 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.986151920345702,
+          "points_scale": 0.9861497110996025,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "perimeter",
@@ -44618,8 +44618,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 9.005060714527984,
-          "fga_per_min": 0.3611620550722582,
-          "fta_per_min": 0.06159569246618198,
+          "fga_per_min": 0.36116543164395853,
+          "fta_per_min": 0.0615960819437745,
           "shooting_posterior": {
             "share": [
               25.33838458836585,
@@ -44635,14 +44635,14 @@
             ]
           },
           "tpa_given_fga": 0.47628542459334305,
-          "fg2_pct": 0.6189714388821561,
+          "fg2_pct": 0.6189713228039938,
           "tp_pct": 0.36275337772150734,
           "ft_pct": 0.7770377575623385,
-          "reb_per_min": 0.23794874895868892,
-          "stl_per_min": 0.018847556849173767,
-          "blk_per_min": 0.04869507586149756,
-          "tov_per_min": 0.045296771376497146,
-          "ast_per_min": 0.07062172948160571,
+          "reb_per_min": 0.23794842965040514,
+          "stl_per_min": 0.01884673790059395,
+          "blk_per_min": 0.04869471321294607,
+          "tov_per_min": 0.04529734844330839,
+          "ast_per_min": 0.07062259145437787,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/4592435.png",
           "role_prior_games": 1,
           "closing_rate": 0.1,
@@ -44760,7 +44760,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -44942,7 +44942,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -45124,7 +45124,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -45306,7 +45306,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -45488,7 +45488,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -45670,7 +45670,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -45852,7 +45852,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -46034,12 +46034,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 1.0040312255428374,
+          "points_scale": 1.0040303194760543,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "starter",
@@ -46074,8 +46074,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 25.822495463872414,
-          "fga_per_min": 0.32933975673535537,
-          "fta_per_min": 0.0968833168119487,
+          "fga_per_min": 0.3293405372033446,
+          "fta_per_min": 0.09688336518754943,
           "shooting_posterior": {
             "share": [
               74.28109008887476,
@@ -46091,14 +46091,14 @@
             ]
           },
           "tpa_given_fga": 0.3394930991264843,
-          "fg2_pct": 0.6108219823633368,
+          "fg2_pct": 0.6108219334883213,
           "tp_pct": 0.35574732963357353,
           "ft_pct": 0.7088180267221025,
-          "reb_per_min": 0.4108609703577198,
-          "stl_per_min": 0.020385399277589502,
-          "blk_per_min": 0.06400619248263976,
-          "tov_per_min": 0.04864328915433919,
-          "ast_per_min": 0.07475744739586905,
+          "reb_per_min": 0.4108608896103665,
+          "stl_per_min": 0.020385192180142758,
+          "blk_per_min": 0.06400610077530805,
+          "tov_per_min": 0.04864343508421336,
+          "ast_per_min": 0.07475766537336442,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5105565.png",
           "role_prior_games": 1,
           "closing_rate": 0.13333333333333333,
@@ -46216,12 +46216,12 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
           "active_season": 2027,
-          "points_scale": 0.9680916824761526,
+          "points_scale": 0.9680891077157829,
           "skill_prior": {
             "source": "chronological-selection",
             "role": "perimeter",
@@ -46256,8 +46256,8 @@
           "missing_shooting": false,
           "thin_sample": false,
           "minutes_mean": 11.056936130792526,
-          "fga_per_min": 0.31769442041762047,
-          "fta_per_min": 0.11230749453997378,
+          "fga_per_min": 0.31769845178720174,
+          "fta_per_min": 0.11230781034626275,
           "shooting_posterior": {
             "share": [
               22.73780437932567,
@@ -46273,14 +46273,14 @@
             ]
           },
           "tpa_given_fga": 0.48378307190054615,
-          "fg2_pct": 0.5338997954145149,
+          "fg2_pct": 0.5338996740865865,
           "tp_pct": 0.3663356040869465,
           "ft_pct": 0.8247236017765076,
-          "reb_per_min": 0.24224284344137603,
-          "stl_per_min": 0.020621882473714073,
-          "blk_per_min": 0.02811981079549449,
-          "tov_per_min": 0.09738534823039802,
-          "ast_per_min": 0.07508337879143434,
+          "reb_per_min": 0.24224246450658898,
+          "stl_per_min": 0.020620910597563498,
+          "blk_per_min": 0.028119380427230938,
+          "tov_per_min": 0.09738603305663125,
+          "ast_per_min": 0.07508440172596326,
           "headshot_url": "https://a.espncdn.com/i/headshots/nba/players/full/5217746.png",
           "role_prior_games": 1,
           "closing_rate": 0.4666666666666667,
@@ -46398,7 +46398,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         },
         {
@@ -46580,7 +46580,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v8",
-          "as_of": "2026-11-11T00:41:23Z",
+          "as_of": "2026-11-11T01:29:51Z",
           "calibration": null
         }
       ],
