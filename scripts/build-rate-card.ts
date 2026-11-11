@@ -10,7 +10,7 @@ import { mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync, rena
 import { dirname, join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
-import { chicagoDate } from '../src/date.ts';
+import { chicagoDate, recentChicagoDates } from '../src/date.ts';
 import { fitPlayers, hasFreeThrowAttempts, type InjuryInput, type RosterPlayer } from '../src/fit.ts';
 import { fitMatchup, fitCurrentRoles, eligibleEvents, MODEL_VERSION } from '../src/team-model.ts';
 import { addEvidence, MISSING_FEATURES } from '../src/model-evidence.ts';
@@ -283,6 +283,20 @@ export function gamesFromScoreboard(payload: unknown, date: string, picks: unkno
   return games;
 }
 
+function tipMatchesDate(game: SlateGame): boolean {
+  const tip = Date.parse(game.start_time);
+  return Number.isFinite(tip) && chicagoDate(new Date(tip)) === game.date;
+}
+
+export function mergeSlateGames(groups: readonly (readonly SlateGame[])[]): SlateGame[] {
+  const byId = new Map<string, SlateGame>();
+  for (const game of groups.flat()) {
+    const previous = byId.get(game.event_id);
+    if (!previous || (tipMatchesDate(game) && !tipMatchesDate(previous))) byId.set(game.event_id, game);
+  }
+  return [...byId.values()].sort((a, b) => compareText(a.start_time, b.start_time) || compareText(a.event_id, b.event_id));
+}
+
 function pushRosterPlayer(out: RosterPlayer[], teamId: string, item: unknown): void {
   if (!isRecord(item)) return;
   const athleteId = String(item.id ?? '').trim();
@@ -481,6 +495,13 @@ async function fetchJson(url: string | URL, timeoutMs: number): Promise<unknown>
   return (await fetchWithRetry(url,timeoutMs)).json() as Promise<unknown>;
 }
 
+async function fetchScoreboard(day: string): Promise<unknown> {
+  const url = new URL(SCOREBOARD);
+  url.searchParams.set('dates', day.replaceAll('-', ''));
+  url.searchParams.set('limit', '100');
+  return fetchJson(url, JSON_TIMEOUT_MS);
+}
+
 async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length);
   let cursor = 0;
@@ -505,17 +526,15 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
   const SLATE_PATH=join(outputRoot,'public/data/slate.json'),RATE_CARD_PATH=join(outputRoot,'public/data/rate-card.json'),CACHE_PATH=join(outputRoot,'data/shooting-cache.json');
   const date = chicagoDate(now);
   let generatedAt = stamp(now);
-  const scoreboardUrl = new URL(SCOREBOARD);
-  scoreboardUrl.searchParams.set('dates', date.replaceAll('-', ''));
-  scoreboardUrl.searchParams.set('limit', '100');
-  let scoreboard: unknown;
-  try {
-    scoreboard = await fetchJson(scoreboardUrl, JSON_TIMEOUT_MS);
-  } catch (error) {
-    throw new Error(`scoreboard failed: ${message(error)}`);
-  }
-
-  const [teamIndex, injuryPayload, gzipText] = await Promise.all([
+  const previousDates = recentChicagoDates(date).filter((day) => day !== date);
+  const [scoreboard, previousBoards, teamIndex, injuryPayload, gzipText] = await Promise.all([
+    fetchScoreboard(date).catch((error: unknown) => {
+      throw new Error(`scoreboard failed: ${message(error)}`);
+    }),
+    Promise.all(previousDates.map((day) => fetchScoreboard(day).catch((error: unknown) => {
+      console.error(`scoreboard ${day} failed: ${message(error)}`);
+      return null;
+    }))),
     fetchJson(TEAMS, JSON_TIMEOUT_MS).catch((error: unknown) => {
       console.error(`team index failed: ${message(error)}`);
       throw error;
@@ -535,7 +554,17 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
   ]);
 
   const picks: unknown[] = [];
-  const games = gamesFromScoreboard(scoreboard, date, picks);
+  const earlier = previousDates.flatMap((day, index) => {
+    const board = previousBoards[index];
+    if (!board) return [];
+    try {
+      return gamesFromScoreboard(board, day, picks);
+    } catch (error) {
+      console.error(`scoreboard ${day} failed: ${message(error)}`);
+      return [];
+    }
+  });
+  const games = mergeSlateGames([earlier, gamesFromScoreboard(scoreboard, date, picks)]);
   const slate: Slate = {
     schema_version: 1,
     generated_at: generatedAt,

@@ -1,7 +1,7 @@
 import { availablePlayer, fillThinRoster, rosterIssue, InsufficientRosterError } from './roster-capacity.ts';
 import {freshnessBudget} from './refresh-window.ts';
 import { healthyCheck, type RefreshHealth } from './generation.ts';
-import { chicagoDate } from './date.ts';
+import { chicagoDate, recentChicagoDates } from './date.ts';
 import { MAX_LEAD_TILT } from './lead-effect.ts';
 import { USAGE_EXPONENT_RANGE } from './usage-concentration.ts';
 import { MIN_DEFENSIVE_CREDIT } from './rebound-credit.ts';
@@ -64,17 +64,19 @@ export function validateGeneration(slate: Slate, card: RateCard): void {
   if (slate.timezone !== 'America/Chicago' || card.iterations !== 10000 || !Array.isArray(card.columns)) throw new Error('Invalid simulation contract');
   if (slate.games.length !== card.games.length || new Set(card.games.map(g => g.event_id)).size !== card.games.length || new Set(slate.games.map(g => g.event_id)).size !== slate.games.length) throw new Error('Incomplete slate coverage');
   if(!['min','fgm','fga','tpm','tpa','ftm','fta','pts','reb','ast'].every(k=>card.columns.includes(k as typeof card.columns[number])))throw new Error('Missing display columns');
+  const allowedDates = new Set(slate.date ? recentChicagoDates(slate.date) : []);
   const memberships = new Map<string, string>();
   for (const g of slate.games) {
-    if (g.date !== slate.date || !Number.isFinite(Date.parse(g.start_time))) throw new Error('Invalid game date');
+    if (!allowedDates.has(g.date) || !Number.isFinite(Date.parse(g.start_time))) throw new Error('Invalid game date');
     const r = card.games.find(x => x.event_id === g.event_id);
     if (!r || r.away_team_id !== g.away.team_id || r.home_team_id !== g.home.team_id) throw new Error('Slate team mismatch');
     try { validateGame(r); } catch (error) {
       if (!(error instanceof InsufficientRosterError) || r.simulation_error !== error.message) throw error;
     }
     for (const p of r.players) {
-      if (memberships.has(p.athlete_id) && memberships.get(p.athlete_id) !== p.team_id) throw new Error('Cross-team athlete membership');
-      memberships.set(p.athlete_id, p.team_id);
+      const key = `${g.date}\0${p.athlete_id}`;
+      if (memberships.has(key) && memberships.get(key) !== p.team_id) throw new Error('Cross-team athlete membership');
+      memberships.set(key, p.team_id);
     }
   }
 }

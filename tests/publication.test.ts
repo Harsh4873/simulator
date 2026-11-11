@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { validateGeneration, freshnessIssue } from '../src/validate-card.ts';
+import { shiftChicagoDate } from '../src/date.ts';
 import { gzipSync } from 'node:zlib';
 import { buildRateCard, fetchWithRetry, parseInjuries, parseOutcomeLines, gamesFromScoreboard } from '../scripts/build-rate-card.ts';
 import { parseCompletedSummary } from '../src/parse-summary.ts';
@@ -31,6 +32,13 @@ test('outcomes reject missing, conflicting, pending and negative values and dedu
 });
 test('incomplete summaries never qualify as completed events', () => {
   for (const s of [{}, {boxscore:{players:[]}}, JSON.parse(readFileSync('tests/fixtures/summary-event.json','utf8'))]) assert.throws(() => parseCompletedSummary(s,'1'));
+});
+test('yesterday stays publishable and an older date does not', () => {
+  const {card,slate} = load();
+  slate.games[0].date = shiftChicagoDate(slate.date!, -1);
+  assert.doesNotThrow(() => validateGeneration(slate, card));
+  slate.games[0].date = shiftChicagoDate(slate.date!, -2);
+  assert.throws(() => validateGeneration(slate, card), /Invalid game date/);
 });
 test('stale and mismatched generations are gated', () => {
   const {card,slate} = load();

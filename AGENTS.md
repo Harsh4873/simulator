@@ -2,7 +2,7 @@
 
 This repository is the public NBA simulator at `/simulator/`.
 
-The page lists today's NBA games in America/Chicago. Simulate draws 10,000 independent games in the browser from the committed rate card. It is a simulator, not a betting ticket. The spread caption is visible text. The sampler does not read it.
+The page lists today's and yesterday's NBA games in America/Chicago. Simulate draws 10,000 independent games in the browser from the committed rate card. It is a simulator, not a betting ticket. The spread caption is visible text. The sampler does not read it.
 
 ## Data
 

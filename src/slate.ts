@@ -1,6 +1,6 @@
 import type {RefreshHealth} from './generation.ts';
 import { freshnessIssue, validateGame } from './validate-card.ts';
-import { formatTip } from './date.ts';
+import { chicagoDate, formatTip, shiftChicagoDate } from './date.ts';
 import { paletteStyle, playerHeadshotUrl, teamLogoUrl } from './display.ts';
 import type { RateCard, Slate, SlateGame, TeamSide } from './types.ts';
 
@@ -102,14 +102,25 @@ function renderCard(game: SlateGame, card: RateCard, now: Date, capturedAt: stri
   </article>`;
 }
 
+function dayTitle(gameDate: string, today: string): string {
+  if (gameDate === today) return 'Today';
+  if (gameDate === shiftChicagoDate(today, -1)) return 'Yesterday';
+  return gameDate;
+}
+
 function slateSummary(slate: Slate, card: RateCard, now: Date): string {
-  const upcoming = slate.games.filter((g) => g.status_state === 'pre' && Date.parse(g.start_time) > now.getTime());
+  const today = chicagoDate(now);
+  const todayGames = slate.games.filter((game) => game.date === today);
+  const older = slate.games.length - todayGames.length;
+  const upcoming = todayGames.filter((g) => g.status_state === 'pre' && Date.parse(g.start_time) > now.getTime());
   const first = upcoming.map((g) => g.start_time).sort()[0];
-  const parts = [`${slate.games.length} game${slate.games.length === 1 ? '' : 's'}`];
+  const parts: string[] = [];
+  if (todayGames.length) parts.push(`${todayGames.length} today`);
+  if (older) parts.push(`${older} from yesterday`);
   if (first) parts.push(`next tip ${tipClock(first)}`);
-  else if (slate.games.length) parts.push('all games under way or final');
+  else if (todayGames.length) parts.push('today\'s games are under way or final');
   const built = card.generated_at ? `Card built ${tipClock(card.generated_at)}` : 'Card time unknown';
-  return `<div class="slate-head"><h2 class="slate-title">Tonight</h2><p class="slate-meta">${escapeHtml(parts.join(' · '))}</p><p class="status captured" title="${escapeHtml(card.generated_at ?? '')}">${escapeHtml(built)}</p></div>`;
+  return `<div class="slate-head"><p class="slate-meta">${escapeHtml(parts.join(' · '))}</p><p class="status captured" title="${escapeHtml(card.generated_at ?? '')}">${escapeHtml(built)}</p></div>`;
 }
 
 export function renderSlate(slate: Slate, card: RateCard, now: Date, health:RefreshHealth|null=null, edits: Readonly<Record<string, number>> = {}): string {
@@ -121,5 +132,17 @@ export function renderSlate(slate: Slate, card: RateCard, now: Date, health:Refr
   if (slate.games.length === 0) {
     return `<p class="state">No NBA games on ${escapeHtml(slate.date ?? '')}.</p>`;
   }
-  return `${slateSummary(slate, card, now)}<div class="slate">${slate.games.map((game) => renderCard(game, card, now, slate.generated_at, edits[game.event_id] ?? 0)).join('')}</div>`;
+  const today = chicagoDate(now);
+  const byDate = new Map<string, SlateGame[]>();
+  for (const game of slate.games) {
+    const list = byDate.get(game.date) ?? [];
+    list.push(game);
+    byDate.set(game.date, list);
+  }
+  const sections = [...byDate.keys()].sort((a, b) => b.localeCompare(a)).map((day) => {
+    const games = byDate.get(day) ?? [];
+    const cards = games.map((game) => renderCard(game, card, now, slate.generated_at, edits[game.event_id] ?? 0)).join('');
+    return `<section class="slate-day"><h2 class="slate-title">${escapeHtml(dayTitle(day, today))}</h2><div class="slate">${cards}</div></section>`;
+  }).join('');
+  return `${slateSummary(slate, card, now)}${sections}`;
 }

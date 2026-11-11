@@ -76,6 +76,12 @@ for(const mode of ['populated','empty','unavailable'] as const)test(mode==='popu
   click('[data-back]');assert.ok((focused as Element|null)?.hasAttribute('data-event'));
   click('button[data-event]');await flush();assert.equal(workerCount,1); // Cache hit.
   click('[data-back]');pending=true;
-  const second=document.querySelectorAll<HTMLElement>('button[data-event]')[1];assert.ok(second);second.click();await flush();click('[data-cancel]');await flush();assert.ok(terminations>=2);assert.ok(document.querySelector('[role="alert"]')?.textContent?.includes('cancelled'));
+  const second=document.querySelectorAll<HTMLElement>('button[data-event]')[1];assert.ok(second);second.click();await flush();
+  const screen=document.querySelector('.sim-screen');
+  assert.ok(screen);
+  assert.equal(screen.textContent?.includes('%'), false);
+  assert.ok(screen.querySelector('.sim-hand'));
+  assert.equal(screen.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow'), '0');
+  click('[data-cancel]');await flush();assert.equal(document.querySelector('.sim-screen'), null);assert.ok(terminations>=2);assert.ok(document.querySelector('[role="alert"]')?.textContent?.includes('cancelled'));
  }finally{globals.setInterval=timer;rmSync(dir,{recursive:true});}
 });

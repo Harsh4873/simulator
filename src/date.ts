@@ -13,6 +13,22 @@ export function chicagoDate(now: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Today and the day before. Each extra day republishes another full set of matchup rates. */
+export const PUBLISHED_SLATE_DAYS = 2;
+
+export function shiftChicagoDate(date: string, days: number): string {
+  const anchor = Date.parse(`${date}T18:00:00Z`);
+  if (!Number.isFinite(anchor)) return date;
+  return chicagoDate(new Date(anchor + days * 86400000));
+}
+
+export function recentChicagoDates(anchor: string, days = PUBLISHED_SLATE_DAYS): string[] {
+  const count = Math.max(1, days);
+  const dates: string[] = [];
+  for (let ago = count - 1; ago >= 0; ago -= 1) dates.push(shiftChicagoDate(anchor, -ago));
+  return dates;
+}
+
 export function formatTip(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;

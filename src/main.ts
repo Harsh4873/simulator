@@ -20,7 +20,7 @@ import { renderLineupEditor } from './lineup-editor.ts';
 import { applyLineupOverrides, cleanOverrides, isLineupChoice, LINEUP_STORAGE_KEY, overridesKey, readStoredLineups, summarizeOverrides, type LineupOverrides } from './lineup-overrides.ts';
 import { healthyCheck } from './generation.ts';
 import { fnv1a } from './rng.ts';
-import { renderSlate } from './slate.ts';
+import { escapeHtml, renderSlate } from './slate.ts';
 import { ITERATIONS, type Simulation } from './simulate.ts';
 import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
 
@@ -177,6 +177,92 @@ function syncPanel(): void {
   );
 }
 
+const CLOCK_RADIUS = 64;
+const CLOCK_ARC = 2 * Math.PI * CLOCK_RADIUS;
+
+function clockTicks(): string {
+  return Array.from({ length: 12 }, (_, index) => {
+    const major = index % 3 === 0;
+    const angle = (index / 12) * Math.PI * 2 - Math.PI / 2;
+    const inner = major ? 74 : 82;
+    const outer = 92;
+    const point = (radius: number) => `${(100 + Math.cos(angle) * radius).toFixed(2)},${(100 + Math.sin(angle) * radius).toFixed(2)}`;
+    const [x1, y1] = point(inner).split(',');
+    const [x2, y2] = point(outer).split(',');
+    return `<line class="${major ? 'major' : ''}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`;
+  }).join('');
+}
+
+function paintSimClock(screen: HTMLElement, progress: number): void {
+  const clamped = Math.min(1, Math.max(0, progress));
+  const arc = screen.querySelector<SVGCircleElement>('.sim-arc');
+  if (arc) {
+    arc.style.strokeDasharray = String(CLOCK_ARC);
+    arc.style.strokeDashoffset = String(CLOCK_ARC * (1 - clamped));
+    arc.style.opacity = clamped <= 0 ? '0' : '1';
+  }
+  const hand = screen.querySelector<SVGGElement>('.sim-hand');
+  if (hand) hand.setAttribute('transform', `rotate(${(clamped * 360).toFixed(2)} 100 100)`);
+  screen.querySelector('[role="progressbar"]')?.setAttribute('aria-valuenow', String(Math.round(clamped * 100)));
+}
+
+function openSimClock(game: SlateGame): HTMLElement {
+  const away = game.away.abbreviation.trim() || game.away.name.trim();
+  const home = game.home.abbreviation.trim() || game.home.name.trim();
+  const screen = document.createElement('div');
+  screen.className = 'sim-screen';
+  screen.setAttribute('role', 'dialog');
+  screen.setAttribute('aria-modal', 'true');
+  screen.setAttribute('aria-labelledby', 'sim-clock-title');
+  screen.innerHTML = `<div class="sim-clock" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="${escapeHtml(`Simulating ${away} at ${home}`)}"><svg viewBox="0 0 200 200" aria-hidden="true"><circle class="sim-face" cx="100" cy="100" r="96"></circle><g class="sim-ticks">${clockTicks()}</g><circle class="sim-track" cx="100" cy="100" r="${CLOCK_RADIUS}"></circle><circle class="sim-arc" cx="100" cy="100" r="${CLOCK_RADIUS}" transform="rotate(-90 100 100)"></circle><g class="sim-hand" transform="rotate(0 100 100)"><line class="sim-hand-tail" x1="100" y1="100" x2="100" y2="118"></line><line class="sim-hand-arm" x1="100" y1="100" x2="100" y2="40"></line><circle class="sim-hub" cx="100" cy="100" r="5"></circle></g></svg></div><p id="sim-clock-title" class="sim-clock-title">${escapeHtml(away)} <span class="at">@</span> ${escapeHtml(home)}</p><p class="sim-clock-note">Simulating</p><button type="button" class="ghost" data-cancel>Cancel</button>`;
+  screen.addEventListener('click', (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest('[data-cancel]')) cancelRun?.();
+  });
+  document.body.append(screen);
+  document.body.classList.add('sim-open');
+  paintSimClock(screen, 0);
+  screen.querySelector<HTMLButtonElement>('[data-cancel]')?.focus();
+  return screen;
+}
+
+function closeSimClock(screen: HTMLElement | null): void {
+  screen?.remove();
+  if (!document.querySelector('.sim-screen')) document.body.classList.remove('sim-open');
+}
+
+function runSimulation(rates: RateGame, eventId: string, screen: HTMLElement | null): Promise<Simulation> {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      const worker = new Worker(new URL('./simulation-worker.ts', import.meta.url), { type: 'module' });
+      activeWorker = worker;
+      const finish = () => {
+        worker.terminate();
+        activeWorker = null;
+        cancelRun = null;
+      };
+      cancelRun = () => {
+        finish();
+        reject(new Error('Simulation cancelled'));
+      };
+      worker.onmessage = (event: MessageEvent<{ result?: Simulation; error?: string; progress?: number }>) => {
+        if (event.data.progress !== undefined) {
+          if (screen) paintSimClock(screen, event.data.progress);
+          return;
+        }
+        finish();
+        if (event.data.result) resolve(event.data.result);
+        else reject(new Error(event.data.error ?? 'Simulation failed'));
+      };
+      worker.onerror = () => {
+        finish();
+        reject(new Error('Simulation worker failed'));
+      };
+      worker.postMessage({ game: rates, seed: fnv1a(`${eventId}:${card!.generated_at ?? ''}`), iterations: ITERATIONS });
+    }, 0);
+  });
+}
+
 async function onSimulate(button: HTMLButtonElement): Promise<void> {
   const eventId = button.dataset.event;
   if (running || !eventId || !slate || !card || !boxRoot) return;
@@ -190,26 +276,11 @@ async function onSimulate(button: HTMLButtonElement): Promise<void> {
   running = true;
   desk?.setAttribute('aria-busy','true');
   button.disabled = true;
-  button.textContent = 'Simulating…';
-  const progressStatus=document.createElement('span');progressStatus.setAttribute('role','status');progressStatus.textContent='Simulating…';button.after(progressStatus);
-  const cancel=document.createElement('button');cancel.dataset.cancel='';cancel.textContent='Cancel';button.after(cancel);
-  await new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
+  const key=`${eventId}:${card.input_hash??card.generated_at}:${card.model_hash??card.model_version ?? 'legacy'}:${overridesKey(overrides)}`;
+  const cached = simulationCache.get(key);
+  const screen = cached ? null : openSimClock(game);
   try {
-    const key=`${eventId}:${card.input_hash??card.generated_at}:${card.model_hash??card.model_version ?? 'legacy'}:${overridesKey(overrides)}`;
-    const result = simulationCache.get(key) ?? await new Promise<Simulation>((resolve,reject)=>{
-      const worker=new Worker(new URL('./simulation-worker.ts',import.meta.url),{type:'module'});
-      activeWorker=worker;
-      const finish=()=>{worker.terminate();activeWorker=null;cancelRun=null;};
-      cancelRun=()=>{finish();reject(new Error('Simulation cancelled'));};
-      worker.onmessage=(event:MessageEvent<{result?:Simulation;error?:string;progress?:number}>)=>{
-        if(event.data.progress!==undefined){button.textContent=`Simulating… ${Math.round(event.data.progress*100)}%`;progressStatus.textContent=button.textContent;return;}
-        finish();if(event.data.result)resolve(event.data.result);else reject(new Error(event.data.error??'Simulation failed'));
-      };
-      worker.onerror=()=>{finish();reject(new Error('Simulation worker failed'));};
-      worker.postMessage({game:rates,seed:fnv1a(`${eventId}:${card!.generated_at ?? ''}`),iterations:ITERATIONS});
-    });
+    const result = cached ?? await runSimulation(rates, eventId, screen);
     simulationCache.set(key,result);
     if(simulationCache.size>12)simulationCache.delete(simulationCache.keys().next().value!);
     view = { game, rates, result };
@@ -224,9 +295,8 @@ async function onSimulate(button: HTMLButtonElement): Promise<void> {
     button.disabled = false;
     button.textContent = label;
   } finally {
+    closeSimClock(screen);
     desk?.setAttribute('aria-busy','false');
-    progressStatus.remove();
-    cancel.remove();
     running = false;
     if (button.isConnected) {
       button.disabled = false;
@@ -399,6 +469,11 @@ function onImageError(event: Event): void {
 }
 
 function onKey(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && document.querySelector('.sim-screen')) {
+    event.preventDefault();
+    cancelRun?.();
+    return;
+  }
   if(event.target instanceof Element && event.target.matches('[role=tab]') && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){
     event.preventDefault();panelTab=event.key==='Home'?'forecast':event.key==='End'?'props':panelTab==='forecast'?'props':'forecast';syncPanel();document.getElementById(`${panelTab}-tab`)?.focus();return;
   }

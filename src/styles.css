@@ -325,6 +325,10 @@ html[data-theme="light"] .pill.tone-out { background: #fde8e7; color: #b42318; }
 
 .slate-meta { margin: 0; color: var(--text); font-weight: 600; }
 
+.slate-day + .slate-day { margin-top: 28px; }
+
+.slate-day .slate-title { margin-bottom: 14px; }
+
 .captured { margin: 0; font-size: 0.8125rem; }
 
 .slate {
@@ -1733,4 +1737,96 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
 
   button:hover:not(:disabled),
   .game-card:hover { transform: none; }
+
+  .sim-screen { animation: none; }
 }
+
+body.sim-open { overflow: hidden; }
+
+.sim-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px 24px;
+  background:
+    radial-gradient(42rem 24rem at 50% 42%, var(--glow), transparent 68%),
+    var(--bg);
+  animation: sim-in 180ms ease-out;
+}
+
+@keyframes sim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sim-clock { width: min(17.5rem, 72vw); }
+
+.sim-clock svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.sim-face {
+  fill: var(--card);
+  stroke: var(--border-strong);
+  stroke-width: 2;
+}
+
+.sim-ticks line {
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.sim-ticks line.major {
+  stroke: var(--text);
+  stroke-width: 3;
+}
+
+.sim-track,
+.sim-arc {
+  fill: none;
+  stroke-width: 8;
+}
+
+.sim-track { stroke: var(--surface); }
+
+.sim-arc { stroke: var(--accent); stroke-linecap: round; }
+
+.sim-hand-arm,
+.sim-hand-tail {
+  stroke: var(--text);
+  stroke-linecap: round;
+}
+
+.sim-hand-arm { stroke-width: 3.5; }
+.sim-hand-tail { stroke-width: 3; stroke: var(--muted); }
+
+.sim-hub { fill: var(--accent); }
+
+.sim-clock-title {
+  margin: 6px 0 0;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-align: center;
+}
+
+.sim-clock-title .at {
+  margin: 0 0.35em;
+  color: var(--muted);
+  font-size: 0.72em;
+  font-weight: 600;
+}
+
+.sim-clock-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sim-screen button { margin-top: 10px; }

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { gamesFromScoreboard, parseOutcomeLines, parseRoster, spreadCaption } from '../scripts/build-rate-card.ts';
+import { readFileSync } from 'node:fs';
+import { gamesFromScoreboard, mergeSlateGames, parseOutcomeLines, parseRoster, spreadCaption } from '../scripts/build-rate-card.ts';
+import { shiftChicagoDate } from '../src/date.ts';
 import { renderSlate, statusLabel } from '../src/slate.ts';
 import type { RateCard, Slate, SlateGame } from '../src/types.ts';
 
@@ -199,6 +201,16 @@ test('outcome lines keep the NBA counting stats from 2026 and 2027', () => {
   );
 });
 
+test('merged scoreboards keep one game and the copy dated on the Chicago tip', () => {
+  const matched = game();
+  const stamped = game({ date: '2026-10-28' });
+  assert.equal(mergeSlateGames([[stamped], [matched]])[0].date, '2026-10-27');
+  assert.equal(mergeSlateGames([[matched], [stamped]]).length, 1);
+  assert.equal(mergeSlateGames([[matched], [stamped]])[0].date, '2026-10-27');
+  const earlier = game({ event_id: '2', date: '2026-10-26', start_time: '2026-10-26T23:30:00Z' });
+  assert.deepEqual(mergeSlateGames([[earlier], [matched]]).map((item) => item.event_id), ['2', '401909877']);
+});
+
 test('slate copy covers the placeholder, an off day, and a card without rates', () => {
   const placeholder: Slate = {
     schema_version: 1,
@@ -231,4 +243,15 @@ test('slate copy covers the placeholder, an off day, and a card without rates', 
   const enabled = renderSlate(ready, withRates, new Date('2026-10-27T18:00:00Z'));
   assert.match(enabled,/fewer than five eligible/);
   assert.equal(enabled.includes('data-event='),false);
+});
+
+test('a fresh slate puts today ahead of yesterday', () => {
+  const card = JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json', 'utf8')) as RateCard;
+  const ready = JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/slate.json', 'utf8')) as Slate;
+  ready.games[0].date = shiftChicagoDate(ready.date!, -1);
+  const html = renderSlate(ready, card, new Date(card.generated_at!));
+  const todayAt = html.indexOf('>Today<');
+  const yesterdayAt = html.indexOf('>Yesterday<');
+  assert.ok(todayAt >= 0 && yesterdayAt > todayAt);
+  assert.equal(html.includes('Tonight'), false);
 });
