@@ -4,6 +4,34 @@ export function canonical(value:unknown):string {
   if(value&&typeof value==='object')return `{${Object.entries(value).filter(([,v])=>v!==undefined).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>`${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;
   return JSON.stringify(value);
 }
+/** Streams the exact UTF-16 chunk sequence of `canonical(value)` in ~64 KB buffers without allocating one giant string. */
+export function streamCanonical(value:unknown,onChunk:(chunk:string)=>void):void {
+  let buf='';
+  const emit=(piece:string)=>{buf+=piece;if(buf.length>=65536){onChunk(buf);buf='';}};
+  const visit=(node:unknown):void=>{
+    if(Array.isArray(node)){
+      emit('[');
+      for(let i=0;i<node.length;i+=1){if(i>0)emit(',');visit(node[i]);}
+      emit(']');
+      return;
+    }
+    if(node&&typeof node==='object'){
+      emit('{');
+      const rec=node as Record<string,unknown>;
+      const keys=Object.keys(rec).filter(k=>rec[k]!==undefined).sort((a,b)=>a.localeCompare(b));
+      for(let i=0;i<keys.length;i+=1){
+        if(i>0)emit(',');
+        const k=keys[i];
+        emit(JSON.stringify(k));emit(':');visit(rec[k]);
+      }
+      emit('}');
+      return;
+    }
+    emit(JSON.stringify(node)??'');
+  };
+  visit(value);
+  if(buf.length>0)onChunk(buf);
+}
 export interface GenerationManifest {schema_version:1;input_hash:string;model_hash:string;generated_at:string;slate_hash:string;card_hash:string}
 export interface RefreshHealth {checked_at:string;input_hash:string;model_hash:string}
 export function generationTime(previous:{input_hash?:string;model_hash?:string;generated_at:string|null}|null,inputHash:string,modelHash:string,now:string):string {

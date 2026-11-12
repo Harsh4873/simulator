@@ -715,7 +715,7 @@ export const DEFAULT_PROP_FORM: PropFormState = {
 
 export type PanelTab = 'forecast' | 'props';
 
-function percent(value: number): string {
+export function percent(value: number): string {
   const tenths = Math.round(value * 1000) / 10;
   const text = Number.isInteger(tenths) ? tenths.toFixed(0) : tenths.toFixed(1);
   return `${text}%`;
@@ -803,7 +803,7 @@ export function renderPropResults(
   </div>`;
 }
 
-function propFormMarkup(form: PropFormState): string {
+export function propFormMarkup(form: PropFormState): string {
   const markets: { value: PropMarket; label: string }[] = [
     {value:'pa',label:'Points + assists'},{value:'pr',label:'Points + rebounds'},{value:'ra',label:'Rebounds + assists'},
     {value:'dd',label:'Double-double (line 0.5)'},{value:'td',label:'Triple-double (line 0.5)'},

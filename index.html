@@ -38,6 +38,10 @@
             <p class="sub">Today and yesterday, Chicago time</p>
           </div>
         </div>
+        <nav class="panel-tabs desk-tabs" aria-label="Sections">
+          <button type="button" data-desk-tab="games" aria-selected="true">Games</button>
+          <button type="button" data-desk-tab="projections" aria-selected="false">Projections</button>
+        </nav>
         <div class="topbar-tools">
           <p class="fresh" data-fresh hidden></p>
           <button type="button" data-theme-toggle aria-pressed="false">Dark</button>
@@ -60,6 +64,7 @@
           <p class="frame-label" id="player-label">Player</p>
           <div data-panel-body></div>
         </aside>
+        <section class="frame" data-region="projections" hidden><div id="projections"></div></section>
       </main>
       <footer class="foot">
         <p>A simulator, not a betting ticket. Each game is drawn 10,000 times from the published rate card. Data refreshes about every 45 minutes before tip.</p>

@@ -20,6 +20,28 @@ import { renderLineupEditor } from './lineup-editor.ts';
 import { applyLineupOverrides, cleanOverrides, isLineupChoice, LINEUP_STORAGE_KEY, overridesKey, readStoredLineups, summarizeOverrides, type LineupOverrides } from './lineup-overrides.ts';
 import { healthyCheck } from './generation.ts';
 import { fnv1a } from './rng.ts';
+import {
+  defaultMarketLine,
+  gameLogRowsHtml,
+  historyChartBlockHtml,
+  historySummaryHtml,
+  historyWindowsHtml,
+  isDefenseSlot,
+  isHistorySplit,
+  isPropMarket,
+  l10HistoricalValues,
+  modelChanceHtml,
+  playedValues,
+  projectionBoardHtml,
+  projectionChartHtml,
+  renderProjections,
+  searchHitsHtml,
+  viewerLine,
+  type HistorySplit,
+  type ProjectionView,
+  type SupportMode,
+} from './projections.ts';
+import { unpackPlayerGames, type DefenseSlot } from './projection-context.ts';
 import { escapeHtml, renderSlate } from './slate.ts';
 import { ITERATIONS, type Simulation } from './simulate.ts';
 import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
@@ -33,6 +55,8 @@ const boxRoot = document.querySelector<HTMLElement>('#boxscore');
 const stageFrame = document.querySelector<HTMLElement>('[data-region="stage"]');
 const playerFrame = document.querySelector<HTMLElement>('[data-region="player"]');
 const panelBody = document.querySelector<HTMLElement>('[data-panel-body]');
+const projectionsRoot = document.querySelector<HTMLElement>('#projections');
+const projectionsFrame = document.querySelector<HTMLElement>('[data-region="projections"]');
 
 let slate: Slate | null = null;
 let card: RateCard | null = null;
@@ -49,6 +73,17 @@ let panelTab: PanelTab = 'forecast';
 let propForm: PropFormState = { ...DEFAULT_PROP_FORM };
 let lineupEdits: Record<string, LineupOverrides> = {};
 let lineupEvent: string | null = null;
+let lineupOrigin: 'slate' | 'projections' = 'slate';
+let projectionQuery = '';
+let projectionEvent: string | null = null;
+let projectionAthlete: string | null = null;
+let projectionHistorySplit: HistorySplit = 'all';
+let projectionSelectedBar: number | null = null;
+let projectionSupportMode: SupportMode = 'avg';
+let projectionTeammate: string | null = null;
+let projectionDefenseSlot: DefenseSlot | null = null;
+/** Set only while this game's worker is drawing. A cache hit never sets it. */
+let drawingEvent: string | null = null;
 
 function storedLineups(): string | null {
   try {
@@ -118,9 +153,174 @@ function gamesFrame(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[data-region="games"]');
 }
 
+function simulationKey(eventId: string, overrides: LineupOverrides): string {
+  return `${eventId}:${card?.input_hash ?? card?.generated_at}:${card?.model_hash ?? card?.model_version ?? 'legacy'}:${overridesKey(overrides)}`;
+}
+
+function cachedSimulation(eventId: string): Simulation | null {
+  if (!card) return null;
+  return simulationCache.get(simulationKey(eventId, editsFor(eventId))) ?? null;
+}
+
+function unmountProjections(): void {
+  if (projectionsFrame) projectionsFrame.hidden = true;
+  projectionsRoot?.replaceChildren();
+}
+
+function unmountSheet(): void {
+  panelAthlete = null;
+  panelBody?.replaceChildren();
+  desk?.classList.remove('panel-open');
+  if (playerFrame) playerFrame.hidden = true;
+}
+
+function markDeskTabs(): void {
+  const projections = desk?.dataset.mode === 'projections';
+  document.querySelectorAll<HTMLButtonElement>('[data-desk-tab]').forEach((button) => {
+    const on = (button.dataset.deskTab === 'projections') === projections;
+    button.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+}
+
+function projectionView(): ProjectionView | null {
+  if (!slate || !card) return null;
+  const form = propForm.market === 'dd' || propForm.market === 'td' ? { ...propForm, line: '0.5' } : propForm;
+  return {
+    slate,
+    card,
+    now: new Date(),
+    query: projectionQuery,
+    eventId: projectionEvent,
+    athleteId: projectionAthlete,
+    form,
+    simulation: projectionEvent ? cachedSimulation(projectionEvent) : null,
+    drawing: projectionEvent !== null && drawingEvent === projectionEvent && !cachedSimulation(projectionEvent),
+    overrides: projectionEvent ? editsFor(projectionEvent) : {},
+    historySplit: projectionHistorySplit,
+    selectedGameIndex: projectionSelectedBar,
+    supportMode: projectionSupportMode,
+    selectedTeammateId: projectionTeammate,
+    defenseSlot: projectionDefenseSlot,
+  };
+}
+
+function lockMilestoneLine(): void {
+  if (propForm.market !== 'dd' && propForm.market !== 'td') return;
+  propForm = { ...propForm, line: '0.5' };
+  const line = projectionsRoot?.querySelector<HTMLInputElement>('[data-prop-line]');
+  if (line) {
+    line.value = '0.5';
+    line.readOnly = true;
+  }
+}
+
+function projectionCaret(): { selector: string; start: number | null; end: number | null } | null {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLInputElement) || !projectionsRoot?.contains(active)) return null;
+  const selector = active.matches('[data-prop-line]')
+    ? '[data-prop-line]'
+    : active.matches('[data-prop-odds]')
+      ? '[data-prop-odds]'
+      : active.matches('[data-prop-opposite]')
+        ? '[data-prop-opposite]'
+        : null;
+  if (!selector) return null;
+  return { selector, start: active.selectionStart, end: active.selectionEnd };
+}
+
+function restoreProjectionCaret(caret: { selector: string; start: number | null; end: number | null } | null): void {
+  if (!caret || !projectionsRoot) return;
+  const input = projectionsRoot.querySelector<HTMLInputElement>(caret.selector);
+  if (!input) return;
+  input.focus();
+  const start = caret.start ?? input.value.length;
+  const end = caret.end ?? start;
+  try {
+    input.setSelectionRange(start, end);
+  } catch {
+    // Some input modes reject a selection range. Focus still lands in the field.
+  }
+}
+
+function paintProjection(): void {
+  const viewModel = projectionView();
+  if (!projectionsRoot || !viewModel) return;
+  const caret = projectionCaret();
+  projectionsRoot.innerHTML = renderProjections(viewModel);
+  lockMilestoneLine();
+  restoreProjectionCaret(caret);
+}
+
+function paintProjectionFigures(): void {
+  if (!projectionsRoot || !slate || !card || !projectionEvent) return;
+  const rate = rateGame(projectionEvent);
+  const game = slate.games.find((item) => item.event_id === projectionEvent) ?? null;
+  const simulation = cachedSimulation(projectionEvent);
+  const sample = projectionAthlete ? simulation?.playerDraws.get(projectionAthlete) ?? null : null;
+  const form = propForm.market === 'dd' || propForm.market === 'td' ? { ...propForm, line: '0.5' } : propForm;
+  const chances = projectionsRoot.querySelector<HTMLElement>('[data-model-chances]');
+  if (chances) chances.innerHTML = modelChanceHtml(sample, form.market, form.line);
+  const chart = projectionsRoot.querySelector<HTMLElement>('[data-projection-chart]');
+  if (chart) chart.innerHTML = projectionChartHtml(sample, form.market, form.line);
+  const board = projectionsRoot.querySelector<HTMLElement>('[data-projection-board]');
+  if (board && rate) board.innerHTML = projectionBoardHtml(rate, simulation, form, projectionEvent, projectionAthlete, card.projection_context);
+  const player = projectionAthlete ? rate?.players.find((item) => item.athlete_id === projectionAthlete) ?? null : null;
+  const results = projectionsRoot.querySelector<HTMLElement>('[data-prop-results]');
+  if (results && simulation && projectionAthlete) {
+    const open = results.querySelector('details.prop-advanced');
+    const keepOpen = open instanceof HTMLDetailsElement && open.open;
+    results.innerHTML = renderPropResults(simulation, projectionAthlete, form, player);
+    const details = results.querySelector('details.prop-advanced');
+    if (keepOpen && details instanceof HTMLDetailsElement) details.open = true;
+  }
+  const context = card.projection_context;
+  if (context && player && game) {
+    const allRows = unpackPlayerGames(context.players[player.athlete_id]?.games);
+    const filtered =
+      projectionHistorySplit === 'home'
+        ? allRows.filter((r) => r.home)
+        : projectionHistorySplit === 'away'
+          ? allRows.filter((r) => !r.home)
+          : allRows;
+    const teamSide = player.team_id === game.away.team_id ? game.away : game.home;
+    const oppSide = player.team_id === game.away.team_id ? game.home : game.away;
+    const teamAbbr = teamSide.abbreviation.trim() || teamSide.name.trim() || 'Team';
+    const summaryEl = projectionsRoot.querySelector<HTMLElement>('[data-history-summary]');
+    if (summaryEl) summaryEl.innerHTML = historySummaryHtml(filtered, allRows, form, context.active_season);
+    const histChartEl = projectionsRoot.querySelector<HTMLElement>('[data-history-chart]');
+    if (histChartEl) histChartEl.innerHTML = historyChartBlockHtml(filtered, form, projectionSelectedBar, teamAbbr, slate, context);
+    const windowsEl = projectionsRoot.querySelector<HTMLElement>('[data-history-windows]');
+    if (windowsEl) windowsEl.innerHTML = historyWindowsHtml(filtered, form, context.active_season, oppSide.team_id);
+    const logBody = projectionsRoot.querySelector<HTMLElement>('[data-gamelog-body]');
+    if (logBody) logBody.innerHTML = gameLogRowsHtml(filtered, form, slate, context);
+  }
+}
+
+function showProjections(): void {
+  if (!slate || !card || !desk || !projectionsRoot) return;
+  const entering = desk.dataset.mode !== 'projections';
+  if (entering) {
+    cancelRun?.();
+    drawingEvent = null;
+  }
+  unmountSheet();
+  const games = gamesFrame();
+  if (games) games.hidden = true;
+  if (stageFrame) stageFrame.hidden = true;
+  if (entering) {
+    lineupEvent = null;
+    boxRoot?.replaceChildren();
+  }
+  if (projectionsFrame) projectionsFrame.hidden = false;
+  desk.dataset.mode = 'projections';
+  paintProjection();
+  markDeskTabs();
+}
+
 function showSlate(): void {
   if (!slateRoot || !slate || !card) return;
   cancelRun?.();
+  drawingEvent = null;
   view = null;
   panelAthlete = null;
   boxRoot?.replaceChildren();
@@ -135,8 +335,15 @@ function showSlate(): void {
     desk.dataset.mode = unbuilt ? 'empty' : 'games';
   }
   lineupEvent = null;
+  unmountProjections();
+  try {
+    if (location.hash === '#projections') location.hash = '';
+  } catch {
+    // Hosts without a location object keep the surface change.
+  }
   slateRoot.innerHTML = renderSlate(slate, card, new Date(), health, editCounts());
   paintFreshness();
+  markDeskTabs();
 }
 
 function paintScore(): void {
@@ -154,10 +361,13 @@ function showScore(): void {
   if (stageFrame) stageFrame.hidden = false;
   if (playerFrame) playerFrame.hidden = true;
   desk?.classList.remove('panel-open');
+  unmountProjections();
   if (desk) desk.dataset.mode = 'score';
+  markDeskTabs();
 }
 
 function syncPanel(): void {
+  if (desk?.dataset.mode === 'projections') return;
   if (!desk || !panelBody || !view) return;
   if (panelAthlete === null) {
     desk.classList.remove('panel-open');
@@ -231,7 +441,7 @@ function closeSimClock(screen: HTMLElement | null): void {
   if (!document.querySelector('.sim-screen')) document.body.classList.remove('sim-open');
 }
 
-function runSimulation(rates: RateGame, eventId: string, screen: HTMLElement | null): Promise<Simulation> {
+function drawSimulation(rates: RateGame, eventId: string, screen: HTMLElement | null): Promise<Simulation> {
   return new Promise((resolve, reject) => {
     setTimeout(() => {
       const worker = new Worker(new URL('./simulation-worker.ts', import.meta.url), { type: 'module' });
@@ -263,45 +473,92 @@ function runSimulation(rates: RateGame, eventId: string, screen: HTMLElement | n
   });
 }
 
-async function onSimulate(button: HTMLButtonElement): Promise<void> {
-  const eventId = button.dataset.event;
-  if (running || !eventId || !slate || !card || !boxRoot) return;
-  if(freshnessIssue(slate,card,new Date(),health)) {showSlate();return;}
+async function runSimulation(eventId: string): Promise<Simulation | null> {
+  if (running || !eventId || !slate || !card) return null;
+  if (freshnessIssue(slate, card, new Date(), health)) {
+    showSlate();
+    return null;
+  }
   const game = slate.games.find((item) => item.event_id === eventId);
   const base = rateGame(eventId);
-  if (!game || !base) return;
+  if (!game || !base) return null;
   const overrides = editsFor(eventId);
   const rates = applyLineupOverrides(base, overrides);
-  const label = button.textContent ?? 'Simulate';
-  running = true;
-  desk?.setAttribute('aria-busy','true');
-  button.disabled = true;
-  const key=`${eventId}:${card.input_hash??card.generated_at}:${card.model_hash??card.model_version ?? 'legacy'}:${overridesKey(overrides)}`;
+  const key = simulationKey(eventId, overrides);
   const cached = simulationCache.get(key);
-  const screen = cached ? null : openSimClock(game);
+  if (cached) {
+    if (drawingEvent === eventId) drawingEvent = null;
+    simulationCache.set(key, cached);
+    if (simulationCache.size > 12) simulationCache.delete(simulationCache.keys().next().value!);
+    view = { game, rates, result: cached };
+    return cached;
+  }
+  running = true;
+  drawingEvent = eventId;
+  desk?.setAttribute('aria-busy', 'true');
+  if (desk?.dataset.mode === 'projections') paintProjection();
+  const screen = openSimClock(game);
   try {
-    const result = cached ?? await runSimulation(rates, eventId, screen);
-    simulationCache.set(key,result);
-    if(simulationCache.size>12)simulationCache.delete(simulationCache.keys().next().value!);
+    const result = await drawSimulation(rates, eventId, screen);
+    simulationCache.set(key, result);
+    if (simulationCache.size > 12) simulationCache.delete(simulationCache.keys().next().value!);
     view = { game, rates, result };
+    return result;
+  } finally {
+    if (drawingEvent === eventId) drawingEvent = null;
+    closeSimClock(screen);
+    desk?.setAttribute('aria-busy', 'false');
+    running = false;
+  }
+}
+
+async function onSimulate(button: HTMLButtonElement): Promise<void> {
+  const eventId = button.dataset.event;
+  if (running || !eventId || !boxRoot) return;
+  const label = button.textContent ?? 'Simulate';
+  button.disabled = true;
+  try {
+    const result = await runSimulation(eventId);
+    if (!result || !view || !boxRoot) return;
     panelAthlete = null;
     panelBody?.replaceChildren();
+    unmountProjections();
     paintScore();
     showScore();
     boxRoot.querySelector<HTMLButtonElement>('[data-back]')?.focus();
   } catch (error) {
-    const status=document.createElement('p');status.setAttribute('role','alert');status.textContent=error instanceof Error?error.message:'Simulation failed. Retry.';
+    const status = document.createElement('p');
+    status.setAttribute('role', 'alert');
+    status.textContent = error instanceof Error ? error.message : 'Simulation failed. Retry.';
     button.after(status);
-    button.disabled = false;
-    button.textContent = label;
   } finally {
-    closeSimClock(screen);
-    desk?.setAttribute('aria-busy','false');
-    running = false;
     if (button.isConnected) {
       button.disabled = false;
       button.textContent = label;
     }
+  }
+}
+
+async function simulateProjection(eventId: string): Promise<void> {
+  try {
+    const result = await runSimulation(eventId);
+    if (drawingEvent === eventId) drawingEvent = null;
+    if (desk?.dataset.mode !== 'projections') return;
+    if (result && projectionAthlete && propForm.line.trim() === '') {
+      const sample = result.playerDraws.get(projectionAthlete) ?? null;
+      const auto = defaultMarketLine(propForm.market, sample, card?.projection_context, projectionAthlete);
+      if (auto !== null) propForm = { ...propForm, line: String(auto) };
+    }
+    paintProjection();
+    if (result) return;
+  } catch (error) {
+    if (drawingEvent === eventId) drawingEvent = null;
+    if (desk?.dataset.mode !== 'projections' || !projectionsRoot) return;
+    paintProjection();
+    const status = document.createElement('p');
+    status.setAttribute('role', 'alert');
+    status.textContent = error instanceof Error ? error.message : 'Simulation failed. Retry.';
+    projectionsRoot.prepend(status);
   }
 }
 
@@ -311,6 +568,7 @@ function showLineups(eventId: string, focusSelector?: string): void {
   const base = rateGame(eventId);
   if (!game || !base) return;
   cancelRun?.();
+  drawingEvent = null;
   lineupEvent = eventId;
   panelAthlete = null;
   panelBody?.replaceChildren();
@@ -320,7 +578,9 @@ function showLineups(eventId: string, focusSelector?: string): void {
   if (games) games.hidden = true;
   if (stageFrame) stageFrame.hidden = false;
   if (playerFrame) playerFrame.hidden = true;
+  unmountProjections();
   if (desk) desk.dataset.mode = 'lineups';
+  markDeskTabs();
   const focus = focusSelector ? boxRoot.querySelector<HTMLElement>(focusSelector) : null;
   (focus ?? boxRoot.querySelector<HTMLElement>('#lineup-title'))?.focus();
 }
@@ -343,7 +603,10 @@ function onDeskClick(event: Event): void {
   const lineupButton = target.closest('button[data-lineup]');
   if (lineupButton instanceof HTMLButtonElement) {
     const id = lineupButton.dataset.lineup;
-    if (id && !running) showLineups(id);
+    if (id && !running) {
+      lineupOrigin = desk?.dataset.mode === 'projections' ? 'projections' : 'slate';
+      showLineups(id);
+    }
     return;
   }
   if (target.closest('[data-lineup-reset]') && lineupEvent) {
@@ -359,13 +622,170 @@ function onDeskClick(event: Event): void {
     return;
   }
   if(target.closest('[data-cancel]')){cancelRun?.();return;}
+  const projectionMarket = target.closest('button[data-projection-market]');
+  if (projectionMarket instanceof HTMLButtonElement && isPropMarket(projectionMarket.dataset.projectionMarket ?? '')) {
+    const market = projectionMarket.dataset.projectionMarket as typeof propForm.market;
+    const sample = projectionEvent && projectionAthlete ? cachedSimulation(projectionEvent)?.playerDraws.get(projectionAthlete) ?? null : null;
+    const auto = defaultMarketLine(market, sample, card?.projection_context, projectionAthlete);
+    projectionSelectedBar = null;
+    propForm = { ...propForm, market, line: auto !== null ? String(auto) : market === 'dd' || market === 'td' ? '0.5' : propForm.line };
+    paintProjection();
+    projectionsRoot?.querySelector<HTMLButtonElement>(`[data-projection-market="${CSS.escape(market)}"]`)?.focus();
+    return;
+  }
+  const l10Btn = target.closest('button[data-line-l10]');
+  if (l10Btn instanceof HTMLButtonElement) {
+    if (propForm.market === 'dd' || propForm.market === 'td') return;
+    const vals = l10HistoricalValues(card?.projection_context, projectionAthlete, propForm.market);
+    if (!vals.length) return;
+    propForm = { ...propForm, line: String(viewerLine(propForm.market, vals)) };
+    const input = projectionsRoot?.querySelector<HTMLInputElement>('[data-prop-line]');
+    if (input) input.value = propForm.line;
+    paintProjectionFigures();
+    return;
+  }
+  const historySplitBtn = target.closest('button[data-history-split]');
+  if (historySplitBtn instanceof HTMLButtonElement && isHistorySplit(historySplitBtn.dataset.historySplit ?? '')) {
+    const nextSplit = historySplitBtn.dataset.historySplit as HistorySplit;
+    projectionHistorySplit = nextSplit;
+    projectionSelectedBar = null;
+    paintProjection();
+    projectionsRoot?.querySelector<HTMLButtonElement>(`button[data-history-split="${nextSplit}"]`)?.focus();
+    return;
+  }
+  const historyBar = target.closest('[data-history-bar]');
+  if (historyBar instanceof Element) {
+    const idx = Number(historyBar.getAttribute('data-history-bar'));
+    if (Number.isInteger(idx) && idx >= 0) {
+      projectionSelectedBar = idx;
+      paintProjectionFigures();
+      projectionsRoot?.querySelector<HTMLElement>(`[data-history-bar="${idx}"]`)?.focus();
+    }
+    return;
+  }
+  const supportBtn = target.closest('button[data-support-mode]');
+  if (supportBtn instanceof HTMLButtonElement) {
+    const mode = supportBtn.dataset.supportMode === 'med' ? 'med' : 'avg';
+    projectionSupportMode = mode;
+    paintProjection();
+    projectionsRoot?.querySelector<HTMLButtonElement>(`button[data-support-mode="${mode}"]`)?.focus();
+    return;
+  }
+  const mateBtn = target.closest('button[data-onoff-mate]');
+  if (mateBtn instanceof HTMLButtonElement) {
+    const mateId = mateBtn.dataset.onoffMate ?? '';
+    if (!mateId) return;
+    projectionTeammate = mateId;
+    paintProjection();
+    projectionsRoot?.querySelector<HTMLButtonElement>(`.mate-pill[data-onoff-mate="${CSS.escape(mateId)}"]`)?.focus();
+    return;
+  }
+  const defBtn = target.closest('button[data-defense-slot]');
+  if (defBtn instanceof HTMLButtonElement && isDefenseSlot(defBtn.dataset.defenseSlot ?? '')) {
+    const slot = defBtn.dataset.defenseSlot as DefenseSlot;
+    projectionDefenseSlot = slot;
+    paintProjection();
+    projectionsRoot?.querySelector<HTMLButtonElement>(`button[data-defense-slot="${slot}"]`)?.focus();
+    return;
+  }
+  const nudge = target.closest('button[data-line-nudge]');
+  if (nudge instanceof HTMLButtonElement) {
+    if (propForm.market === 'dd' || propForm.market === 'td') return;
+    const delta = Number(nudge.dataset.lineNudge);
+    const current = Number(propForm.line);
+    const base = propForm.line.trim() === '' || !Number.isFinite(current) ? 0 : current;
+    const next = Math.max(0, Math.round((base + delta) * 2) / 2);
+    propForm = { ...propForm, line: String(next) };
+    const input = projectionsRoot?.querySelector<HTMLInputElement>('[data-prop-line]');
+    if (input) input.value = propForm.line;
+    paintProjectionFigures();
+    return;
+  }
+  const median = target.closest('[data-line-median]');
+  if (median instanceof HTMLButtonElement) {
+    const sample = projectionEvent && projectionAthlete ? cachedSimulation(projectionEvent)?.playerDraws.get(projectionAthlete) : null;
+    const next = sample ? viewerLine(propForm.market, playedValues(sample, propForm.market)) : propForm.market === 'dd' || propForm.market === 'td' ? 0.5 : null;
+    if (next === null) return;
+    propForm = { ...propForm, line: String(next) };
+    const input = projectionsRoot?.querySelector<HTMLInputElement>('[data-prop-line]');
+    if (input) input.value = propForm.line;
+    paintProjectionFigures();
+    return;
+  }
+  const rerunBtn = target.closest('button[data-projection-rerun]');
+  if (rerunBtn instanceof HTMLButtonElement) {
+    const eventId = rerunBtn.dataset.projectionRerun ?? '';
+    if (!eventId || running) return;
+    if (cachedSimulation(eventId)) {
+      paintProjection();
+      return;
+    }
+    drawingEvent = eventId;
+    paintProjection();
+    void simulateProjection(eventId);
+    return;
+  }
+  const projectionPlayer = target.closest('button[data-projection-player]');
+  if (projectionPlayer instanceof HTMLButtonElement) {
+    const eventId = projectionPlayer.dataset.projectionEvent ?? '';
+    const athleteId = projectionPlayer.dataset.projectionPlayer ?? '';
+    if (!eventId || !athleteId || running) return;
+    if (projectionPlayer.closest('[data-projection-hits]')) projectionQuery = '';
+    projectionEvent = eventId;
+    projectionAthlete = athleteId;
+    projectionSelectedBar = null;
+    projectionTeammate = null;
+    projectionDefenseSlot = null;
+    const cached = cachedSimulation(eventId);
+    const sample = cached?.playerDraws.get(athleteId) ?? null;
+    const auto = defaultMarketLine(propForm.market, sample, card?.projection_context, athleteId);
+    if (auto !== null) propForm = { ...propForm, line: String(auto) };
+    else if (propForm.market === 'dd' || propForm.market === 'td') propForm = { ...propForm, line: '0.5' };
+    if (cached) {
+      if (drawingEvent === eventId) drawingEvent = null;
+      paintProjection();
+      return;
+    }
+    drawingEvent = eventId;
+    paintProjection();
+    void simulateProjection(eventId);
+    return;
+  }
+  const projectionGame = target.closest('button[data-projection-game]');
+  if (projectionGame instanceof HTMLButtonElement) {
+    const eventId = projectionGame.dataset.projectionGame ?? '';
+    if (!eventId || running) return;
+    projectionQuery = '';
+    projectionEvent = eventId;
+    projectionAthlete = null;
+    paintProjection();
+    return;
+  }
   const simulateButton = target.closest('button[data-event]');
   if (simulateButton instanceof HTMLButtonElement) {
     if (simulateButton.disabled) return;
+    if (simulateButton.hasAttribute('data-lineup-run') && lineupOrigin === 'projections') {
+      const eventId = simulateButton.dataset.event ?? '';
+      lineupOrigin = 'slate';
+      if (!eventId || running) return;
+      projectionEvent = eventId;
+      showProjections();
+      if (!cachedSimulation(eventId)) {
+        drawingEvent = eventId;
+        paintProjection();
+        void simulateProjection(eventId);
+      }
+      return;
+    }
     void onSimulate(simulateButton);
     return;
   }
   if (target.closest('[data-back]')) {
+    if (lineupEvent && lineupOrigin === 'projections') {
+      lineupOrigin = 'slate';
+      showProjections();
+      return;
+    }
     const eventId=lineupEvent??view?.game.event_id;
     showSlate();
     if(eventId)slateRoot?.querySelector<HTMLButtonElement>(`[data-event="${CSS.escape(eventId)}"]`)?.focus();
@@ -422,8 +842,12 @@ function readPropForm(): void {
 }
 
 function paintPropResults(): void {
+  if (desk?.dataset.mode === 'projections') {
+    paintProjectionFigures();
+    return;
+  }
   if (!view || !panelAthlete) return;
-  const results = document.querySelector<HTMLElement>('[data-prop-results]');
+  const results = playerFrame?.querySelector<HTMLElement>('[data-prop-results]') ?? null;
   if (!results) return;
   const open = results.querySelector('details.prop-advanced');
   const keepOpen = open instanceof HTMLDetailsElement && open.open;
@@ -441,8 +865,28 @@ function onPropEdit(event: Event): void {
     return;
   }
   const target = event.target;
+  if (target instanceof HTMLInputElement && target.matches('[data-projection-search]')) {
+    projectionQuery = target.value;
+    const hits = projectionsRoot?.querySelector<HTMLElement>('[data-projection-hits]');
+    if (hits && slate && card) hits.innerHTML = searchHitsHtml(slate, card, projectionQuery);
+    return;
+  }
   if (!(target instanceof Element) || !target.closest('[data-prop-form]')) return;
   readPropForm();
+  if (desk?.dataset.mode === 'projections') {
+    if (propForm.market === 'dd' || propForm.market === 'td') propForm = { ...propForm, line: '0.5' };
+    const structural = target instanceof HTMLSelectElement && (target.matches('[data-prop-market]') || target.matches('[data-prop-style]'));
+    if (structural) {
+      paintProjection();
+      const selector = target.matches('[data-prop-style]') ? '[data-prop-style]' : '[data-prop-market]';
+      projectionsRoot?.querySelector<HTMLElement>(selector)?.focus();
+      return;
+    }
+    const line = projectionsRoot?.querySelector<HTMLInputElement>('[data-prop-line]');
+    if (line && (propForm.market === 'dd' || propForm.market === 'td')) line.value = '0.5';
+    paintProjectionFigures();
+    return;
+  }
   if (target instanceof HTMLSelectElement && target.matches('[data-prop-style]')) {
     syncPanel();
     return;
@@ -474,8 +918,18 @@ function onKey(event: KeyboardEvent): void {
     cancelRun?.();
     return;
   }
-  if(event.target instanceof Element && event.target.matches('[role=tab]') && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){
+  if(event.target instanceof Element && event.target.matches('[data-panel-tab]') && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){
     event.preventDefault();panelTab=event.key==='Home'?'forecast':event.key==='End'?'props':panelTab==='forecast'?'props':'forecast';syncPanel();document.getElementById(`${panelTab}-tab`)?.focus();return;
+  }
+  if (event.target instanceof Element && event.target.matches('[data-history-bar]') && (event.key === 'Enter' || event.key === ' ')) {
+    event.preventDefault();
+    const idx = Number(event.target.getAttribute('data-history-bar'));
+    if (Number.isInteger(idx) && idx >= 0) {
+      projectionSelectedBar = idx;
+      paintProjectionFigures();
+      projectionsRoot?.querySelector<HTMLElement>(`[data-history-bar="${idx}"]`)?.focus();
+    }
+    return;
   }
   if (event.key !== 'Escape' || panelAthlete === null) return;
   document.querySelector<HTMLButtonElement>(`button[data-athlete="${CSS.escape(panelAthlete)}"]`)?.focus();
@@ -490,6 +944,10 @@ function bind(): void {
   desk.addEventListener('change', onDeskChange);
   desk.addEventListener('input', onPropEdit);
   desk.addEventListener('change', onPropEdit);
+  desk.addEventListener('submit', (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest('[data-prop-form]')) event.preventDefault();
+  });
   desk.addEventListener('error', onImageError, true);
   document.addEventListener('keydown', onKey);
 }
@@ -501,12 +959,15 @@ async function load(): Promise<void> {
       const response=await fetch(`${DATA_BASE}${name}`,{cache:'no-store',signal:AbortSignal.timeout(15000)});
       if(response.status===404&&['manifest.json','health.json'].includes(name))return null;
       if(!response.ok)throw new Error('Data fetch failed');
-      return response.text();
+      const text=await response.text();
+      if(name==='health.json'){try{JSON.parse(text);}catch{return null;}}
+      return text;
     },async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join(''));
     slate=loaded.slate;card=loaded.card;health=loaded.health;
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
-    showSlate();
+    if (readHash() === '#projections') showProjections();
+    else showSlate();
   } catch {
     bind();
     slateRoot.innerHTML = '<p class="state" role="alert">Slate could not be loaded or validated. <button data-retry>Retry</button></p>';
@@ -544,6 +1005,43 @@ function bindTheme(): void {
     applyTheme(next);
   });
 }
+
+function readHash(): string {
+  try {
+    return location.hash;
+  } catch {
+    return '';
+  }
+}
+
+function navigateDesk(mode: 'games' | 'projections'): void {
+  const next = mode === 'projections' ? '#projections' : '';
+  try {
+    if (location.hash !== next) {
+      location.hash = next;
+      return;
+    }
+  } catch {
+    // Some hosts have no location object. The click still changes the surface.
+  }
+  if (mode === 'projections') showProjections();
+  else showSlate();
+}
+
+document.querySelectorAll<HTMLButtonElement>('[data-desk-tab]').forEach((button) => {
+  button.addEventListener('click', () => {
+    navigateDesk(button.dataset.deskTab === 'projections' ? 'projections' : 'games');
+  });
+});
+
+window.addEventListener('hashchange', () => {
+  if (!slate || !card) {
+    markDeskTabs();
+    return;
+  }
+  if (readHash() === '#projections') showProjections();
+  else showSlate();
+});
 
 applyTheme(themeFromStorage(storedTheme(), window.matchMedia('(prefers-color-scheme: light)').matches));
 bindTheme();

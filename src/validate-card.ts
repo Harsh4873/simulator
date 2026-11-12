@@ -79,6 +79,36 @@ export function validateGeneration(slate: Slate, card: RateCard): void {
       memberships.set(key, p.team_id);
     }
   }
+  if (card.projection_context) {
+    const ctx = card.projection_context;
+    if (!Number.isInteger(ctx.active_season) || !ctx.season_label || typeof ctx.teams !== 'object' || typeof ctx.players !== 'object') {
+      throw new Error('Invalid projection context');
+    }
+    for (const team of Object.values(ctx.teams)) {
+      if (!team || !(team.games > 0) || typeof team.pace !== 'string') {
+        throw new Error('Invalid team defense context');
+      }
+      const [paceVal, paceRank] = team.pace.split(',').map(Number);
+      if (!Number.isFinite(paceVal) || !(paceRank >= 1)) throw new Error('Invalid team pace context');
+    }
+    for (const entry of Object.values(ctx.players)) {
+      if (!entry || typeof entry.games !== 'string') throw new Error('Invalid player history context');
+      if (entry.games) {
+        for (const chunk of entry.games.split(';')) {
+          const fields = chunk.split(',');
+          if (fields.length < 22 || !Number.isFinite(Number(fields[6])) || !(Number(fields[6]) > 0)) {
+            throw new Error('Invalid player game tuple');
+          }
+        }
+      }
+      if (entry.on_off) {
+        const overall = entry.on_off.overall.split(',').map(Number);
+        if (!(entry.on_off.games > 0) || overall.length !== 7 || !overall.every((x) => Number.isFinite(x) && x >= 0)) {
+          throw new Error('Invalid player on/off summary');
+        }
+      }
+    }
+  }
 }
 
 // Operational expiry policy, not an assertion that injury information remains valid until expiry.

@@ -71,6 +71,8 @@ for(const mode of ['populated','empty','unavailable'] as const)test(mode==='popu
   click(`button[data-athlete="${athlete}"]`);assert.equal((focused as Element|null)?.id,'forecast-tab');
   key('#forecast-tab','ArrowRight');assert.equal((focused as Element|null)?.id,'props-tab');
   key('#props-tab','Home');assert.equal((focused as Element|null)?.id,'forecast-tab');
+  key('[data-desk-tab="projections"]','ArrowRight');assert.equal((focused as Element|null)?.id,'forecast-tab');
+  key('[data-desk-tab="games"]','ArrowLeft');assert.equal((focused as Element|null)?.id,'forecast-tab');
   key('#forecast-tab','Escape');assert.equal((focused as Element|null)?.getAttribute('data-athlete'),athlete);
   click(`button[data-athlete="${athlete}"]`);click('[data-close]');assert.equal((focused as Element|null)?.getAttribute('data-athlete'),athlete);
   click('[data-back]');assert.ok((focused as Element|null)?.hasAttribute('data-event'));

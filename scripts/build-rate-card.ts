@@ -1,9 +1,10 @@
 import { fillThinRoster, rosterIssue } from '../src/roster-capacity.ts';
 import {teamCoverage} from '../src/coverage.ts';
+import { buildProjectionContext } from '../src/projection-context.ts';
 import {sourceVenue} from '../src/schedule-context.ts';
 import {attachPlayCache,savePlayCache} from './play-cache.ts';
 import {availabilityHistory} from '../src/availability-history.ts';
-import type {ForecastArchive} from '../src/forecast-archive.ts';
+import {sameInstant,type ForecastArchive} from '../src/forecast-archive.ts';
 import {fitShootingPriors} from '../src/shooting-priors.ts';
 import {marketObservations} from '../src/market-evaluation.ts';
 import { mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync, renameSync } from 'node:fs';
@@ -11,10 +12,10 @@ import { dirname, join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { chicagoDate, recentChicagoDates } from '../src/date.ts';
-import { fitPlayers, hasFreeThrowAttempts, type InjuryInput, type RosterPlayer } from '../src/fit.ts';
+import { fitPlayers, hasFreeThrowAttempts, positionGroup, type InjuryInput, type RosterPlayer } from '../src/fit.ts';
 import { fitMatchup, fitCurrentRoles, eligibleEvents, MODEL_VERSION } from '../src/team-model.ts';
-import { addEvidence, MISSING_FEATURES } from '../src/model-evidence.ts';
-import { canonical, generationTime } from '../src/generation.ts';
+import { addEvidence, MISSING_FEATURES, type AvailabilityObservation } from '../src/model-evidence.ts';
+import { canonical, generationTime, streamCanonical } from '../src/generation.ts';
 import { upsertEvents, aggregateShooting, pendingEvents } from '../src/event-cache.ts';
 import { createHash } from 'node:crypto';
 import { validateGeneration } from '../src/validate-card.ts';
@@ -518,6 +519,72 @@ async function mapLimit<T, R>(items: T[], limit: number, task: (item: T) => Prom
   return results;
 }
 
+export function hashCanonical(value: unknown): string {
+  const hasher = createHash('sha256');
+  streamCanonical(value, (chunk) => hasher.update(chunk));
+  return hasher.digest('hex');
+}
+
+/**
+ * Streams forecast-archive snapshots one file at a time so multi-month archive growth
+ * stays bounded to a single parsed file in V8 heap, while producing byte-identical
+ * `availabilityHistory` observations and archived position groups.
+ */
+export function loadArchiveSummaries(
+  archiveRoot: string,
+  events: CompletedEvent[],
+  cutoff: string,
+): { availability: AvailabilityObservation[]; archivedPositions: Map<string, import('../src/types.ts').PositionGroup> } {
+  const archivedPositions = new Map<string, import('../src/types.ts').PositionGroup>();
+  let files: string[] = [];
+  try {
+    files = readdirSync(archiveRoot, { recursive: true })
+      .map(String)
+      .filter((f) => f.endsWith('.json') && !f.split('/').at(-1)!.startsWith('inputs-'));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    return { availability: [], archivedPositions };
+  }
+  const cutoffMs = Date.parse(cutoff);
+  const eligibleById = new Map<string, CompletedEvent>();
+  for (const event of events) {
+    const final = event.play_history?.final_observed_at;
+    if (final && Date.parse(final) < cutoffMs) eligibleById.set(event.event_id, event);
+  }
+  const bestByEvent = new Map<string, { generatedAtMs: number; rows: AvailabilityObservation[] }>();
+  for (const rel of files) {
+    const archive = JSON.parse(readFileSync(join(archiveRoot, rel), 'utf8')) as ForecastArchive;
+    for (const r of archive.source_lineage?.roster ?? []) {
+      const pg = positionGroup(r.position);
+      if (pg) archivedPositions.set(r.athlete_id, pg);
+    }
+    for (const g of archive.card?.games ?? []) {
+      for (const p of g.players ?? []) {
+        if (p.position_group) archivedPositions.set(p.athlete_id, p.position_group);
+      }
+    }
+    const gen = archive.card?.generated_at;
+    const genMs = gen ? Date.parse(gen) : NaN;
+    if (!Number.isFinite(genMs) || !archive.source_lineage?.roster || !archive.source_lineage?.injuries || !Array.isArray(archive.slate?.games)) {
+      continue;
+    }
+    for (const g of archive.slate.games) {
+      const event = eligibleById.get(g.event_id);
+      if (!event) continue;
+      if (!(genMs < Date.parse(event.start_time)) || !sameInstant(g.start_time, event.start_time)) continue;
+      const prev = bestByEvent.get(event.event_id);
+      if (!prev || genMs > prev.generatedAtMs) {
+        bestByEvent.set(event.event_id, {
+          generatedAtMs: genMs,
+          rows: availabilityHistory([archive], [event], cutoff),
+        });
+      }
+    }
+  }
+  const availability = events.flatMap((event) => bestByEvent.get(event.event_id)?.rows ?? []);
+  return { availability, archivedPositions };
+}
+
 export async function buildRateCard(options:{now?:Date;outputRoot?:string;summaryCap?:number;generatorSha?:string}={}): Promise<void> {
   const generatorSha=options.generatorSha??process.env.GENERATOR_SHA??process.env.GITHUB_SHA;
   if(!generatorSha||! /^(?:[a-f0-9]{40}|pending)$/.test(generatorSha))throw new Error('Set GENERATOR_SHA to the source commit or explicit pending before building publishable data');
@@ -590,7 +657,7 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
   if (!outcomes?.length) throw new Error('Required outcome history is empty');
   for (const team of slateTeamIds) if (!roster.some(p => p.team_id === team)) throw new Error(`Missing roster ${team}`);
   const cache = loadCache(CACHE_PATH);
-  const previousCache = serialize(cache);
+  const previousCacheHash = createHash('sha256').update(serialize(cache)).digest('hex');
   attachPlayCache(cache,CACHE_PATH);
   let summariesFetched = 0;
   let summariesFailed = 0;
@@ -633,19 +700,19 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
   const trainingEvents = eligibleEvents(cache.events!,generatedAt);
   cache.rows=aggregateShooting(trainingEvents);
   finishCache(cache);
-  const nextCache = `${JSON.stringify(savePlayCache(cache,CACHE_PATH),null,2)}\n`;
-  if (nextCache !== previousCache) writeFileSync(CACHE_PATH, nextCache);
+  {
+    const nextCache = `${JSON.stringify(savePlayCache(cache,CACHE_PATH),null,2)}\n`;
+    if (createHash('sha256').update(nextCache).digest('hex') !== previousCacheHash) writeFileSync(CACHE_PATH, nextCache);
+  }
 
   const activeSeason=games[0]?.season??fallbackSeason(isRecord(scoreboard)?scoreboard:{},date);
   if(activeSeason!==2026&&activeSeason!==2027)throw new Error('Active season outside approved 2026/2027 history window; migrate source policy explicitly');
   const hash=(value:string)=>createHash('sha256').update(value).digest('hex');
-  const modelHash=hash(canonical(['src','scripts'].flatMap(dir=>readdirSync(join(ROOT,dir)).filter(f=>/\.(ts|mjs)$/.test(f)).sort().map(f=>[`${dir}/${f}`,readFileSync(join(ROOT,dir,f),'utf8')]))));
-  let archives:ForecastArchive[]=[];
+  const modelHash=hashCanonical(['src','scripts'].flatMap(dir=>readdirSync(join(ROOT,dir)).filter(f=>/\.(ts|mjs)$/.test(f)).sort().map(f=>[`${dir}/${f}`,readFileSync(join(ROOT,dir,f),'utf8')])));
   const archiveRoot=join(outputRoot,'data/forecast-archive');
-  try{archives=readdirSync(archiveRoot,{recursive:true}).map(String).filter(f=>f.endsWith('.json')&&!f.split('/').at(-1)!.startsWith('inputs-')).map(f=>JSON.parse(readFileSync(join(archiveRoot,f),'utf8')));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}
-  const availability=availabilityHistory(archives,trainingEvents,generatedAt);
+  const {availability,archivedPositions}=loadArchiveSummaries(archiveRoot,trainingEvents,generatedAt);
   const inputs={date,games,availability,roster:[...roster].sort((a,b)=>a.athlete_id.localeCompare(b.athlete_id)||a.team_id.localeCompare(b.team_id)),injuries:[...injuries].sort((a,b)=>canonical(a).localeCompare(canonical(b))),events:trainingEvents};
-  const inputHash=hash(canonical(inputs));
+  const inputHash=hashCanonical(inputs);
   let previous:RateCard|null=null;
   try{previous=JSON.parse(readFileSync(RATE_CARD_PATH,'utf8'));}catch{/* First build. */}
   generatedAt=generationTime(previous,inputHash,modelHash,generatedAt);
@@ -700,6 +767,7 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
         return feature==='lineup_defense'?c?.lineup_effects?.status==='fitted':feature==='absence_efficiency'?c?.usage_effects?.status==='fitted':feature==='ft_trip_types'?c?.free_throws?.status==='fitted':feature==='foul_outs'?c?.fouls?.status==='fitted':feature==='late_game_tactics'?c?.rotation_state?.status==='fitted'&&c?.free_throws?.late?.status==='fitted':false;
       }));
       rateCard.coverage=teamCoverage(rosterIds,cache.events!,{teams:teamsByEvent(outcomes),seasons:eventSeasons(outcomes),dates:new Map(outcomes.filter(r=>r.event_date).map(r=>[r.event_id,r.event_date!])),retries:cache.retries!},activeSeason,generatedAt,fitted.players);
+      rateCard.projection_context=buildProjectionContext({events:trainingEvents,slate,games:rateCard.games,roster:fitted.players,archivedPositions,activeSeason});
       mkdirSync(dirname(RATE_CARD_PATH), { recursive: true });
       validateGeneration(slate, rateCard);
       console.log(JSON.stringify({team_coverage:rateCard.coverage}));
@@ -717,7 +785,8 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
         const sourcePath=join(archive,`inputs-${inputHash}.json`);
         // Full input snapshots are large (~10 MB); keep them out of the committed archive unless explicitly requested.
         if(process.env.ARCHIVE_INPUT_SNAPSHOTS==='1'){try{readFileSync(sourcePath);}catch{writeFileSync(sourcePath,serialize(inputs));}}
-        writeFileSync(join(archive,`${generatedAt.replaceAll(':','-')}.json`),serialize({source_lineage:{input_hash:inputHash,model_hash:modelHash,fetch_started:generatedAt,maximum_event_start:trainingEvents.at(-1)?.start_time??null,injuries,roster,training_event_ids:trainingEvents.map(e=>e.event_id)},slate:{...slate,games:slate.games.filter(g=>upcoming.has(g.event_id))},card:{...rateCard,games:rateCard.games.filter(g=>upcoming.has(g.event_id))}}));
+        const {projection_context:omittedContext,...archivedCard}=rateCard;void omittedContext;
+        writeFileSync(join(archive,`${generatedAt.replaceAll(':','-')}.json`),serialize({source_lineage:{input_hash:inputHash,model_hash:modelHash,fetch_started:generatedAt,maximum_event_start:trainingEvents.at(-1)?.start_time??null,injuries,roster,training_event_ids:trainingEvents.map(e=>e.event_id)},slate:{...slate,games:slate.games.filter(g=>upcoming.has(g.event_id))},card:{...archivedCard,games:rateCard.games.filter(g=>upcoming.has(g.event_id))}}));
       }
       const quotes=marketObservations(scoreboard,stamp(now));
       if(quotes.length){

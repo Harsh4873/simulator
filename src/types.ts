@@ -131,6 +131,7 @@ export interface RateCard {
   calibration?: CalibrationArtifact | null;
   unavailable_features?: UnavailableFeature[];
   coverage?:import('./coverage.ts').TeamCoverage[];
+  projection_context?:import('./projection-context.ts').ProjectionContext;
   columns: ColumnKey[];
   games: RateGame[];
 }
