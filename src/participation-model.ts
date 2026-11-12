@@ -126,29 +126,82 @@ export function fitParticipation(events:CompletedEvent[]):ParticipationFit{
  return {...report,coefficients:fitLogistic(rows,best.penalty),reason:null};
 }
 
-export interface HealthyCalibration {status:'fitted'|'unknown';a:number;b:number;rows:number;heldout_rows:number;log_loss:number|null;baseline_log_loss:number|null;reason:string|null}
+export interface HealthyCalibrationContext {
+  career_minutes?: number;
+  coach_dnp_last5?: number;
+  inactive_last5?: number;
+  missing_minutes?: number;
+}
+export interface HealthyCalibrationRow extends HealthyCalibrationContext {
+  tip: string;
+  p: number;
+  y: number;
+}
+export interface HealthyCalibration {
+  status: 'fitted' | 'unknown';
+  a: number;
+  b: number;
+  coefficients?: number[];
+  penalty?: number;
+  rows: number;
+  heldout_rows: number;
+  log_loss: number | null;
+  baseline_log_loss: number | null;
+  reason: string | null;
+}
 const logit=(p:number)=>{const q=Math.min(1-1e-6,Math.max(1e-6,p));return Math.log(q/(1-q));};
 export const MIN_CALIBRATION_ROWS=300;
+const HEALTHY_PENALTIES=[0.5,1,3] as const;
+
+function healthyFeatures(p:number,ctx?:HealthyCalibrationContext):number[]{
+ const role=Math.min(40,Math.max(0,ctx?.career_minutes??0))/40;
+ const dnp=Math.min(1,Math.max(0,ctx?.coach_dnp_last5??0));
+ const inactive=Math.min(1,Math.max(0,ctx?.inactive_last5??0));
+ const missing=Math.min(80,Math.max(0,ctx?.missing_minutes??0))/80;
+ return [1,logit(p),role,dnp,inactive*role,missing];
+}
+
 /**
  * Participation rows include absences that a pre-tip injury report would already show. Archived pre-tip reports pair a
- * player listed healthy with the model probability and the settled outcome, so a two-parameter logistic map
- * (fitted on earlier games, accepted only if it improves later games) restores P(play | listed healthy).
+ * player listed healthy with the model probability, role/DNP/absence context, tonight's missing team minutes and the
+ * settled outcome, fitting a regularized logistic map on earlier games and accepting it only when it beats baseline on later games.
  */
-export function calibrateHealthy(rows:{tip:string;p:number;y:number}[]):HealthyCalibration{
+export function calibrateHealthy(rows:HealthyCalibrationRow[]):HealthyCalibration{
  const sorted=[...rows].filter(r=>Number.isFinite(r.p)&&Number.isFinite(Date.parse(r.tip))).sort((a,b)=>Date.parse(a.tip)-Date.parse(b.tip));
  const empty:HealthyCalibration={status:'unknown',a:0,b:1,rows:sorted.length,heldout_rows:0,log_loss:null,baseline_log_loss:null,reason:`Fewer than ${MIN_CALIBRATION_ROWS} archived healthy pre-tip rows`};
  if(sorted.length<MIN_CALIBRATION_ROWS)return empty;
  const tips=[...new Set(sorted.map(r=>r.tip))],cut=tips[Math.floor(tips.length*.7)];
  const fit=sorted.filter(r=>Date.parse(r.tip)<Date.parse(cut)),hold=sorted.filter(r=>Date.parse(r.tip)>=Date.parse(cut));
  if(fit.length<MIN_CALIBRATION_ROWS/2||!hold.length)return {...empty,reason:'Insufficient chronological calibration blocks'};
- const design=(xs:typeof sorted)=>xs.map(r=>({x:[1,logit(r.p)],y:r.y}));
- const [a,b]=fitLogistic(design(fit),0.01);
+ const design1d=(xs:typeof sorted)=>xs.map(r=>({x:[1,logit(r.p)],y:r.y}));
+ const [a,b]=fitLogistic(design1d(fit),0.01);
  const mean=(xs:number[])=>xs.reduce((s,x)=>s+x,0)/xs.length;
- const loss=mean(hold.map(r=>logLoss(sigmoid(a+b*logit(r.p)),r.y))),baseline=mean(hold.map(r=>logLoss(r.p,r.y)));
- if(!(loss<baseline)||!(b>0))return {...empty,heldout_rows:hold.length,log_loss:loss,baseline_log_loss:baseline,reason:'Calibration did not improve later archived games'};
- const [fa,fb]=fitLogistic(design(sorted),0.01);
- return {status:'fitted',a:fa,b:fb,rows:sorted.length,heldout_rows:hold.length,log_loss:loss,baseline_log_loss:baseline,reason:null};
+ const loss1d=mean(hold.map(r=>logLoss(sigmoid(a+b*logit(r.p)),r.y))),baseline=mean(hold.map(r=>logLoss(r.p,r.y)));
+ const hasContext=sorted.some(r=>r.career_minutes!==undefined);
+ if(hasContext){
+  const innerTips=[...new Set(fit.map(r=>r.tip))];
+  const innerCut=innerTips[Math.max(1,Math.floor(innerTips.length*.75))];
+  const subTrain=fit.filter(r=>Date.parse(r.tip)<Date.parse(innerCut)),subVal=fit.filter(r=>Date.parse(r.tip)>=Date.parse(innerCut));
+  const chosenPenalty=subTrain.length>=80&&subVal.length>=20
+   ?HEALTHY_PENALTIES.map(pen=>{const coef=fitLogistic(subTrain.map(r=>({x:healthyFeatures(r.p,r),y:r.y})),pen);return {pen,loss:mean(subVal.map(r=>logLoss(sigmoid(healthyFeatures(r.p,r).reduce((s,v,i)=>s+v*coef[i],0)),r.y)))};}).sort((x,y)=>x.loss-y.loss||x.pen-y.pen)[0].pen
+   :1;
+  const coefHold=fitLogistic(fit.map(r=>({x:healthyFeatures(r.p,r),y:r.y})),chosenPenalty);
+  const lossMulti=mean(hold.map(r=>logLoss(sigmoid(healthyFeatures(r.p,r).reduce((s,v,i)=>s+v*coefHold[i],0)),r.y)));
+  if(lossMulti<baseline&&lossMulti<=loss1d&&coefHold[1]>0){
+   const [fa,fb]=fitLogistic(design1d(sorted),0.01);
+   const finalCoef=fitLogistic(sorted.map(r=>({x:healthyFeatures(r.p,r),y:r.y})),chosenPenalty);
+   return {status:'fitted',a:fa,b:fb,coefficients:finalCoef,penalty:chosenPenalty,rows:sorted.length,heldout_rows:hold.length,log_loss:lossMulti,baseline_log_loss:baseline,reason:null};
+  }
+ }
+ if(!(loss1d<baseline)||!(b>0))return {...empty,heldout_rows:hold.length,log_loss:loss1d,baseline_log_loss:baseline,reason:'Calibration did not improve later archived games'};
+ const [fa,fb]=fitLogistic(design1d(sorted),0.01);
+ return {status:'fitted',a:fa,b:fb,rows:sorted.length,heldout_rows:hold.length,log_loss:loss1d,baseline_log_loss:baseline,reason:null};
 }
-export function applyHealthyCalibration(calibration:HealthyCalibration|null|undefined,p:number):number{
- return calibration?.status==='fitted'?sigmoid(calibration.a+calibration.b*logit(p)):p;
+export function applyHealthyCalibration(calibration:HealthyCalibration|null|undefined,p:number,context?:HealthyCalibrationContext):number{
+ if(calibration?.status!=='fitted')return p;
+ if(context&&Array.isArray(calibration.coefficients)&&calibration.coefficients.length===6){
+  const feats=healthyFeatures(p,context);
+  return sigmoid(feats.reduce((s,v,i)=>s+v*calibration.coefficients![i],0));
+ }
+ return sigmoid(calibration.a+calibration.b*logit(p));
 }

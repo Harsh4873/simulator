@@ -64,7 +64,9 @@ export function fitMatchup(events: CompletedEvent[], game: SlateGame, cutoff: st
   const league = effects.level !== undefined && Number.isFinite(effects.level) && effects.level > 0 ? effects.level : pooled;
   const pace = sum(samples.map(x => x.pace*x.weight))/sum(samples.map(x => x.weight));
   const leagueTov = sum(samples.map(x => sum(x.rows.map(p => p.tov!))*x.weight))/possessions;
-  const leagueOrb = sum(samples.map(x => sum(x.rows.map(p => p.orb!))*x.weight))/sum(samples.map(x => sum(x.rows.map(p => p.fga-p.fgm))*x.weight));
+  // Missed final free throws (~0.5 of missed FT attempts) also create live rebound opportunities in drawPossessions.
+  const reboundMisses = (rows: typeof samples[number]['rows']) => sum(rows.map(p => (p.fga - p.fgm) + 0.5 * (p.fta - p.ftm)));
+  const leagueOrb = sum(samples.map(x => sum(x.rows.map(p => p.orb!))*x.weight))/Math.max(1,sum(samples.map(x => reboundMisses(x.rows)*x.weight)));
   const leagueAst = sum(samples.map(x => sum(x.rows.map(p => p.ast))*x.weight))/sum(samples.map(x => sum(x.rows.map(p => p.fgm))*x.weight));
   const leagueTrips = sum(samples.map(x => sum(x.rows.map(p => p.fta/2))*x.weight))/possessions;
   const profile = (team: string): TeamProfile => {
@@ -76,7 +78,7 @@ export function fitMatchup(events: CompletedEvent[], game: SlateGame, cutoff: st
     return { pace:pacePrior, offense:effects.offense[team]??league,
       defense:effects.defense[team]??league,
       turnover_rate:shrink(xs.map(x=>sum(x.rows.map(p=>p.tov!))/x.poss),leagueTov),
-      offensive_rebound_rate:shrink(xs.map(x=>sum(x.rows.map(p=>p.orb!))/Math.max(1,sum(x.rows.map(p=>p.fga-p.fgm)))),leagueOrb),
+      offensive_rebound_rate:shrink(xs.map(x=>sum(x.rows.map(p=>p.orb!))/Math.max(1,reboundMisses(x.rows))),leagueOrb),
       assist_rate:shrink(xs.map(x=>sum(x.rows.map(p=>p.ast))/Math.max(1,sum(x.rows.map(p=>p.fgm)))),leagueAst),
       ft_trip_rate:shrink(xs.map(x=>sum(x.rows.map(p=>p.fta/2))/x.poss),leagueTrips),
       schedule:scheduleContext(xs.at(-1)?.e??null,game.start_time,game.venue),games:xs.length, rest_days:Number.isFinite(last)?restDays(new Date(last).toISOString(),game.start_time):null };
@@ -103,37 +105,111 @@ export function newcomerMinutes(events: CompletedEvent[], season: number): numbe
 // Labelled prior for a rostered player with no NBA appearance in the permitted history, until 20 newcomer appearances exist.
 export const NEWCOMER_MINUTES_PRIOR = 10;
 
+const OUT_DESIGNATIONS=new Set(['out','injured reserve','suspension','suspended','inactive','out for season']);
+const K_ORB_REBOUNDS=25;
+
 export function fitCurrentRoles(players: RatePlayer[], events: CompletedEvent[], season: number, availability:AvailabilityObservation[]=[], cutoff:string=new Date().toISOString()): void {
   events=eligibleEvents(events,cutoff);
   const selection=selectRolePrior(events,season);
   const ROLE_PRIOR_GAMES=selection.prior_games;
   const participationFit=fitParticipation(events);
   const tracker=new ParticipationTracker();
-  // Score each archived healthy pre-tip row with the tracker state just before that game, then calibrate.
+  // Score each archived healthy pre-tip row with the tracker state, career role minutes, DNP/absence split and missing team minutes just before that game.
   const archived=new Map<string,AvailabilityObservation[]>();
-  for(const row of availability)if(row.designation==='healthy'&&row.event_id&&row.team_id){const xs=archived.get(row.event_id)??[];xs.push(row);archived.set(row.event_id,xs);}
-  const calibrationRows:{tip:string;p:number;y:number}[]=[];
+  const outByEventTeam=new Map<string,number>();
+  for(const row of availability){
+    if(!row.event_id||!row.team_id)continue;
+    if(row.designation==='healthy'){const xs=archived.get(row.event_id)??[];xs.push(row);archived.set(row.event_id,xs);}
+    else if(OUT_DESIGNATIONS.has(row.designation)){const k=`${row.event_id}:${row.team_id}`;outByEventTeam.set(k,(outByEventTeam.get(k)??0)+(row.expected_minutes??0));}
+  }
+  const careerMinutes=new Map<string,{sum:number;w:number}>();
+  const calibrationRows:import('./participation-model.ts').HealthyCalibrationRow[]=[];
   for(const e of [...events].sort((a,b)=>a.start_time.localeCompare(b.start_time)||a.event_id.localeCompare(b.event_id))){
     for(const row of archived.get(e.event_id)??[]){
       const history=tracker.history(row.team_id!,row.athlete_id,e.season);
       const p=history?participationProbability(participationFit,participationFeatures(history)):null;
-      if(p!==null)calibrationRows.push({tip:e.start_time,p,y:Number(row.played&&row.minutes>0)});
+      if(p!==null){
+        const cm=careerMinutes.get(row.athlete_id);
+        const last5=history!.slice(-5);
+        calibrationRows.push({
+          tip:e.start_time,
+          p,
+          y:Number(row.played&&row.minutes>0),
+          career_minutes:cm?cm.sum/cm.w:0,
+          coach_dnp_last5:last5.length?last5.filter(s=>!s.played&&!s.absent).length/last5.length:0,
+          inactive_last5:last5.length?last5.filter(s=>s.absent).length/last5.length:0,
+          missing_minutes:outByEventTeam.get(`${e.event_id}:${row.team_id}`)??0,
+        });
+      }
     }
     tracker.observe(e);
+    for(const gp of e.players){
+      if(gp.minutes>0){
+        const w=e.season===season?1:0.3;
+        const cur=careerMinutes.get(gp.athlete_id)??{sum:0,w:0};
+        cur.sum+=w*gp.minutes;cur.w+=w;
+        careerMinutes.set(gp.athlete_id,cur);
+      }
+    }
   }
   const healthyCalibration=calibrateHealthy(calibrationRows);
   const newcomer=newcomerMinutes(events,season);
   const closing=events.map(e=>({e,stint:historicalStints(e).stints.filter(s=>s.period===4&&s.end_seconds===0).at(-1)})).filter(x=>x.stint);
+
+  // Fit player offensive-rebound share (orb / reb) shrunk toward position-group and league priors.
+  const groupByAthlete=new Map<string,string>();
+  for(const p of players)if(p.position_group)groupByAthlete.set(p.athlete_id,p.position_group);
+  let leagueOrbSum=0,leagueRebSum=0;
+  const posOrb=new Map<string,{orb:number;reb:number}>();
+  const ownOrb=new Map<string,{orb:number;reb:number}>();
+  for(const e of events){
+    const w=e.season===season?1:e.season===season-1?0.5:0;
+    if(!(w>0))continue;
+    for(const gp of e.players){
+      if(gp.orb===undefined||gp.drb===undefined||!(gp.minutes>0))continue;
+      const reb=gp.orb+gp.drb;
+      leagueOrbSum+=w*gp.orb;leagueRebSum+=w*reb;
+      const g=groupByAthlete.get(gp.athlete_id)??'';
+      if(g){const pc=posOrb.get(g)??{orb:0,reb:0};pc.orb+=w*gp.orb;pc.reb+=w*reb;posOrb.set(g,pc);}
+      const oc=ownOrb.get(gp.athlete_id)??{orb:0,reb:0};oc.orb+=w*gp.orb;oc.reb+=w*reb;ownOrb.set(gp.athlete_id,oc);
+    }
+  }
+  const leagueOrbShare=leagueRebSum>0?leagueOrbSum/leagueRebSum:null;
+
+  // Pre-compute typical_minutes and missing team minutes for tonight's healthy participation context.
+  const teamEventsByTeam=new Map<string,CompletedEvent[]>();
+  const getTeamEvents=(teamId:string)=>{
+    let xs=teamEventsByTeam.get(teamId);
+    if(!xs){xs=events.filter(e=>e.season===season&&[e.home_team_id,e.away_team_id].includes(teamId));teamEventsByTeam.set(teamId,xs);}
+    return xs;
+  };
+  for(const p of players){
+    const te=getTeamEvents(p.team_id);
+    p.typical_minutes=te.length?sum(te.map(e=>e.players.find(r=>r.athlete_id===p.athlete_id&&r.team_id===p.team_id)?.minutes??0))/te.length:null;
+  }
+  const missingByTeam=new Map<string,number>();
+  for(const p of players){
+    if(p.minutes_weight===0){
+      missingByTeam.set(p.team_id,(missingByTeam.get(p.team_id)??0)+(p.typical_minutes??p.minutes_mean??0));
+    }
+  }
+
   for (const p of players) {
     p.active_season=season;p.role_prior_games=ROLE_PRIOR_GAMES;
-    const teamEvents = events.filter(e => e.season===season && [e.home_team_id,e.away_team_id].includes(p.team_id));
+    const teamEvents = getTeamEvents(p.team_id);
     const current = teamEvents.flatMap(e => e.players.filter(r=>r.athlete_id===p.athlete_id&&r.team_id===p.team_id&&r.minutes>0).map(r=>({r,date:e.start_time})) ).sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
     const prior = events.filter(e=>e.season===season-1).flatMap(e=>e.players.filter(r=>r.athlete_id===p.athlete_id&&r.minutes>0));
-    const everPlayed = prior.length>0 || events.some(e=>e.players.some(r=>r.athlete_id===p.athlete_id&&r.minutes>0));
-    const priorMean = prior.length ? mean(prior.map(r=>r.minutes)) : everPlayed ? p.minutes_mean : Math.min(p.minutes_mean,newcomer);
+    const everPlayedOwnOrOlder = prior.length>0 || current.length>0 || events.some(e=>e.season<season-1&&e.players.some(r=>r.athlete_id===p.athlete_id&&r.minutes>0));
+    const priorMean = prior.length ? mean(prior.map(r=>r.minutes)) : everPlayedOwnOrOlder ? p.minutes_mean : Math.min(p.minutes_mean,newcomer);
     const recent = current.slice(0,selection.window);
     const weights = recent.map((_,i)=>selection.half_life===null?1:2**(-i/selection.half_life));
     p.minutes_mean = !recent.length ? priorMean : (sum(recent.map((x,i)=>x.r.minutes*weights[i]))+ROLE_PRIOR_GAMES*priorMean)/(sum(weights)+ROLE_PRIOR_GAMES);
+    if(leagueOrbShare!==null){
+      const pc=p.position_group?posOrb.get(p.position_group):undefined;
+      const targetShare=pc&&pc.reb>0?(pc.orb+K_ORB_REBOUNDS*leagueOrbShare)/(pc.reb+K_ORB_REBOUNDS):leagueOrbShare;
+      const oc=ownOrb.get(p.athlete_id)??{orb:0,reb:0};
+      p.orb_share=Math.min(1,Math.max(0,(oc.orb+K_ORB_REBOUNDS*targetShare)/(oc.reb+K_ORB_REBOUNDS)));
+    }
     const starts=current.filter(x=>x.r.starter!==undefined);
     const closings=closing.filter(x=>[x.e.home_team_id,x.e.away_team_id].includes(p.team_id));
     p.closing_rate=closings.length?closings.filter(x=>[...x.stint!.home,...x.stint!.away].includes(p.athlete_id)).length/closings.length:null;
@@ -149,12 +225,18 @@ export function fitCurrentRoles(players: RatePlayer[], events: CompletedEvent[],
     let play=known.length?(known.filter(r=>r.played).length+2*priorPlay)/(known.length+2):priorPlay;
     const history=tracker.history(p.team_id,p.athlete_id,season);
     const raw=history?participationProbability(participationFit,participationFeatures(history)):null;
+    const cm=careerMinutes.get(p.athlete_id);
+    const last5=history?history.slice(-5):[];
     // The calibration describes players listed healthy; uncertain designations are scaled from that baseline below.
-    const predicted=raw===null?null:applyHealthyCalibration(healthyCalibration,raw);
+    const predicted=raw===null?null:applyHealthyCalibration(healthyCalibration,raw,{
+      career_minutes:cm?cm.sum/cm.w:0,
+      coach_dnp_last5:last5.length?last5.filter(s=>!s.played&&!s.absent).length/last5.length:0,
+      inactive_last5:last5.length?last5.filter(s=>s.absent).length/last5.length:0,
+      missing_minutes:missingByTeam.get(p.team_id)??0,
+    });
     if(predicted!==null)play=predicted;
     p.participation_coverage={known:known.length,unknown:teamEvents.length-known.length,absent:history?.filter(s=>s.absent).length??0,source:predicted!==null?'team-boxes':known.length?'explicit-DNP':'scenario-prior'};
     p.participation_model={...participationFit,applied:predicted!==null,healthy_calibration:healthyCalibration};
-    p.typical_minutes=teamEvents.length?sum(teamEvents.map(e=>e.players.find(r=>r.athlete_id===p.athlete_id&&r.team_id===p.team_id)?.minutes??0))/teamEvents.length:null;
     p.role_context={window:selection.window,half_life:selection.half_life,team_changed:events.some(e=>e.season===season&&e.players.some(r=>r.athlete_id===p.athlete_id&&r.team_id!==p.team_id)),return_from_injury:'unknown'};
     const status = p.injury_status;
     // A designation-level rate never replaces a healthy player's own history; it calibrates uncertain designations only.

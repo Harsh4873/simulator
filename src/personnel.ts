@@ -110,6 +110,7 @@ export function leagueReplacementRates(players: RatePlayer[]): RatePlayer | null
     tp_pct: rate('tp_pct'),
     ft_pct: rate('ft_pct'),
     reb_per_min: rate('reb_per_min'),
+    orb_share: averageRate(xs, 'orb_share'),
     ast_per_min: rate('ast_per_min'),
     stl_per_min: averageRate(xs, 'stl_per_min'),
     blk_per_min: averageRate(xs, 'blk_per_min'),

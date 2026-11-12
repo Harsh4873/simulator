@@ -135,6 +135,21 @@ export function l10HistoricalValues(
     .slice(-10);
 }
 
+/** Nearest .5 hook to the median of the values (never a whole integer, so pushes do not distort prop rates). */
+export function naturalHookLine(market: PropMarket, values: ArrayLike<number>): number {
+  if (market === 'dd' || market === 'td') return 0.5;
+  const nums: number[] = [];
+  for (let index = 0; index < values.length; index += 1) {
+    const value = values[index];
+    if (Number.isFinite(value)) nums.push(value);
+  }
+  if (!nums.length) return 0.5;
+  nums.sort((a, b) => a - b);
+  const mid = Math.floor(nums.length / 2);
+  const median = nums.length % 2 === 1 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+  return Math.max(0.5, Math.ceil(median) - 0.5);
+}
+
 export function defaultMarketLine(
   market: PropMarket,
   sample: PlayerSample | null,
@@ -144,10 +159,10 @@ export function defaultMarketLine(
   if (market === 'dd' || market === 'td') return 0.5;
   if (sample && !statMissing(sample, market)) {
     const values = playedValues(sample, market);
-    if (values.length) return viewerLine(market, values);
+    if (values.length) return naturalHookLine(market, values);
   }
   const recent = l10HistoricalValues(context, athleteId, market);
-  if (recent.length) return viewerLine(market, recent);
+  if (recent.length) return naturalHookLine(market, recent);
   return null;
 }
 
@@ -243,6 +258,7 @@ interface BoardRow {
   name: string;
   minutes: number;
   projection: number | null;
+  line: number | null;
   over: string;
   under: string;
   edge: string;
@@ -254,9 +270,11 @@ function boardRows(
   game: RateGame,
   simulation: Simulation | null,
   form: PropFormState,
+  athleteId: string | null,
   context?: ProjectionContext,
 ): BoardRow[] {
-  const line = validPropLine(form.line);
+  const viewerGraded = validPropLine(form.line);
+  const validViewer = viewerGraded !== null && !((form.market === 'dd' || form.market === 'td') && viewerGraded !== 0.5) ? viewerGraded : null;
   const rows = game.players.map((player) => {
     const sample = simulation?.playerDraws.get(player.athlete_id) ?? null;
     const missing = sample ? statMissing(sample, form.market) : false;
@@ -265,14 +283,20 @@ function boardRows(
     let note: string | null = null;
     if (simulation && missing) note = 'This stat is missing from the older card.';
     else if (simulation && projection === null) note = 'does not play in the simulations.';
+    const rowLine =
+      player.athlete_id === athleteId
+        ? validViewer
+        : validViewer !== null || context
+          ? defaultMarketLine(form.market, sample, context, player.athlete_id)
+          : null;
     let over = '';
     let under = '';
     let edge = '';
-    if (sample && line !== null && !missing && projection !== null) {
-      const pair = chancePair(sample, form.market, line);
+    if (sample && rowLine !== null && !missing && projection !== null) {
+      const pair = chancePair(sample, form.market, rowLine);
       over = !pair || pair.over === null ? '' : percent(pair.over);
       under = !pair || pair.under === null ? '' : percent(pair.under);
-      edge = edgeText(sample, form.market, form, line);
+      edge = edgeText(sample, form.market, form, rowLine);
     }
     const games = context ? unpackPlayerGames(context.players[player.athlete_id]?.games) : [];
     return {
@@ -280,6 +304,7 @@ function boardRows(
       name: player.name,
       minutes: player.minutes_mean,
       projection,
+      line: projection === null && simulation ? null : rowLine,
       over,
       under,
       edge,
@@ -308,7 +333,7 @@ export function projectionBoardHtml(
   athleteId: string | null,
   context?: ProjectionContext,
 ): string {
-  const rows = boardRows(game, simulation, form, context);
+  const rows = boardRows(game, simulation, form, athleteId, context);
   const hasHistory = Boolean(context);
   const line = validPropLine(form.line);
   const gradedLine = line !== null && !((form.market === 'dd' || form.market === 'td') && line !== 0.5) ? line : null;
@@ -317,12 +342,14 @@ export function projectionBoardHtml(
     .map((row) => {
       const selected = row.athleteId === athleteId;
       const projection = row.note ?? (row.projection === null ? '' : row.projection.toFixed(1));
+      const lineCell = row.line === null ? '' : Number.isInteger(row.line) ? row.line.toFixed(1) : String(row.line);
       const historyCols = hasHistory
-        ? `${compactHitCell(row.games, 5, form, gradedLine)}${compactHitCell(row.games, 10, form, gradedLine)}${compactHitCell(row.games, 15, form, gradedLine)}${compactHitCell(row.games, 20, form, gradedLine)}`
+        ? `${compactHitCell(row.games, 5, form, row.line)}${compactHitCell(row.games, 10, form, row.line)}${compactHitCell(row.games, 15, form, row.line)}${compactHitCell(row.games, 20, form, row.line)}`
         : '';
       return `<tr${selected ? ' class="is-selected"' : ''}>
         <th scope="row"><button type="button" class="projection-player" data-projection-player="${escapeHtml(row.athleteId)}" data-projection-event="${escapeHtml(eventId)}" aria-pressed="${selected ? 'true' : 'false'}">${escapeHtml(row.name)}</button></th>
         <td>${escapeHtml(projection)}</td>
+        <td>${escapeHtml(lineCell)}</td>
         ${historyCols}
         <td>${row.over}</td>
         <td>${row.under}</td>
@@ -336,13 +363,13 @@ export function projectionBoardHtml(
   const waiting = simulation ? '' : '<p class="panel-lede">Projection, over, under, and edge stay blank until this game is simulated.</p>';
   const lineBadge =
     gradedLine !== null
-      ? `<p class="board-grade-note">Recent hit chips and edge graded for <strong>${sideText} ${gradedLine}</strong></p>`
+      ? `<p class="board-grade-note">Selected player graded at <strong>${sideText} ${gradedLine}</strong> · other rows use each player's own .5 median line.</p>`
       : '';
   const hitHead = hasHistory
     ? `<th title="${sideText} hit rate in last 5">L5</th><th title="${sideText} hit rate in last 10">L10</th><th title="${sideText} hit rate in last 15">L15</th><th title="${sideText} hit rate in last 20">L20</th>`
     : '';
   return `${pickPrompt}${waiting}${lineBadge}<div class="table-scroll"><table>
-      <thead><tr><th>Player</th><th>Projection</th>${hitHead}<th>Over</th><th>Under</th><th>Edge</th></tr></thead>
+      <thead><tr><th>Player</th><th>Projection</th><th>Line</th>${hitHead}<th>Over</th><th>Under</th><th>Edge</th></tr></thead>
       <tbody>${body}</tbody>
     </table></div>`;
 }

@@ -203,7 +203,7 @@ export function isUnobservedProfile(player: {
 
 type AppearancePlayer = Pick<
   RatePlayer,
-  'minutes_weight' | 'games_2026' | 'games_2027' | 'minutes_mean' | 'questionable_widen' | 'play_probability'
+  'minutes_weight' | 'games_2026' | 'games_2027' | 'current_team_games' | 'minutes_mean' | 'questionable_widen' | 'play_probability'
 >;
 
 export function teamGamesPlayed(roster: readonly Pick<RatePlayer, 'minutes_weight' | 'games_2027' | 'team_games'>[]): number {
@@ -236,7 +236,7 @@ export function playProbability(player: AppearancePlayer, teamGames: number): nu
 
 export function conditionalMinutes(player: AppearancePlayer): number {
   if (player.minutes_weight === 0) return 0;
-  if (player.games_2027 === 0 && player.games_2026 < 20) return Math.min(player.minutes_mean, CAMEO_MINUTE_CAP);
+  if ((player.current_team_games ?? player.games_2027) === 0 && player.games_2026 < 20) return Math.min(player.minutes_mean, CAMEO_MINUTE_CAP);
   return Math.max(0, player.minutes_mean);
 }
 

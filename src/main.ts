@@ -82,6 +82,7 @@ let projectionSelectedBar: number | null = null;
 let projectionSupportMode: SupportMode = 'avg';
 let projectionTeammate: string | null = null;
 let projectionDefenseSlot: DefenseSlot | null = null;
+let projectionAutoLine = false;
 /** Set only while this game's worker is drawing. A cache hit never sets it. */
 let drawingEvent: string | null = null;
 
@@ -544,10 +545,11 @@ async function simulateProjection(eventId: string): Promise<void> {
     const result = await runSimulation(eventId);
     if (drawingEvent === eventId) drawingEvent = null;
     if (desk?.dataset.mode !== 'projections') return;
-    if (result && projectionAthlete && propForm.line.trim() === '') {
+    if (result && projectionAthlete && (propForm.line.trim() === '' || projectionAutoLine)) {
       const sample = result.playerDraws.get(projectionAthlete) ?? null;
       const auto = defaultMarketLine(propForm.market, sample, card?.projection_context, projectionAthlete);
       if (auto !== null) propForm = { ...propForm, line: String(auto) };
+      projectionAutoLine = false;
     }
     paintProjection();
     if (result) return;
@@ -628,6 +630,7 @@ function onDeskClick(event: Event): void {
     const sample = projectionEvent && projectionAthlete ? cachedSimulation(projectionEvent)?.playerDraws.get(projectionAthlete) ?? null : null;
     const auto = defaultMarketLine(market, sample, card?.projection_context, projectionAthlete);
     projectionSelectedBar = null;
+    projectionAutoLine = sample === null && auto !== null;
     propForm = { ...propForm, market, line: auto !== null ? String(auto) : market === 'dd' || market === 'td' ? '0.5' : propForm.line };
     paintProjection();
     projectionsRoot?.querySelector<HTMLButtonElement>(`[data-projection-market="${CSS.escape(market)}"]`)?.focus();
@@ -638,6 +641,7 @@ function onDeskClick(event: Event): void {
     if (propForm.market === 'dd' || propForm.market === 'td') return;
     const vals = l10HistoricalValues(card?.projection_context, projectionAthlete, propForm.market);
     if (!vals.length) return;
+    projectionAutoLine = false;
     propForm = { ...propForm, line: String(viewerLine(propForm.market, vals)) };
     const input = projectionsRoot?.querySelector<HTMLInputElement>('[data-prop-line]');
     if (input) input.value = propForm.line;
@@ -691,6 +695,7 @@ function onDeskClick(event: Event): void {
   const nudge = target.closest('button[data-line-nudge]');
   if (nudge instanceof HTMLButtonElement) {
     if (propForm.market === 'dd' || propForm.market === 'td') return;
+    projectionAutoLine = false;
     const delta = Number(nudge.dataset.lineNudge);
     const current = Number(propForm.line);
     const base = propForm.line.trim() === '' || !Number.isFinite(current) ? 0 : current;
@@ -706,6 +711,7 @@ function onDeskClick(event: Event): void {
     const sample = projectionEvent && projectionAthlete ? cachedSimulation(projectionEvent)?.playerDraws.get(projectionAthlete) : null;
     const next = sample ? viewerLine(propForm.market, playedValues(sample, propForm.market)) : propForm.market === 'dd' || propForm.market === 'td' ? 0.5 : null;
     if (next === null) return;
+    projectionAutoLine = false;
     propForm = { ...propForm, line: String(next) };
     const input = projectionsRoot?.querySelector<HTMLInputElement>('[data-prop-line]');
     if (input) input.value = propForm.line;
@@ -739,6 +745,7 @@ function onDeskClick(event: Event): void {
     const cached = cachedSimulation(eventId);
     const sample = cached?.playerDraws.get(athleteId) ?? null;
     const auto = defaultMarketLine(propForm.market, sample, card?.projection_context, athleteId);
+    projectionAutoLine = sample === null && auto !== null;
     if (auto !== null) propForm = { ...propForm, line: String(auto) };
     else if (propForm.market === 'dd' || propForm.market === 'td') propForm = { ...propForm, line: '0.5' };
     if (cached) {
@@ -874,6 +881,7 @@ function onPropEdit(event: Event): void {
   if (!(target instanceof Element) || !target.closest('[data-prop-form]')) return;
   readPropForm();
   if (desk?.dataset.mode === 'projections') {
+    if (target instanceof HTMLInputElement && target.matches('[data-prop-line]')) projectionAutoLine = false;
     if (propForm.market === 'dd' || propForm.market === 'td') propForm = { ...propForm, line: '0.5' };
     const structural = target instanceof HTMLSelectElement && (target.matches('[data-prop-market]') || target.matches('[data-prop-style]'));
     if (structural) {

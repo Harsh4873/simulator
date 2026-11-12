@@ -24,16 +24,21 @@ import {
 } from '../src/projection-context.ts';
 import { gradeProp, quoteProp } from '../src/props.ts';
 import {
+  defaultMarketLine,
   modelChanceHtml,
+  naturalHookLine,
   nearestHalfPoint,
   playedMean,
   playedValues,
+  projectionBoardHtml,
   renderProjections,
   searchHitsHtml,
   viewerLine,
   type ProjectionView,
 } from '../src/projections.ts';
-import { ITERATIONS, simulate } from '../src/simulate.ts';
+import { applyHealthyCalibration, calibrateHealthy, MIN_CALIBRATION_ROWS } from '../src/participation-model.ts';
+import { CAMEO_MINUTE_CAP, conditionalMinutes, ITERATIONS, simulate } from '../src/simulate.ts';
+import { fitCurrentRoles, NEWCOMER_MINUTES_PRIOR } from '../src/team-model.ts';
 import type { RateCard, RatePlayer, Slate } from '../src/types.ts';
 
 const card = JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json', 'utf8')) as RateCard;
@@ -726,4 +731,127 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     globals.setInterval = timer;
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('model and board accuracy fixes: .5 hook lines, per-player board lines, cameo transfer cap, orb_share, and context healthy calibration', () => {
+  // 1. Default lines snap to .5 hooks (never whole integers) so push mass does not distort prop chances.
+  assert.equal(naturalHookLine('pts', [20, 20, 20]), 19.5);
+  assert.equal(naturalHookLine('pts', [20, 21]), 20.5);
+  assert.equal(naturalHookLine('dd', [0, 1]), 0.5);
+  const sim = simulate(game, seed, draws);
+  const sorted = [...game.players].sort(
+    (a, b) =>
+      (playedMean(playedValues(sim.playerDraws.get(b.athlete_id)!, 'pts')) ?? 0) -
+      (playedMean(playedValues(sim.playerDraws.get(a.athlete_id)!, 'pts')) ?? 0),
+  );
+  const top = sorted[0]!;
+  const auto = defaultMarketLine('pts', sim.playerDraws.get(top.athlete_id) ?? null, undefined, top.athlete_id);
+  assert.ok(auto !== null && auto % 1 === 0.5, `expected .5 hook, got ${auto}`);
+
+  // 2. Game Props Board grades each non-selected player against their own .5 line while preserving the viewer's line for the selected player.
+  const rolePlayer = sorted.find((p) => {
+    const m = playedMean(playedValues(sim.playerDraws.get(p.athlete_id)!, 'pts')) ?? 0;
+    return m > 4 && m < 14;
+  });
+  assert.ok(rolePlayer);
+  const boardHtml = projectionBoardHtml(
+    game,
+    sim,
+    { market: 'pts', side: 'over', line: '29.5', style: 'american', odds: '-110', opposite: '' },
+    game.event_id,
+    top.athlete_id,
+  );
+  assert.match(boardHtml, /<th>Line<\/th>/);
+  assert.match(boardHtml, /29\.5/);
+  const roleSample = sim.playerDraws.get(rolePlayer.athlete_id)!;
+  const roleHook = naturalHookLine('pts', playedValues(roleSample, 'pts'));
+  assert.ok(roleHook < 20);
+  assert.equal(boardHtml.includes(`<td>${roleHook}</td>`), true);
+
+  // 3. Team-changed newcomer with 0 prior-season games and 0 current-team games gets newcomer prior and cameo cap, not phantom 20 min.
+  const transfer: RatePlayer = {
+    ...structuredClone(top),
+    athlete_id: 'transfer-rookie',
+    team_id: game.home_team_id,
+    games_2026: 0,
+    games_2027: 1,
+    games: 1,
+    shooting_games: 1,
+    minutes_mean: 22,
+    current_team_games: 0,
+  };
+  assert.equal(conditionalMinutes(transfer), CAMEO_MINUTE_CAP);
+  const otherTeamAppearance: CompletedEvent = {
+    event_id: 'other-1',
+    start_time: '2026-10-22T01:00:00Z',
+    season: 2027,
+    season_type: 2,
+    neutral: false,
+    periods: 4,
+    home_team_id: '98',
+    away_team_id: '99',
+    home_pts: 100,
+    away_pts: 98,
+    players: [
+      {
+        athlete_id: 'transfer-rookie',
+        team_id: '98',
+        minutes: 22,
+        fgm: 2,
+        fga: 5,
+        tpm: 0,
+        tpa: 1,
+        ftm: 0,
+        fta: 0,
+        reb: 5,
+        ast: 1,
+        pts: 4,
+        orb: 4,
+        drb: 1,
+        tov: 1,
+      },
+    ],
+  };
+  fitCurrentRoles([transfer], [otherTeamAppearance], 2027, [], '2026-11-10T00:00:00Z');
+  assert.equal(transfer.current_team_games, 0);
+  assert.ok(transfer.minutes_mean <= NEWCOMER_MINUTES_PRIOR + 1e-9);
+  assert.ok(transfer.orb_share !== undefined && transfer.orb_share > 0 && transfer.orb_share < 1);
+
+  // 4. Context-aware healthy calibration separates returning high-minute starters from coach-DNP bench warmers at the same raw logit.
+  let rngState = 19;
+  const rand = () => ((rngState = (Math.imul(rngState ^ (rngState >>> 15), 0x2c1b3c6d) >>> 0)) / 4294967296);
+  const calRows = Array.from({ length: MIN_CALIBRATION_ROWS * 2 }, (_, i) => {
+    const isStarterReturn = i % 2 === 0;
+    const p = 0.25 + 0.2 * rand();
+    const career_minutes = isStarterReturn ? 30 : 6;
+    const coach_dnp_last5 = isStarterReturn ? 0 : 0.8;
+    const inactive_last5 = isStarterReturn ? 0.8 : 0;
+    const missing_minutes = isStarterReturn ? 35 : 0;
+    const truth = isStarterReturn ? 0.92 : 0.12;
+    return {
+      tip: new Date(Date.UTC(2026, 9, 20) + Math.floor(i / 20) * 86400000).toISOString(),
+      p,
+      y: Number(rand() < truth),
+      career_minutes,
+      coach_dnp_last5,
+      inactive_last5,
+      missing_minutes,
+    };
+  });
+  const cal = calibrateHealthy(calRows);
+  assert.equal(cal.status, 'fitted');
+  assert.ok(Array.isArray(cal.coefficients));
+  const pStarter = applyHealthyCalibration(cal, 0.3, {
+    career_minutes: 30,
+    coach_dnp_last5: 0,
+    inactive_last5: 0.8,
+    missing_minutes: 35,
+  });
+  const pBench = applyHealthyCalibration(cal, 0.3, {
+    career_minutes: 6,
+    coach_dnp_last5: 0.8,
+    inactive_last5: 0,
+    missing_minutes: 0,
+  });
+  assert.ok(pStarter > pBench + 0.4, `expected starter ${pStarter} >> bench ${pBench}`);
 });

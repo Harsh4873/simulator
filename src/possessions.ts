@@ -107,8 +107,8 @@ export function drawPossessions(
     let shots = p.map((x,i)=>mins[i]*x.fga_per_min);
     let fts = p.map((x,i)=>mins[i]*x.fta_per_min);
     let creators = p.map((x,i)=>mins[i]*x.ast_per_min);
-    let offensiveBoards = p.map((x,i)=>mins[i]*x.reb_per_min);
-    let defensiveBoards = q.map((x,i)=>defMins[i]*x.reb_per_min);
+    let offensiveBoards = p.map((x,i)=>mins[i]*x.reb_per_min*(x.orb_share ?? 1));
+    let defensiveBoards = q.map((x,i)=>defMins[i]*x.reb_per_min*(x.orb_share !== undefined ? 1 - x.orb_share : 1));
     let steals = q.map((x,i)=>defMins[i]*(x.stl_per_min ?? 0));
     let blocks = q.map((x,i)=>defMins[i]*(x.blk_per_min ?? 0));
     let turnovers = p.map((x,i)=>mins[i]*(x.tov_per_min ?? 0));
@@ -125,7 +125,7 @@ export function drawPossessions(
     // normalized over the planned stints so team totals stay with the team model. Splitting a fixed number of events
     // each minute instead gave stars, who play beside other high-rate starters, less than their rate and bench units more.
     const assistBase=p.map(x=>concentrate(x.ast_per_min,assistExponent)),tripBase=p.map(x=>concentrate(x.fta_per_min,tripExponent));
-    const offBoardBase=p.map(x=>concentrate(x.reb_per_min,reboundExponent)),defBoardBase=q.map(x=>concentrate(x.reb_per_min,reboundExponent));
+    const offBoardBase=p.map(x=>concentrate(x.reb_per_min*(x.orb_share ?? 1),reboundExponent)),defBoardBase=q.map(x=>concentrate(x.reb_per_min*(x.orb_share !== undefined ? 1 - x.orb_share : 1),reboundExponent));
     const assistMean=plannedLineupMean(assistBase,offStints),tripLineupMean=plannedLineupMean(tripBase,offStints);
     const offBoardMean=plannedLineupMean(offBoardBase,offStints),defBoardMean=plannedLineupMean(defBoardBase,defStints);
     const makeRate=p.map(x=>(1-x.tpa_given_fga)*x.fg2_pct+x.tpa_given_fga*x.tp_pct);
