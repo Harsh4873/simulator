@@ -37,7 +37,8 @@ import {
   type ProjectionView,
 } from '../src/projections.ts';
 import { applyHealthyCalibration, calibrateHealthy, MIN_CALIBRATION_ROWS } from '../src/participation-model.ts';
-import { CAMEO_MINUTE_CAP, conditionalMinutes, ITERATIONS, simulate } from '../src/simulate.ts';
+import { hydrateSimulationCache, persistSimulationEntry } from '../src/simulation-cache.ts';
+import { CAMEO_MINUTE_CAP, conditionalMinutes, ITERATIONS, simulate, type Simulation } from '../src/simulate.ts';
 import { fitCurrentRoles, NEWCOMER_MINUTES_PRIOR } from '../src/team-model.ts';
 import type { RateCard, RatePlayer, Slate } from '../src/types.ts';
 
@@ -685,10 +686,15 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     const hitBtn = document.querySelector<HTMLButtonElement>(`[data-projection-hits] button[data-projection-player="${star.athlete_id}"]`);
     assert.ok(hitBtn);
     hitBtn.click();
+    // On Projections, no full-screen modal clock opens — the page stays interactive while drawing inline!
+    assert.equal(document.querySelector('.sim-screen'), null);
+    assert.match(document.querySelector('[data-projection-status]')?.textContent ?? '', /Simulating 10,000 games/);
     await flush();
 
-    // Search hits auto-closed and 1 worker ran
+    // Search hits auto-closed, 1 worker ran, and the game rail shows 10k ready
     assert.equal(workers, 1);
+    assert.equal(document.querySelector('.sim-screen'), null);
+    assert.ok(document.querySelector('.ready-dot'));
     assert.equal(document.querySelector('[data-projection-hits]')?.innerHTML, '');
     assert.match(document.querySelector('.who-name')?.textContent ?? '', new RegExp(star.name.split(' ')[0]!));
 
@@ -854,4 +860,62 @@ test('model and board accuracy fixes: .5 hook lines, per-player board lines, cam
     missing_minutes: 0,
   });
   assert.ok(pStarter > pBench + 0.4, `expected starter ${pStarter} >> bench ${pBench}`);
+});
+
+test('IndexedDB simulation cache hydrates matching generations and purges stale generations automatically', async () => {
+  const backing = new Map<string, unknown>();
+  const makeRequest = <T>(compute: () => T) => {
+    const req: { result?: T; onsuccess?: () => void; onerror?: () => void; onupgradeneeded?: () => void } = {};
+    queueMicrotask(() => {
+      req.result = compute();
+      req.onsuccess?.();
+    });
+    return req;
+  };
+  const fakeDb = {
+    objectStoreNames: { contains: () => true },
+    createObjectStore: () => ({}),
+    close: () => {},
+    transaction: () => {
+      const tx: { oncomplete?: () => void; onerror?: () => void; onabort?: () => void; objectStore: () => unknown } = {
+        objectStore: () => ({
+          getAll: () =>
+            makeRequest(() => {
+              const all = [...backing.values()];
+              queueMicrotask(() => tx.oncomplete?.());
+              return all;
+            }),
+          put: (val: { key: string }) => {
+            backing.set(val.key, val);
+            queueMicrotask(() => tx.oncomplete?.());
+          },
+          delete: (key: string) => {
+            backing.delete(key);
+          },
+        }),
+      };
+      return tx;
+    },
+  };
+  const prevIdb = (globalThis as Record<string, unknown>).indexedDB;
+  Object.defineProperty(globalThis, 'indexedDB', {
+    configurable: true,
+    value: { open: () => makeRequest(() => fakeDb) },
+  });
+  try {
+    const sim = simulate(game, seed, 60);
+    await persistSimulationEntry('ev-stale:old:old:auto', 'old:old', sim);
+    await persistSimulationEntry('ev-current:new:new:auto', 'new:new', sim);
+    assert.equal(backing.size, 2);
+
+    const hydrated = new Map<string, Simulation>();
+    const count = await hydrateSimulationCache('new:new', hydrated);
+    assert.equal(count, 1);
+    assert.equal(hydrated.has('ev-current:new:new:auto'), true);
+    assert.equal(hydrated.has('ev-stale:old:old:auto'), false);
+    assert.equal(backing.has('ev-stale:old:old:auto'), false, 'stale generation purged from browser storage');
+  } finally {
+    if (prevIdb === undefined) delete (globalThis as Record<string, unknown>).indexedDB;
+    else Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: prevIdb });
+  }
 });

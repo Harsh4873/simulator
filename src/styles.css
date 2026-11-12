@@ -1714,6 +1714,15 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
   font-size: 0.75rem;
 }
 
+.projection-drawing {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--card-2));
+}
+
 .projection-unrun {
   display: flex;
   align-items: center;
@@ -1724,6 +1733,27 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
   border: 1px dashed var(--border-strong);
   border-radius: 14px;
   background: var(--card-2);
+}
+
+.game-row-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ready-dot {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--card));
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
 }
 
 .board-grade-note {

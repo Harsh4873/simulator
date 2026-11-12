@@ -708,6 +708,16 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
 }
 
 function bandFrom(values: ArrayLike<number>): PointsBand {
+  if (values instanceof Uint16Array) {
+    const sorted = values.slice().sort();
+    const q = (p: number) => (sorted.length === 0 ? 0 : sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))]);
+    return { p05: q(0.05), p10: q(0.1), p50: q(0.5), p90: q(0.9), p95: q(0.95) };
+  }
+  if (values instanceof Float64Array) {
+    const sorted = values.slice().sort();
+    const q = (p: number) => (sorted.length === 0 ? 0 : sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(p * sorted.length) - 1))]);
+    return { p05: q(0.05), p10: q(0.1), p50: q(0.5), p90: q(0.9), p95: q(0.95) };
+  }
   const sorted = Array.from(values).sort((a, b) => a - b);
   return {
     p05: quantile(sorted, 0.05),

@@ -42,12 +42,14 @@ import {
   type SupportMode,
 } from './projections.ts';
 import { unpackPlayerGames, type DefenseSlot } from './projection-context.ts';
+import { hydrateSimulationCache, persistSimulationEntry } from './simulation-cache.ts';
 import { escapeHtml, renderSlate } from './slate.ts';
 import { ITERATIONS, type Simulation } from './simulate.ts';
 import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
 
 const DATA_BASE = '/simulator/data/';
 const THEME_KEY = 'simulator.theme';
+const MEMORY_CACHE_LIMIT = 24;
 
 const desk = document.querySelector<HTMLElement>('#desk');
 const slateRoot = document.querySelector<HTMLElement>('#slate');
@@ -65,6 +67,10 @@ let bound = false;
 let running = false;
 let activeWorker: Worker | null = null;
 let cancelRun: (()=>void) | null = null;
+let prefetchWorker: Worker | null = null;
+let cancelPrefetch: (()=>void) | null = null;
+let prefetchTimer = 0;
+let simulationEpoch = 0;
 const simulationCache = new Map<string, Simulation>();
 let panelAthlete: string | null = null;
 let view: { game: SlateGame; rates: RateGame; result: Simulation } | null = null;
@@ -85,6 +91,7 @@ let projectionDefenseSlot: DefenseSlot | null = null;
 let projectionAutoLine = false;
 /** Set only while this game's worker is drawing. A cache hit never sets it. */
 let drawingEvent: string | null = null;
+let drawingProgress = 0;
 
 function storedLineups(): string | null {
   try {
@@ -154,13 +161,35 @@ function gamesFrame(): HTMLElement | null {
   return document.querySelector<HTMLElement>('[data-region="games"]');
 }
 
+function generationKey(): string {
+  return `${card?.input_hash ?? card?.generated_at}:${card?.model_hash ?? card?.model_version ?? 'legacy'}`;
+}
+
 function simulationKey(eventId: string, overrides: LineupOverrides): string {
-  return `${eventId}:${card?.input_hash ?? card?.generated_at}:${card?.model_hash ?? card?.model_version ?? 'legacy'}:${overridesKey(overrides)}`;
+  return `${eventId}:${generationKey()}:${overridesKey(overrides)}`;
+}
+
+function storeCachedSimulation(key: string, result: Simulation): void {
+  simulationCache.delete(key);
+  simulationCache.set(key, result);
+  while (simulationCache.size > MEMORY_CACHE_LIMIT) {
+    simulationCache.delete(simulationCache.keys().next().value!);
+  }
+  if (card) void persistSimulationEntry(key, generationKey(), result);
 }
 
 function cachedSimulation(eventId: string): Simulation | null {
   if (!card) return null;
   return simulationCache.get(simulationKey(eventId, editsFor(eventId))) ?? null;
+}
+
+function readyEventIdSet(): Set<string> {
+  const ready = new Set<string>();
+  if (!slate || !card) return ready;
+  for (const g of slate.games) {
+    if (cachedSimulation(g.event_id)) ready.add(g.event_id);
+  }
+  return ready;
 }
 
 function unmountProjections(): void {
@@ -196,6 +225,8 @@ function projectionView(): ProjectionView | null {
     form,
     simulation: projectionEvent ? cachedSimulation(projectionEvent) : null,
     drawing: projectionEvent !== null && drawingEvent === projectionEvent && !cachedSimulation(projectionEvent),
+    drawProgress: drawingProgress,
+    readyEventIds: readyEventIdSet(),
     overrides: projectionEvent ? editsFor(projectionEvent) : {},
     historySplit: projectionHistorySplit,
     selectedGameIndex: projectionSelectedBar,
@@ -297,12 +328,96 @@ function paintProjectionFigures(): void {
   }
 }
 
+function paintProjectionProgress(progress: number): void {
+  drawingProgress = Math.min(1, Math.max(0, progress));
+  if (desk?.dataset.mode !== 'projections' || !projectionsRoot) return;
+  const pct = Math.round(drawingProgress * 100);
+  const fill = projectionsRoot.querySelector<HTMLElement>('[data-projection-progress]');
+  if (fill) fill.style.width = `${pct}%`;
+  const text = projectionsRoot.querySelector<HTMLElement>('[data-projection-pct]');
+  if (text) text.textContent = `${pct}%`;
+  const bar = fill?.closest('[role="progressbar"]');
+  if (bar) bar.setAttribute('aria-valuenow', String(pct));
+}
+
+function stopPrefetch(): void {
+  if (prefetchTimer) {
+    clearTimeout(prefetchTimer);
+    prefetchTimer = 0;
+  }
+  cancelPrefetch?.();
+}
+
+function scheduleNextPrefetch(): void {
+  if (prefetchTimer || prefetchWorker || running || desk?.dataset.mode !== 'projections') return;
+  if (typeof indexedDB === 'undefined') return;
+  if (!slate || !card || freshnessIssue(slate, card, new Date(), health)) return;
+  const candidates = [...slate.games].sort((a, b) => {
+    const aPriority = a.event_id === projectionEvent ? 0 : a.completed ? 2 : 1;
+    const bPriority = b.event_id === projectionEvent ? 0 : b.completed ? 2 : 1;
+    return aPriority - bPriority || a.start_time.localeCompare(b.start_time);
+  });
+  const nextGame = candidates.find((g) => {
+    const base = rateGame(g.event_id);
+    return Boolean(base && !base.simulation_error && !cachedSimulation(g.event_id));
+  });
+  if (!nextGame) return;
+  prefetchTimer = window.setTimeout(() => {
+    prefetchTimer = 0;
+    if (running || prefetchWorker || desk?.dataset.mode !== 'projections' || !slate || !card) return;
+    if (cachedSimulation(nextGame.event_id)) {
+      scheduleNextPrefetch();
+      return;
+    }
+    const base = rateGame(nextGame.event_id);
+    if (!base || base.simulation_error) return;
+    const overrides = editsFor(nextGame.event_id);
+    const rates = applyLineupOverrides(base, overrides);
+    const key = simulationKey(nextGame.event_id, overrides);
+    const worker = new Worker(new URL('./simulation-worker.ts', import.meta.url), { type: 'module' });
+    prefetchWorker = worker;
+    const finish = () => {
+      worker.terminate();
+      if (prefetchWorker === worker) prefetchWorker = null;
+      cancelPrefetch = null;
+    };
+    cancelPrefetch = finish;
+    worker.onmessage = (event: MessageEvent<{ result?: Simulation; error?: string; progress?: number }>) => {
+      if (event.data.progress !== undefined) return;
+      finish();
+      if (event.data.result) {
+        storeCachedSimulation(key, event.data.result);
+        if (desk?.dataset.mode === 'projections') {
+          if (projectionEvent === nextGame.event_id) {
+            if (projectionAthlete && (propForm.line.trim() === '' || projectionAutoLine)) {
+              const sample = event.data.result.playerDraws.get(projectionAthlete) ?? null;
+              const auto = defaultMarketLine(propForm.market, sample, card?.projection_context, projectionAthlete);
+              if (auto !== null) propForm = { ...propForm, line: String(auto) };
+              projectionAutoLine = false;
+            }
+            paintProjection();
+          } else {
+            const btn = projectionsRoot?.querySelector<HTMLElement>(`button[data-projection-game="${CSS.escape(nextGame.event_id)}"] .game-row-head`);
+            if (btn && !btn.querySelector('.ready-dot')) {
+              btn.insertAdjacentHTML('beforeend', '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>');
+            }
+          }
+          scheduleNextPrefetch();
+        }
+      }
+    };
+    worker.onerror = () => finish();
+    worker.postMessage({ game: rates, seed: fnv1a(`${nextGame.event_id}:${card.generated_at ?? ''}`), iterations: ITERATIONS });
+  }, 180);
+}
+
 function showProjections(): void {
   if (!slate || !card || !desk || !projectionsRoot) return;
   const entering = desk.dataset.mode !== 'projections';
   if (entering) {
     cancelRun?.();
     drawingEvent = null;
+    drawingProgress = 0;
   }
   unmountSheet();
   const games = gamesFrame();
@@ -316,12 +431,15 @@ function showProjections(): void {
   desk.dataset.mode = 'projections';
   paintProjection();
   markDeskTabs();
+  scheduleNextPrefetch();
 }
 
 function showSlate(): void {
   if (!slateRoot || !slate || !card) return;
+  stopPrefetch();
   cancelRun?.();
   drawingEvent = null;
+  drawingProgress = 0;
   view = null;
   panelAthlete = null;
   boxRoot?.replaceChildren();
@@ -442,40 +560,73 @@ function closeSimClock(screen: HTMLElement | null): void {
   if (!document.querySelector('.sim-screen')) document.body.classList.remove('sim-open');
 }
 
-function drawSimulation(rates: RateGame, eventId: string, screen: HTMLElement | null): Promise<Simulation> {
+function drawSimulation(
+  rates: RateGame,
+  eventId: string,
+  screen: HTMLElement | null,
+  epoch: number,
+  onProgress?: (progress: number) => void,
+): Promise<Simulation> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    let worker: Worker | null = null;
+    const fail = (error: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    };
+    const succeed = (result: Simulation) => {
+      if (settled) return;
+      settled = true;
+      resolve(result);
+    };
+    const finish = () => {
+      worker?.terminate();
+      if (worker && activeWorker === worker) activeWorker = null;
+      if (cancelRun === cancel) cancelRun = null;
+    };
+    const cancel = () => {
+      finish();
+      fail(new Error('Simulation cancelled'));
+    };
+    cancelRun = cancel;
     setTimeout(() => {
-      const worker = new Worker(new URL('./simulation-worker.ts', import.meta.url), { type: 'module' });
-      activeWorker = worker;
-      const finish = () => {
-        worker.terminate();
-        activeWorker = null;
-        cancelRun = null;
-      };
-      cancelRun = () => {
+      if (settled || epoch !== simulationEpoch) {
         finish();
-        reject(new Error('Simulation cancelled'));
-      };
+        fail(new Error('Simulation cancelled'));
+        return;
+      }
+      worker = new Worker(new URL('./simulation-worker.ts', import.meta.url), { type: 'module' });
+      activeWorker = worker;
       worker.onmessage = (event: MessageEvent<{ result?: Simulation; error?: string; progress?: number }>) => {
+        if (epoch !== simulationEpoch) {
+          finish();
+          fail(new Error('Simulation cancelled'));
+          return;
+        }
         if (event.data.progress !== undefined) {
           if (screen) paintSimClock(screen, event.data.progress);
+          onProgress?.(event.data.progress);
           return;
         }
         finish();
-        if (event.data.result) resolve(event.data.result);
-        else reject(new Error(event.data.error ?? 'Simulation failed'));
+        if (event.data.result) succeed(event.data.result);
+        else fail(new Error(event.data.error ?? 'Simulation failed'));
       };
       worker.onerror = () => {
         finish();
-        reject(new Error('Simulation worker failed'));
+        fail(new Error('Simulation worker failed'));
       };
       worker.postMessage({ game: rates, seed: fnv1a(`${eventId}:${card!.generated_at ?? ''}`), iterations: ITERATIONS });
     }, 0);
   });
 }
 
-async function runSimulation(eventId: string): Promise<Simulation | null> {
-  if (running || !eventId || !slate || !card) return null;
+async function runSimulation(
+  eventId: string,
+  options: { modalClock?: boolean } = {},
+): Promise<Simulation | null> {
+  if (!eventId || !slate || !card) return null;
   if (freshnessIssue(slate, card, new Date(), health)) {
     showSlate();
     return null;
@@ -488,28 +639,58 @@ async function runSimulation(eventId: string): Promise<Simulation | null> {
   const key = simulationKey(eventId, overrides);
   const cached = simulationCache.get(key);
   if (cached) {
-    if (drawingEvent === eventId) drawingEvent = null;
-    simulationCache.set(key, cached);
-    if (simulationCache.size > 12) simulationCache.delete(simulationCache.keys().next().value!);
+    if (drawingEvent === eventId) {
+      drawingEvent = null;
+      drawingProgress = 0;
+    }
+    storeCachedSimulation(key, cached);
     view = { game, rates, result: cached };
     return cached;
   }
+  if (running) {
+    if (options.modalClock !== false || !cancelRun) return null;
+    simulationEpoch += 1;
+    const cancel = cancelRun;
+    cancelRun = null;
+    running = false;
+    cancel();
+  }
+  const epoch = simulationEpoch;
+  stopPrefetch();
   running = true;
   drawingEvent = eventId;
-  desk?.setAttribute('aria-busy', 'true');
+  drawingProgress = 0;
+  const useModal = options.modalClock !== false;
+  if (useModal) desk?.setAttribute('aria-busy', 'true');
   if (desk?.dataset.mode === 'projections') paintProjection();
-  const screen = openSimClock(game);
+  const screen = useModal ? openSimClock(game) : null;
   try {
-    const result = await drawSimulation(rates, eventId, screen);
-    simulationCache.set(key, result);
-    if (simulationCache.size > 12) simulationCache.delete(simulationCache.keys().next().value!);
+    const result = await drawSimulation(
+      rates,
+      eventId,
+      screen,
+      epoch,
+      useModal ? undefined : (progress) => {
+        if (epoch === simulationEpoch && drawingEvent === eventId) paintProjectionProgress(progress);
+      },
+    );
+    if (epoch !== simulationEpoch) throw new Error('Simulation cancelled');
+    storeCachedSimulation(key, result);
     view = { game, rates, result };
     return result;
   } finally {
-    if (drawingEvent === eventId) drawingEvent = null;
-    closeSimClock(screen);
-    desk?.setAttribute('aria-busy', 'false');
-    running = false;
+    if (epoch === simulationEpoch) {
+      if (drawingEvent === eventId) {
+        drawingEvent = null;
+        drawingProgress = 0;
+      }
+      closeSimClock(screen);
+      if (useModal) desk?.setAttribute('aria-busy', 'false');
+      running = false;
+      if (desk?.dataset.mode === 'projections') scheduleNextPrefetch();
+    } else {
+      closeSimClock(screen);
+    }
   }
 }
 
@@ -542,8 +723,11 @@ async function onSimulate(button: HTMLButtonElement): Promise<void> {
 
 async function simulateProjection(eventId: string): Promise<void> {
   try {
-    const result = await runSimulation(eventId);
-    if (drawingEvent === eventId) drawingEvent = null;
+    const result = await runSimulation(eventId, { modalClock: false });
+    if (drawingEvent === eventId) {
+      drawingEvent = null;
+      drawingProgress = 0;
+    }
     if (desk?.dataset.mode !== 'projections') return;
     if (result && projectionAthlete && (propForm.line.trim() === '' || projectionAutoLine)) {
       const sample = result.playerDraws.get(projectionAthlete) ?? null;
@@ -554,7 +738,11 @@ async function simulateProjection(eventId: string): Promise<void> {
     paintProjection();
     if (result) return;
   } catch (error) {
-    if (drawingEvent === eventId) drawingEvent = null;
+    if (error instanceof Error && error.message === 'Simulation cancelled') return;
+    if (drawingEvent === eventId) {
+      drawingEvent = null;
+      drawingProgress = 0;
+    }
     if (desk?.dataset.mode !== 'projections' || !projectionsRoot) return;
     paintProjection();
     const status = document.createElement('p');
@@ -569,8 +757,10 @@ function showLineups(eventId: string, focusSelector?: string): void {
   const game = slate.games.find((item) => item.event_id === eventId);
   const base = rateGame(eventId);
   if (!game || !base) return;
+  stopPrefetch();
   cancelRun?.();
   drawingEvent = null;
+  drawingProgress = 0;
   lineupEvent = eventId;
   panelAthlete = null;
   panelBody?.replaceChildren();
@@ -721,12 +911,13 @@ function onDeskClick(event: Event): void {
   const rerunBtn = target.closest('button[data-projection-rerun]');
   if (rerunBtn instanceof HTMLButtonElement) {
     const eventId = rerunBtn.dataset.projectionRerun ?? '';
-    if (!eventId || running) return;
+    if (!eventId) return;
     if (cachedSimulation(eventId)) {
       paintProjection();
       return;
     }
     drawingEvent = eventId;
+    drawingProgress = 0;
     paintProjection();
     void simulateProjection(eventId);
     return;
@@ -735,7 +926,7 @@ function onDeskClick(event: Event): void {
   if (projectionPlayer instanceof HTMLButtonElement) {
     const eventId = projectionPlayer.dataset.projectionEvent ?? '';
     const athleteId = projectionPlayer.dataset.projectionPlayer ?? '';
-    if (!eventId || !athleteId || running) return;
+    if (!eventId || !athleteId) return;
     if (projectionPlayer.closest('[data-projection-hits]')) projectionQuery = '';
     projectionEvent = eventId;
     projectionAthlete = athleteId;
@@ -749,11 +940,19 @@ function onDeskClick(event: Event): void {
     if (auto !== null) propForm = { ...propForm, line: String(auto) };
     else if (propForm.market === 'dd' || propForm.market === 'td') propForm = { ...propForm, line: '0.5' };
     if (cached) {
-      if (drawingEvent === eventId) drawingEvent = null;
+      if (drawingEvent === eventId) {
+        drawingEvent = null;
+        drawingProgress = 0;
+      }
+      paintProjection();
+      return;
+    }
+    if (running && drawingEvent === eventId) {
       paintProjection();
       return;
     }
     drawingEvent = eventId;
+    drawingProgress = 0;
     paintProjection();
     void simulateProjection(eventId);
     return;
@@ -761,11 +960,17 @@ function onDeskClick(event: Event): void {
   const projectionGame = target.closest('button[data-projection-game]');
   if (projectionGame instanceof HTMLButtonElement) {
     const eventId = projectionGame.dataset.projectionGame ?? '';
-    if (!eventId || running) return;
+    if (!eventId) return;
     projectionQuery = '';
     projectionEvent = eventId;
     projectionAthlete = null;
     paintProjection();
+    if (!cachedSimulation(eventId) && !(running && drawingEvent === eventId)) {
+      drawingEvent = eventId;
+      drawingProgress = 0;
+      paintProjection();
+      void simulateProjection(eventId);
+    }
     return;
   }
   const simulateButton = target.closest('button[data-event]');
@@ -974,6 +1179,7 @@ async function load(): Promise<void> {
     slate=loaded.slate;card=loaded.card;health=loaded.health;
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
+    await hydrateSimulationCache(generationKey(), simulationCache);
     if (readHash() === '#projections') showProjections();
     else showSlate();
   } catch {
@@ -1057,7 +1263,7 @@ void load();
 
 function recheckFreshness(): void {
   paintFreshness();
-  if(slate && card && freshnessIssue(slate,card,new Date(),health)){activeWorker?.terminate();cancelRun?.();showSlate();}
+  if(slate && card && freshnessIssue(slate,card,new Date(),health)){stopPrefetch();activeWorker?.terminate();cancelRun?.();showSlate();}
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)recheckFreshness();});
 setInterval(recheckFreshness,60000);

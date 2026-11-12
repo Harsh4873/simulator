@@ -60,6 +60,10 @@ export interface ProjectionView {
   simulation: Simulation | null;
   /** True only while a draw for this game is in flight. A cached result is not a draw. */
   drawing: boolean;
+  /** 0..1 progress while `drawing` is true. */
+  drawProgress?: number;
+  /** Event ids already cached in memory / IndexedDB so the Games rail can badge them. */
+  readyEventIds?: ReadonlySet<string>;
   overrides: LineupOverrides;
   historySplit?: HistorySplit;
   selectedGameIndex?: number | null;
@@ -1069,6 +1073,19 @@ function defenseAsideHtml(
     </section>${perMinCard}`;
 }
 
+function inlineDrawingHtml(progress?: number): string {
+  const pct = Math.min(100, Math.max(0, Math.round((progress ?? 0) * 100)));
+  return `<div class="projection-drawing" role="status" aria-live="polite">
+      <div class="play-meter-label">
+        <span data-projection-status>Simulating 10,000 games</span>
+        <span class="play-meter-value" data-projection-pct>${pct}%</span>
+      </div>
+      <span class="play-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
+        <span class="play-fill" data-projection-progress style="width:${pct}%"></span>
+      </span>
+    </div>`;
+}
+
 function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): string {
   const player = rate.players.find((item) => item.athlete_id === view.athleteId) ?? null;
   if (!player || !view.athleteId) return '';
@@ -1109,7 +1126,7 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
         view.simulation
           ? playedBlock(view.simulation, player.athlete_id, form.market)
           : view.drawing
-            ? '<p class="prop-note" data-projection-status>Simulating</p>'
+            ? inlineDrawingHtml(view.drawProgress)
             : `<div class="projection-unrun"><p class="prop-note" data-projection-status>Not simulated yet.</p><button type="button" data-projection-rerun="${escapeHtml(game.event_id)}">Simulate 10,000 games</button></div>`
       }
       ${lineTools(form, Boolean(sample && playedValues(sample, form.market).length), l10Ready)}
@@ -1157,10 +1174,12 @@ function gamesHtml(view: ProjectionView, game: SlateGame | null, rate: RateGame 
     .map((item) => {
       const selected = item.event_id === view.eventId;
       const spread = item.spread_caption ? `<p class="spread">${escapeHtml(item.spread_caption)}</p>` : '';
+      const ready = view.readyEventIds?.has(item.event_id) ?? false;
+      const status = statusLabel(item, view.now, view.slate.generated_at);
       return `<button type="button" class="projection-game" data-projection-game="${escapeHtml(item.event_id)}" aria-pressed="${selected ? 'true' : 'false'}">
-          <span class="abbr">${escapeHtml(sideAbbr(item.away))} @ ${escapeHtml(sideAbbr(item.home))}</span>
+          <span class="game-row-head"><span class="abbr">${escapeHtml(sideAbbr(item.away))} @ ${escapeHtml(sideAbbr(item.home))}</span>${ready ? '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>' : ''}</span>
           <span class="tip">${escapeHtml(formatTip(item.start_time))}</span>
-          <span class="status">${escapeHtml(statusLabel(item, view.now, view.slate.generated_at))}</span>
+          <span class="status">${escapeHtml(status)}</span>
           ${spread}
         </button>`;
     })
@@ -1178,10 +1197,11 @@ export function renderProjections(view: ProjectionView): string {
   const game = view.slate.games.find((item) => item.event_id === view.eventId) ?? null;
   const rate = view.card.games.find((item) => item.event_id === view.eventId) ?? null;
   const detail = game && rate ? detailHtml(view, game, rate) : '';
+  const boardMeter = view.drawing && !view.athleteId ? inlineDrawingHtml(view.drawProgress) : '';
   const board =
     game && rate
-      ? `<section class="team-box projection-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2><div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context)}</div></section>`
-      : '<p class="state">Search a player, or pick a game. One game is simulated after a player is chosen.</p>';
+      ? `${boardMeter}<section class="team-box projection-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2><div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context)}</div></section>`
+      : '<p class="state">Search a player, or pick a game. Historical trends load right away, and 10,000 simulations warm in the background.</p>';
   return `<div class="projection-page">
       <header class="projection-intro">
         <h2>Projections</h2>
