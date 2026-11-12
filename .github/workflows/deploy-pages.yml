@@ -30,6 +30,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
   pages: write
   id-token: write
 
@@ -77,11 +78,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      # A source push has no new check. Keep the last published one for this same card,
+      # or the rebuilt site treats a still-valid rate card as stale.
       - name: Attach source check health
         env:
           CHECKED_AT: ${{ inputs.checked_at }}
           INPUT_HASH: ${{ inputs.input_hash }}
           MODEL_HASH: ${{ inputs.model_hash }}
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/write-health.mjs
 
       - name: Validate Pages artifact
