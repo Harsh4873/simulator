@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-12T03:08:03Z",
+  "generated_at": "2026-11-12T05:35:42Z",
   "date": "2026-11-11",
   "timezone": "America/Chicago",
   "games": [
@@ -307,8 +307,8 @@
       "start_time": "2026-11-12T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "24",
         "name": "San Antonio Spurs",
@@ -340,8 +340,8 @@
       "start_time": "2026-11-12T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "7",
         "name": "Denver Nuggets",
@@ -373,8 +373,8 @@
       "start_time": "2026-11-12T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "13",
         "name": "Los Angeles Lakers",
@@ -406,8 +406,8 @@
       "start_time": "2026-11-12T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "17",
         "name": "Brooklyn Nets",
@@ -439,8 +439,8 @@
       "start_time": "2026-11-12T02:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "19",
         "name": "Orlando Magic",
@@ -472,8 +472,8 @@
       "start_time": "2026-11-12T02:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "9",
         "name": "Golden State Warriors",
@@ -505,8 +505,8 @@
       "start_time": "2026-11-12T03:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "25",
         "name": "Oklahoma City Thunder",
