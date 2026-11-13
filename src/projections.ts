@@ -72,6 +72,8 @@ export interface ProjectionView {
   supportMode?: SupportMode;
   selectedTeammateId?: string | null;
   defenseSlot?: DefenseSlot | null;
+  /** Simulations already cached, keyed by event id. Absent games are still warming up. */
+  cachedSimulations?: ReadonlyMap<string, Simulation>;
 }
 
 export function isPropMarket(value: string): value is PropMarket {
@@ -1230,6 +1232,93 @@ function gamesHtml(view: ProjectionView, game: SlateGame | null, rate: RateGame 
     </aside>`;
 }
 
+export interface SlateLean {
+  eventId: string;
+  athleteId: string;
+  name: string;
+  matchup: string;
+  side: 'over' | 'under';
+  line: number;
+  rate: number;
+}
+
+const SLATE_LEAN_LIMIT = 5;
+
+/** Stronger side of each simulated player's own half-point hook. Games with no cached simulation are counted as waiting. */
+export function slateLeans(
+  slate: Slate,
+  card: RateCard,
+  market: PropMarket,
+  simulations: ReadonlyMap<string, Simulation>,
+): { over: SlateLean[]; under: SlateLean[]; waiting: number } {
+  const over: SlateLean[] = [];
+  const under: SlateLean[] = [];
+  let waiting = 0;
+  for (const listed of slate.games) {
+    const rate = card.games.find((item) => item.event_id === listed.event_id);
+    if (!rate || rate.simulation_error) continue;
+    const simulation = simulations.get(listed.event_id);
+    if (!simulation) {
+      waiting += 1;
+      continue;
+    }
+    const matchup = `${sideAbbr(listed.away)} @ ${sideAbbr(listed.home)}`;
+    for (const player of rate.players) {
+      if (player.replacement_level) continue;
+      const sample = simulation.playerDraws.get(player.athlete_id);
+      if (!sample || statMissing(sample, market)) continue;
+      const line = defaultMarketLine(market, sample, undefined, player.athlete_id);
+      if (line === null) continue;
+      const pair = chancePair(sample, market, line);
+      if (!pair || pair.over === null || pair.under === null || pair.over === pair.under) continue;
+      const lean: SlateLean = {
+        eventId: listed.event_id,
+        athleteId: player.athlete_id,
+        name: player.name,
+        matchup,
+        side: pair.over > pair.under ? 'over' : 'under',
+        line,
+        rate: pair.over > pair.under ? pair.over : pair.under,
+      };
+      (lean.side === 'over' ? over : under).push(lean);
+    }
+  }
+  const byRate = (a: SlateLean, b: SlateLean) => b.rate - a.rate || a.name.localeCompare(b.name);
+  over.sort(byRate);
+  under.sort(byRate);
+  return { over: over.slice(0, SLATE_LEAN_LIMIT), under: under.slice(0, SLATE_LEAN_LIMIT), waiting };
+}
+
+function leanColumn(title: string, rows: readonly SlateLean[], empty: string): string {
+  const body = rows.length
+    ? `<ul>${rows
+        .map((row) => {
+          const line = Number.isInteger(row.line) ? row.line.toFixed(1) : String(row.line);
+          const side = row.side === 'over' ? 'Over' : 'Under';
+          return `<li><button type="button" class="lean-row" data-projection-player="${escapeHtml(row.athleteId)}" data-projection-event="${escapeHtml(row.eventId)}"><span class="lean-name">${escapeHtml(row.name)}</span><span class="lean-meta">${escapeHtml(row.matchup)} · ${side} ${escapeHtml(line)}</span><strong>${escapeHtml(percent(row.rate))}</strong></button></li>`;
+        })
+        .join('')}</ul>`
+    : `<p class="prop-note">${empty}</p>`;
+  return `<div><h3>${title}</h3>${body}</div>`;
+}
+
+export function modelSidesInner(
+  slate: Slate,
+  card: RateCard,
+  market: PropMarket,
+  simulations: ReadonlyMap<string, Simulation>,
+): string {
+  const leans = slateLeans(slate, card, market, simulations);
+  const ready = leans.over.length + leans.under.length;
+  if (!ready && leans.waiting > 0) {
+    return `<h2>${escapeHtml(marketLabel(market))}</h2><p class="section-sub">Simulations are still warming up. This list fills as each game finishes, so the slate does not have to be opened one game at a time.</p>`;
+  }
+  const waiting = leans.waiting
+    ? `<p class="section-sub">${leans.waiting} ${leans.waiting === 1 ? 'game is' : 'games are'} still simulating.</p>`
+    : '';
+  return `<h2>${escapeHtml(marketLabel(market))}</h2><p class="section-sub">The stronger side of each simulated player's own half-point hook. That hook is not a book line, and the percentage is not a price edge. A book price still has to be typed on the player.</p>${waiting}<div class="lean-columns">${leanColumn('Over', leans.over, 'No simulated player leans over.')}${leanColumn('Under', leans.under, 'No simulated player leans under.')}</div>`;
+}
+
 function injuryReportHtml(rate: RateGame, game: SlateGame): string {
   const sides = [
     { id: game.away.team_id, label: sideAbbr(game.away) },
@@ -1280,6 +1369,7 @@ export function renderProjections(view: ProjectionView): string {
         <div class="projection-main">
           <label class="field projection-search"><span class="field-label">Player</span><input data-projection-search type="search" value="${escapeHtml(view.query)}" placeholder="Search a player on the slate" autocomplete="off"></label>
           <div data-projection-hits class="projection-hits">${searchHitsHtml(view.slate, view.card, view.query)}</div>
+          <section class="model-sides" data-model-sides aria-label="Where the simulations lean">${modelSidesInner(view.slate, view.card, view.form.market, view.cachedSimulations ?? new Map())}</section>
           ${detail}
           ${board}
         </div>

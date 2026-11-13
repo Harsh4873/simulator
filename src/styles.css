@@ -2172,6 +2172,79 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
   margin: 0 0 10px;
 }
 
+.model-sides {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.model-sides h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.model-sides h3 {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.lean-columns {
+  display: grid;
+  gap: 14px;
+}
+
+.model-sides ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.lean-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.lean-row:hover {
+  border-color: var(--accent);
+}
+
+.lean-name {
+  font-weight: 800;
+}
+
+.lean-meta {
+  grid-column: 1;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.lean-row strong {
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (min-width: 720px) {
+  .lean-columns {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .injury-report {
   display: grid;
   gap: 8px;

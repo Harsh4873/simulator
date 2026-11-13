@@ -30,8 +30,10 @@ import {
   nearestHalfPoint,
   playedMean,
   playedValues,
+  modelSidesInner,
   projectionBoardHtml,
   renderProjections,
+  slateLeans,
   searchHitsHtml,
   viewerLine,
   type ProjectionView,
@@ -816,6 +818,18 @@ test('model and board accuracy fixes: .5 hook lines, per-player board lines, cam
   }
   const firstName = overHtml.match(/<th scope="row"><button[^>]*>([^<]+)<\/button>/);
   assert.equal(firstName?.[1], bestName);
+  assert.ok(slateGame);
+  const oneSlate = { ...slate, games: [slateGame] };
+  const cached = new Map([[game.event_id, sim]]);
+  const leans = slateLeans(oneSlate, card, 'pts', cached);
+  assert.ok(leans.over.length + leans.under.length > 0);
+  assert.equal(slateLeans(oneSlate, card, 'pts', new Map()).waiting, 1);
+  const sidesHtml = modelSidesInner(oneSlate, card, 'pts', cached);
+  assert.match(sidesHtml, /not a book line/);
+  const lead = leans.over[0] ?? leans.under[0];
+  assert.ok(lead);
+  assert.equal(sidesHtml.includes(lead.name), true);
+  assert.match(modelSidesInner(oneSlate, card, 'pts', new Map()), /warming up/);
 
   // 3. Team-changed newcomer with 0 prior-season games and 0 current-team games gets newcomer prior and cameo cap, not phantom 20 min.
   const transfer: RatePlayer = {

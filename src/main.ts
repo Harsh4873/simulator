@@ -32,6 +32,7 @@ import {
   isPropMarket,
   l10HistoricalValues,
   modelChanceHtml,
+  modelSidesInner,
   playedValues,
   projectionBoardHtml,
   projectionChartHtml,
@@ -237,7 +238,24 @@ function projectionView(): ProjectionView | null {
     supportMode: projectionSupportMode,
     selectedTeammateId: projectionTeammate,
     defenseSlot: projectionDefenseSlot,
+    cachedSimulations: cachedByEvent(),
   };
+}
+
+function cachedByEvent(): Map<string, Simulation> {
+  const map = new Map<string, Simulation>();
+  if (!slate) return map;
+  for (const game of slate.games) {
+    const sim = cachedSimulation(game.event_id);
+    if (sim) map.set(game.event_id, sim);
+  }
+  return map;
+}
+
+function paintModelSides(): void {
+  const el = projectionsRoot?.querySelector<HTMLElement>('[data-model-sides]');
+  if (!el || !slate || !card) return;
+  el.innerHTML = modelSidesInner(slate, card, propForm.market, cachedByEvent());
 }
 
 function lockMilestoneLine(): void {
@@ -405,6 +423,7 @@ function scheduleNextPrefetch(): void {
             if (btn && !btn.querySelector('.ready-dot')) {
               btn.insertAdjacentHTML('beforeend', '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>');
             }
+            paintModelSides();
           }
           scheduleNextPrefetch();
         }
