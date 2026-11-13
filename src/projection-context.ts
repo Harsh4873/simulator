@@ -964,7 +964,7 @@ export function gradeHistoricalSeries(
 }
 
 export interface HitWindowSummary {
-  key: 'L5' | 'L10' | 'L15' | 'L20' | 'SEASON' | 'H2H';
+  key: 'L5' | 'L10' | 'HOME' | 'AWAY' | 'SEASON' | 'H2H';
   label: string;
   grade: HistoricalGrade;
 }
@@ -976,15 +976,17 @@ export function computeHitWindows(
   line: number | null,
   activeSeason: number,
   opponentTeamId: string,
+  courtRows: readonly PlayerGameRow[] = rows,
 ): HitWindowSummary[] {
   const valid = rows.filter((row) => historicalStatValue(row, market) !== null);
   const seasonRows = valid.filter((row) => row.season === activeSeason);
   const h2hRows = valid.filter((row) => row.opp === opponentTeamId);
+  const court = courtRows.filter((row) => historicalStatValue(row, market) !== null);
   return [
     { key: 'L5', label: 'L5', grade: gradeHistoricalSeries(valid.slice(-5), market, side, line) },
     { key: 'L10', label: 'L10', grade: gradeHistoricalSeries(valid.slice(-10), market, side, line) },
-    { key: 'L15', label: 'L15', grade: gradeHistoricalSeries(valid.slice(-15), market, side, line) },
-    { key: 'L20', label: 'L20', grade: gradeHistoricalSeries(valid.slice(-20), market, side, line) },
+    { key: 'HOME', label: 'Home', grade: gradeHistoricalSeries(court.filter((row) => row.home), market, side, line) },
+    { key: 'AWAY', label: 'Away', grade: gradeHistoricalSeries(court.filter((row) => !row.home), market, side, line) },
     { key: 'SEASON', label: 'SEASON', grade: gradeHistoricalSeries(seasonRows, market, side, line) },
     { key: 'H2H', label: 'H2H', grade: gradeHistoricalSeries(h2hRows, market, side, line) },
   ];

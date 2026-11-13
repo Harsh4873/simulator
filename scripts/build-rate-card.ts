@@ -329,6 +329,20 @@ export function parseRoster(teamId: string, payload: unknown): RosterPlayer[] {
   return out;
 }
 
+function injuryText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/** Side, body part, and the short report. The long comment stays off the card. */
+export function injuryNote(item: Record<string, unknown>): string | null {
+  const details = isRecord(item.details) ? item.details : null;
+  const label = details
+    ? [injuryText(details.side), injuryText(details.type).toLowerCase(), injuryText(details.detail).toLowerCase()].filter(Boolean).join(' ')
+    : '';
+  const note = [label, injuryText(item.shortComment)].filter(Boolean).join(' — ');
+  return note ? note.slice(0, 280) : null;
+}
+
 export function parseInjuries(payload: unknown): InjuryInput[] {
   const root = isRecord(payload) ? payload : {};
   if (!Array.isArray(root.injuries)) throw new Error('Invalid injury report');
@@ -346,7 +360,7 @@ export function parseInjuries(payload: unknown): InjuryInput[] {
       const athleteId = String(athlete.id ?? uniqueIds[0] ?? '').trim();
       const name = String(athlete.displayName || athlete.fullName || '').trim();
       if ((!athleteId && !name) || typeof item.status !== 'string' || !item.status.trim()) throw new Error('Missing injury identity or designation');
-      injuries.push({ reported_at:typeof item.date==='string'?item.date:null, minutes_restriction:null, athlete_id: athleteId, name, status: String((isRecord(item.type) && item.type.description) || item.status || 'unknown') });
+      injuries.push({ reported_at:typeof item.date==='string'?item.date:null, minutes_restriction:null, athlete_id: athleteId, name, note: injuryNote(item), status: String((isRecord(item.type) && item.type.description) || item.status || 'unknown') });
     }
   }
   return injuries;

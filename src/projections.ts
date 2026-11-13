@@ -47,6 +47,7 @@ const MARKETS: { value: PropMarket; label: string; short: string }[] = [
 ];
 
 export type HistorySplit = 'all' | 'home' | 'away';
+export type BoardSort = 'projection' | 'over' | 'under';
 export type SupportMode = 'avg' | 'med';
 
 export interface ProjectionView {
@@ -66,6 +67,7 @@ export interface ProjectionView {
   readyEventIds?: ReadonlySet<string>;
   overrides: LineupOverrides;
   historySplit?: HistorySplit;
+  boardSort?: BoardSort;
   selectedGameIndex?: number | null;
   supportMode?: SupportMode;
   selectedTeammateId?: string | null;
@@ -78,6 +80,10 @@ export function isPropMarket(value: string): value is PropMarket {
 
 export function isHistorySplit(value: string): value is HistorySplit {
   return value === 'all' || value === 'home' || value === 'away';
+}
+
+export function isBoardSort(value: string): value is BoardSort {
+  return value === 'projection' || value === 'over' || value === 'under';
 }
 
 export function isDefenseSlot(value: string): value is DefenseSlot {
@@ -248,10 +254,11 @@ function hitToneClass(rate: number | null): string {
   return 'tone-low';
 }
 
-function compactHitCell(rows: readonly PlayerGameRow[], windowSize: number, form: PropFormState, line: number | null): string {
+function compactHitCell(rows: readonly PlayerGameRow[], form: PropFormState, line: number | null, take?: number): string {
   if (line === null || !rows.length) return '<td class="board-hit-cell">—</td>';
-  const valid = rows.filter((r) => historicalStatValue(r, form.market) !== null).slice(-windowSize);
-  const grade = gradeHistoricalSeries(valid, form.market, form.side, line);
+  const valid = rows.filter((r) => historicalStatValue(r, form.market) !== null);
+  const sample = take === undefined ? valid : valid.slice(-take);
+  const grade = gradeHistoricalSeries(sample, form.market, form.side, line);
   if (grade.decided === 0) return '<td class="board-hit-cell">—</td>';
   const pct = Math.round((grade.rate ?? 0) * 100);
   return `<td class="board-hit-cell"><span class="hit-chip ${hitToneClass(grade.rate)}"><strong>${pct}%</strong><small>${grade.wins}/${grade.decided}</small></span></td>`;
@@ -265,9 +272,22 @@ interface BoardRow {
   line: number | null;
   over: string;
   under: string;
+  overRate: number | null;
+  underRate: number | null;
   edge: string;
   note: string | null;
   games: PlayerGameRow[];
+}
+
+function byRate(key: 'overRate' | 'underRate') {
+  return (a: BoardRow, b: BoardRow) => {
+    const left = a[key];
+    const right = b[key];
+    if (left === null && right === null) return a.name.localeCompare(b.name);
+    if (left === null) return 1;
+    if (right === null) return -1;
+    return right - left || a.name.localeCompare(b.name);
+  };
 }
 
 function boardRows(
@@ -275,7 +295,8 @@ function boardRows(
   simulation: Simulation | null,
   form: PropFormState,
   athleteId: string | null,
-  context?: ProjectionContext,
+  context: ProjectionContext | undefined,
+  sort: BoardSort,
 ): BoardRow[] {
   const viewerGraded = validPropLine(form.line);
   const validViewer = viewerGraded !== null && !((form.market === 'dd' || form.market === 'td') && viewerGraded !== 0.5) ? viewerGraded : null;
@@ -287,19 +308,19 @@ function boardRows(
     let note: string | null = null;
     if (simulation && missing) note = 'This stat is missing from the older card.';
     else if (simulation && projection === null) note = 'does not play in the simulations.';
-    const rowLine =
-      player.athlete_id === athleteId
-        ? validViewer
-        : validViewer !== null || context
-          ? defaultMarketLine(form.market, sample, context, player.athlete_id)
-          : null;
+    const ownLine = sample || context ? defaultMarketLine(form.market, sample, context, player.athlete_id) : null;
+    const rowLine = player.athlete_id === athleteId ? validViewer ?? ownLine : ownLine;
     let over = '';
     let under = '';
+    let overRate: number | null = null;
+    let underRate: number | null = null;
     let edge = '';
     if (sample && rowLine !== null && !missing && projection !== null) {
       const pair = chancePair(sample, form.market, rowLine);
-      over = !pair || pair.over === null ? '' : percent(pair.over);
-      under = !pair || pair.under === null ? '' : percent(pair.under);
+      overRate = pair?.over ?? null;
+      underRate = pair?.under ?? null;
+      over = overRate === null ? '' : percent(overRate);
+      under = underRate === null ? '' : percent(underRate);
       edge = edgeText(sample, form.market, form, rowLine);
     }
     const games = context ? unpackPlayerGames(context.players[player.athlete_id]?.games) : [];
@@ -311,11 +332,21 @@ function boardRows(
       line: projection === null && simulation ? null : rowLine,
       over,
       under,
+      overRate,
+      underRate,
       edge,
       note,
       games,
     };
   });
+  if (sort === 'over' && simulation) {
+    rows.sort(byRate('overRate'));
+    return rows;
+  }
+  if (sort === 'under' && simulation) {
+    rows.sort(byRate('underRate'));
+    return rows;
+  }
   if (!simulation) {
     rows.sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name));
     return rows;
@@ -336,8 +367,9 @@ export function projectionBoardHtml(
   eventId: string,
   athleteId: string | null,
   context?: ProjectionContext,
+  sort: BoardSort = 'projection',
 ): string {
-  const rows = boardRows(game, simulation, form, athleteId, context);
+  const rows = boardRows(game, simulation, form, athleteId, context, sort);
   const hasHistory = Boolean(context);
   const line = validPropLine(form.line);
   const gradedLine = line !== null && !((form.market === 'dd' || form.market === 'td') && line !== 0.5) ? line : null;
@@ -348,7 +380,7 @@ export function projectionBoardHtml(
       const projection = row.note ?? (row.projection === null ? '' : row.projection.toFixed(1));
       const lineCell = row.line === null ? '' : Number.isInteger(row.line) ? row.line.toFixed(1) : String(row.line);
       const historyCols = hasHistory
-        ? `${compactHitCell(row.games, 5, form, row.line)}${compactHitCell(row.games, 10, form, row.line)}${compactHitCell(row.games, 15, form, row.line)}${compactHitCell(row.games, 20, form, row.line)}`
+        ? `${compactHitCell(row.games, form, row.line, 5)}${compactHitCell(row.games, form, row.line, 10)}${compactHitCell(row.games.filter((gameRow) => gameRow.home), form, row.line)}${compactHitCell(row.games.filter((gameRow) => !gameRow.home), form, row.line)}`
         : '';
       return `<tr${selected ? ' class="is-selected"' : ''}>
         <th scope="row"><button type="button" class="projection-player" data-projection-player="${escapeHtml(row.athleteId)}" data-projection-event="${escapeHtml(eventId)}" aria-pressed="${selected ? 'true' : 'false'}">${escapeHtml(row.name)}</button></th>
@@ -365,14 +397,18 @@ export function projectionBoardHtml(
     ? '<p class="panel-lede">Pick any player below to run 10,000 simulations and load their game log, hit windows, and on/off floor splits.</p>'
     : '';
   const waiting = simulation ? '' : '<p class="panel-lede">Projection, over, under, and edge stay blank until this game is simulated.</p>';
-  const lineBadge =
-    gradedLine !== null
-      ? `<p class="board-grade-note">Selected player graded at <strong>${sideText} ${gradedLine}</strong> · other rows use each player's own .5 median line.</p>`
-      : '';
-  const hitHead = hasHistory
-    ? `<th title="${sideText} hit rate in last 5">L5</th><th title="${sideText} hit rate in last 10">L10</th><th title="${sideText} hit rate in last 15">L15</th><th title="${sideText} hit rate in last 20">L20</th>`
+  const lineBadge = simulation
+    ? `<p class="board-grade-note">${gradedLine !== null ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}Every other line is the half-point under that player's simulated median, not a book number. Over and Under are the share of the 10,000 draws in which the player played.</p>`
     : '';
-  return `${pickPrompt}${waiting}${lineBadge}<div class="table-scroll"><table>
+  const hitHead = hasHistory
+    ? `<th title="${sideText} hit rate in the last 5 box scores">L5</th><th title="${sideText} hit rate in the last 10 box scores">L10</th><th title="${sideText} hit rate in every stored home game">Home</th><th title="${sideText} hit rate in every stored away game">Away</th>`
+    : '';
+  const sortBar = `<div class="mini-tabs board-sort" role="group" aria-label="Order the board">
+      <button type="button" class="mini-tab" data-board-sort="projection" aria-pressed="${sort === 'projection' ? 'true' : 'false'}">Projection</button>
+      <button type="button" class="mini-tab" data-board-sort="over" aria-pressed="${sort === 'over' ? 'true' : 'false'}">Highest over</button>
+      <button type="button" class="mini-tab" data-board-sort="under" aria-pressed="${sort === 'under' ? 'true' : 'false'}">Highest under</button>
+    </div>`;
+  return `${pickPrompt}${waiting}${sortBar}${lineBadge}<div class="table-scroll"><table>
       <thead><tr><th>Player</th><th>Projection</th><th>Line</th>${hitHead}<th>Over</th><th>Under</th><th>Edge</th></tr></thead>
       <tbody>${body}</tbody>
     </table></div>`;
@@ -691,10 +727,11 @@ export function historyWindowsHtml(
   form: PropFormState,
   activeSeason: number,
   opponentTeamId: string,
+  courtRows: readonly PlayerGameRow[] = filteredRows,
 ): string {
   const line = validPropLine(form.line);
   const graded = line !== null && !((form.market === 'dd' || form.market === 'td') && line !== 0.5) ? line : null;
-  const windows = computeHitWindows(filteredRows, form.market, form.side, graded, activeSeason, opponentTeamId);
+  const windows = computeHitWindows(filteredRows, form.market, form.side, graded, activeSeason, opponentTeamId, courtRows);
   const sideLabel = form.side === 'under' ? 'Under' : 'Over';
   const cards = windows
     .map((win) => {
@@ -748,7 +785,7 @@ function historyPanelHtml(
   return `<section class="projection-card history-panel" aria-label="Historical game record">
       <div class="section-head">
         <div>
-          <h3 class="section-kicker">${escapeHtml(marketLabel(form.market))} · last 20</h3>
+          <h3 class="section-kicker">${escapeHtml(marketLabel(form.market))} · recent games</h3>
           <p class="section-sub">${filtered.length} games in this cut · click any bar to inspect the box score</p>
         </div>
         <div class="mini-tabs" role="group" aria-label="Location filter">
@@ -759,7 +796,7 @@ function historyPanelHtml(
       </div>
       <div data-history-summary>${historySummaryHtml(filtered, allRows, form, context.active_season)}</div>
       <div data-history-chart>${historyChartBlockHtml(filtered, form, view.selectedGameIndex ?? null, sideAbbr(team), view.slate, context)}</div>
-      <div data-history-windows>${historyWindowsHtml(filtered, form, context.active_season, opponent.team_id)}</div>
+      <div data-history-windows>${historyWindowsHtml(filtered, form, context.active_season, opponent.team_id, allRows)}</div>
       ${supportingStatsHtml(filtered, form.market, mode)}
     </section>`;
 }
@@ -1193,6 +1230,38 @@ function gamesHtml(view: ProjectionView, game: SlateGame | null, rate: RateGame 
     </aside>`;
 }
 
+function injuryReportHtml(rate: RateGame, game: SlateGame): string {
+  const sides = [
+    { id: game.away.team_id, label: sideAbbr(game.away) },
+    { id: game.home.team_id, label: sideAbbr(game.home) },
+  ];
+  const blocks = sides
+    .map((side) => {
+      const players = rate.players
+        .filter((player) => {
+          const status = player.injury_status.trim().toLowerCase();
+          return player.team_id === side.id && !player.replacement_level && status !== '' && status !== 'healthy';
+        })
+        .sort((a, b) => Number(b.minutes_weight === 0) - Number(a.minutes_weight === 0) || a.name.localeCompare(b.name));
+      if (!players.length) return '';
+      const items = players
+        .map((player) => {
+          const when = player.injury_reported_at ? formatTip(player.injury_reported_at) : '';
+          const cap = player.minutes_restriction != null ? `Minutes cap ${player.minutes_restriction}` : '';
+          const meta = [player.injury_status, when, cap].filter(Boolean).join(' · ');
+          const note = player.injury_note?.trim()
+            ? `<span class="injury-note">${escapeHtml(player.injury_note.trim())}</span>`
+            : '';
+          return `<li class="injury-row"><strong>${escapeHtml(player.name)}</strong><span class="injury-meta">${escapeHtml(meta)}</span>${note}</li>`;
+        })
+        .join('');
+      return `<div><p class="stat-group-label">${escapeHtml(side.label)}</p><ul>${items}</ul></div>`;
+    })
+    .join('');
+  const body = blocks || '<p class="prop-note">No one on this card is on the injury report.</p>';
+  return `<section class="injury-report" aria-label="Injury report"><h3>Injury report</h3><p class="section-sub">Designations on the published card. The simulator already sits players from this report.</p>${body}</section>`;
+}
+
 export function renderProjections(view: ProjectionView): string {
   const game = view.slate.games.find((item) => item.event_id === view.eventId) ?? null;
   const rate = view.card.games.find((item) => item.event_id === view.eventId) ?? null;
@@ -1200,7 +1269,7 @@ export function renderProjections(view: ProjectionView): string {
   const boardMeter = view.drawing && !view.athleteId ? inlineDrawingHtml(view.drawProgress) : '';
   const board =
     game && rate
-      ? `${boardMeter}<section class="team-box projection-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2><div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context)}</div></section>`
+      ? `${boardMeter}<section class="team-box projection-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2>${injuryReportHtml(rate, game)}<div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection')}</div></section>`
       : '<p class="state">Search a player, or pick a game. Historical trends load right away, and 10,000 simulations warm in the background.</p>';
   return `<div class="projection-page">
       <header class="projection-intro">

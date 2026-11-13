@@ -27,6 +27,7 @@ import {
   historySummaryHtml,
   historyWindowsHtml,
   isDefenseSlot,
+  isBoardSort,
   isHistorySplit,
   isPropMarket,
   l10HistoricalValues,
@@ -37,6 +38,7 @@ import {
   renderProjections,
   searchHitsHtml,
   viewerLine,
+  type BoardSort,
   type HistorySplit,
   type ProjectionView,
   type SupportMode,
@@ -84,6 +86,7 @@ let projectionQuery = '';
 let projectionEvent: string | null = null;
 let projectionAthlete: string | null = null;
 let projectionHistorySplit: HistorySplit = 'all';
+let projectionBoardSort: BoardSort = 'projection';
 let projectionSelectedBar: number | null = null;
 let projectionSupportMode: SupportMode = 'avg';
 let projectionTeammate: string | null = null;
@@ -229,6 +232,7 @@ function projectionView(): ProjectionView | null {
     readyEventIds: readyEventIdSet(),
     overrides: projectionEvent ? editsFor(projectionEvent) : {},
     historySplit: projectionHistorySplit,
+    boardSort: projectionBoardSort,
     selectedGameIndex: projectionSelectedBar,
     supportMode: projectionSupportMode,
     selectedTeammateId: projectionTeammate,
@@ -295,7 +299,7 @@ function paintProjectionFigures(): void {
   const chart = projectionsRoot.querySelector<HTMLElement>('[data-projection-chart]');
   if (chart) chart.innerHTML = projectionChartHtml(sample, form.market, form.line);
   const board = projectionsRoot.querySelector<HTMLElement>('[data-projection-board]');
-  if (board && rate) board.innerHTML = projectionBoardHtml(rate, simulation, form, projectionEvent, projectionAthlete, card.projection_context);
+  if (board && rate) board.innerHTML = projectionBoardHtml(rate, simulation, form, projectionEvent, projectionAthlete, card.projection_context, projectionBoardSort);
   const player = projectionAthlete ? rate?.players.find((item) => item.athlete_id === projectionAthlete) ?? null : null;
   const results = projectionsRoot.querySelector<HTMLElement>('[data-prop-results]');
   if (results && simulation && projectionAthlete) {
@@ -322,7 +326,7 @@ function paintProjectionFigures(): void {
     const histChartEl = projectionsRoot.querySelector<HTMLElement>('[data-history-chart]');
     if (histChartEl) histChartEl.innerHTML = historyChartBlockHtml(filtered, form, projectionSelectedBar, teamAbbr, slate, context);
     const windowsEl = projectionsRoot.querySelector<HTMLElement>('[data-history-windows]');
-    if (windowsEl) windowsEl.innerHTML = historyWindowsHtml(filtered, form, context.active_season, oppSide.team_id);
+    if (windowsEl) windowsEl.innerHTML = historyWindowsHtml(filtered, form, context.active_season, oppSide.team_id, allRows);
     const logBody = projectionsRoot.querySelector<HTMLElement>('[data-gamelog-body]');
     if (logBody) logBody.innerHTML = gameLogRowsHtml(filtered, form, slate, context);
   }
@@ -814,6 +818,14 @@ function onDeskClick(event: Event): void {
     return;
   }
   if(target.closest('[data-cancel]')){cancelRun?.();return;}
+  const boardSortBtn = target.closest('button[data-board-sort]');
+  const boardSort = boardSortBtn instanceof HTMLButtonElement ? boardSortBtn.dataset.boardSort ?? '' : '';
+  if (boardSortBtn instanceof HTMLButtonElement && isBoardSort(boardSort)) {
+    projectionBoardSort = boardSort;
+    paintProjection();
+    projectionsRoot?.querySelector<HTMLButtonElement>(`[data-board-sort="${projectionBoardSort}"]`)?.focus();
+    return;
+  }
   const projectionMarket = target.closest('button[data-projection-market]');
   if (projectionMarket instanceof HTMLButtonElement && isPropMarket(projectionMarket.dataset.projectionMarket ?? '')) {
     const market = projectionMarket.dataset.projectionMarket as typeof propForm.market;

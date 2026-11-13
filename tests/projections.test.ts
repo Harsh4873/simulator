@@ -395,8 +395,13 @@ test('projection_context renders verified historical hit windows, reconstructed 
   const windows = computeHitWindows(unpackedGames, 'pts', 'over', 22.5, 2027, game.away_team_id);
   assert.equal(windows.find((w) => w.key === 'L5')?.grade.wins, 2);
   assert.equal(windows.find((w) => w.key === 'L5')?.grade.decided, 5);
+  assert.equal(windows.find((w) => w.key === 'HOME')?.grade.wins, 2);
+  assert.equal(windows.find((w) => w.key === 'HOME')?.grade.decided, 3);
+  assert.equal(windows.find((w) => w.key === 'AWAY')?.grade.wins, 1);
+  assert.equal(windows.find((w) => w.key === 'AWAY')?.grade.decided, 3);
   assert.equal(windows.find((w) => w.key === 'SEASON')?.grade.wins, 3);
   assert.equal(windows.find((w) => w.key === 'H2H')?.grade.wins, 3);
+  assert.equal(windows.some((w) => w.label === 'L15' || w.label === 'L20'), false);
   assert.deepEqual(computeStreak(unpackedGames, 'pts', 22.5), { count: 3, kind: 'under' });
 
   const onOff = unpackOnOff(starEntry.on_off);
@@ -413,6 +418,11 @@ test('projection_context renders verified historical hit windows, reconstructed 
   assert.equal(oppDef.games, 6);
   assert.ok(unpackTeamAllowed(oppDef, 'pts', 'all')[0] > 0);
 
+  const listed = enrichedCard.games[0].players.find((p) => p.athlete_id === mateA.athlete_id);
+  assert.ok(listed);
+  listed.injury_status = 'out';
+  listed.injury_note = 'Left knee inflammation — out Friday.';
+  listed.injury_reported_at = '2026-11-02T18:00:00Z';
   const simulation = simulate(enrichedCard.games[0], seed, draws);
   const form: PropFormState = { market: 'pts', side: 'over', line: '22.5', style: 'american', odds: '-110', opposite: '' };
   const html = renderProjections({
@@ -431,6 +441,10 @@ test('projection_context renders verified historical hit windows, reconstructed 
   assert.match(html, /Who he shares the floor with/i);
   assert.match(html, /3 unders/);
   assert.match(html, /40%/);
+  assert.match(html, />Home</);
+  assert.equal(html.includes('>L15<') || html.includes('>L20<'), false);
+  assert.match(html, /Injury report/);
+  assert.match(html, /Left knee inflammation/);
   assert.match(html, /Game log/i);
   assert.match(html, /Per minute/i);
   assert.equal(html.toLowerCase().includes('fantasy'), false);
@@ -773,6 +787,35 @@ test('model and board accuracy fixes: .5 hook lines, per-player board lines, cam
   const roleHook = naturalHookLine('pts', playedValues(roleSample, 'pts'));
   assert.ok(roleHook < 20);
   assert.equal(boardHtml.includes(`<td>${roleHook}</td>`), true);
+  const overHtml = projectionBoardHtml(
+    game,
+    sim,
+    { market: 'pts', side: 'over', line: '', style: 'american', odds: '', opposite: '' },
+    game.event_id,
+    null,
+    undefined,
+    'over',
+  );
+  assert.match(overHtml, /data-board-sort="over" aria-pressed="true"/);
+  let bestName = '';
+  let bestRate = -1;
+  for (const player of game.players) {
+    const sample = sim.playerDraws.get(player.athlete_id);
+    if (!sample) continue;
+    const values = playedValues(sample, 'pts');
+    if (!values.length) continue;
+    const hook = naturalHookLine('pts', values);
+    const grade = gradeProp(sample, 'pts', 'over', hook);
+    const decided = grade.wins + grade.losses;
+    if (!decided) continue;
+    const rate = grade.wins / decided;
+    if (rate > bestRate || (rate === bestRate && (bestName === '' || player.name.localeCompare(bestName) < 0))) {
+      bestRate = rate;
+      bestName = player.name;
+    }
+  }
+  const firstName = overHtml.match(/<th scope="row"><button[^>]*>([^<]+)<\/button>/);
+  assert.equal(firstName?.[1], bestName);
 
   // 3. Team-changed newcomer with 0 prior-season games and 0 current-team games gets newcomer prior and cameo cap, not phantom 20 min.
   const transfer: RatePlayer = {

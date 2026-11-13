@@ -24,6 +24,7 @@ export function validateGame(game: RateGame): void {
     for(const key of ['stl_per_min','blk_per_min','tov_per_min','points_scale'] as const)if(p[key]!==undefined&&(!Number.isFinite(p[key])||p[key]!<0))throw new Error(`Invalid ${key}`);
     if(p.orb_share!==undefined&&(!Number.isFinite(p.orb_share)||p.orb_share<0||p.orb_share>1))throw new Error('Invalid orb_share');
     if(p.minutes_restriction!=null&&(!Number.isFinite(p.minutes_restriction)||p.minutes_restriction<0||p.minutes_restriction>48))throw new Error('Invalid minutes restriction');
+    if(p.injury_note!=null&&(typeof p.injury_note!=='string'||p.injury_note.length===0||p.injury_note.length>280))throw new Error('Invalid injury note');
     if(p.play_probability !== undefined && (!Number.isFinite(p.play_probability)||p.play_probability<0||p.play_probability>1))throw new Error('Invalid participation probability');
     if (p.minutes_weight !== 0 && p.minutes_weight !== 1) throw new Error('Unknown availability');
   }

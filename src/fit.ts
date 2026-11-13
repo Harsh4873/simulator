@@ -38,6 +38,8 @@ export interface InjuryInput {
   status: string;
   reported_at?: string | null;
   minutes_restriction?: number | null;
+  /** Body part and the short report line. Not the long comment. */
+  note?: string | null;
 }
 
 export interface FitInput {
@@ -321,6 +323,7 @@ export function fitPlayers(input: FitInput): FitResult {
       points_scale: pointsScale,
       skill_prior:skill?{source:skill.source,role,accepted:skill.accepted,strengths:{share:skill.accepted?.share===false?K_FGA_SHARE:skill.strengths.share,fg2:skill.accepted?.fg2===false?K_FG2:skill.strengths.fg2,tp:skill.accepted?.tp===false?K_TP:skill.strengths.tp,ft:skill.accepted?.ft===false?K_FT:skill.strengths.ft},older_history:priorGames2026?'observed':'unknown'}:undefined,
       injury_reported_at: input.injuries.find(x=>x.athlete_id===player.athlete_id)?.reported_at??null,
+      injury_note: input.injuries.find(x=>x.athlete_id===player.athlete_id)?.note??null,
       minutes_restriction: input.injuries.find(x=>x.athlete_id===player.athlete_id)?.minutes_restriction??null,
       athlete_id: player.athlete_id,
       name: player.name,

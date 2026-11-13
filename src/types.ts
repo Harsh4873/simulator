@@ -93,6 +93,8 @@ export interface RatePlayer {
   skill_prior?:{source:string;role:string;strengths:Record<string,number>;accepted?:Partial<Record<string,boolean>>;older_history:string};
   evidence?: PlayerEvidence;
   injury_reported_at?: string | null;
+  /** ESPN short report for this listing: body part, then the short comment. Absent when the player is not listed. */
+  injury_note?: string | null;
   minutes_restriction?: number | null;
   starter_rate?: number | null;
   closing_rate?: number | null;

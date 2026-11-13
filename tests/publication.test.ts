@@ -21,6 +21,7 @@ test('generation requires every matchup, unique identities, feasible rosters and
 test('invalid scoreboard and injury payloads fail closed; explicit empty report is valid', () => {
   for (const p of [null, {}, {injuries: null}, {injuries: [{}]}]) assert.throws(() => parseInjuries(p));
   assert.deepEqual(parseInjuries({injuries: []}), []);
+  assert.deepEqual(parseInjuries({injuries:[{injuries:[{status:'Out',date:'2026-11-12T15:00:00Z',shortComment:'Gilbert (knee) is out Friday.',details:{side:'Left',type:'Knee',detail:'Inflammation'},athlete:{id:'9',displayName:'Keshon Gilbert'}}]}]}), [{reported_at:'2026-11-12T15:00:00Z',minutes_restriction:null,athlete_id:'9',name:'Keshon Gilbert',note:'Left knee inflammation — Gilbert (knee) is out Friday.',status:'Out'}]);
   assert.throws(() => gamesFromScoreboard({},'2026-10-30',[]));
 });
 test('outcomes reject missing, conflicting, pending and negative values and deduplicate', () => {
