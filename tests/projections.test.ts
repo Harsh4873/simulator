@@ -22,7 +22,7 @@ import {
   unpackPlayerGames,
   unpackTeamAllowed,
 } from '../src/projection-context.ts';
-import { gradeProp, quoteProp } from '../src/props.ts';
+import { gradeProp, quoteProp, type PlayerSample } from '../src/props.ts';
 import {
   defaultMarketLine,
   modelChanceHtml,
@@ -31,6 +31,7 @@ import {
   playedMean,
   playedValues,
   modelSidesInner,
+  propEligible,
   projectionBoardHtml,
   renderProjections,
   slateLeans,
@@ -803,7 +804,7 @@ test('model and board accuracy fixes: .5 hook lines, per-player board lines, cam
   let bestRate = -1;
   for (const player of game.players) {
     const sample = sim.playerDraws.get(player.athlete_id);
-    if (!sample) continue;
+    if (!sample || !propEligible(sample, 'pts')) continue;
     const values = playedValues(sample, 'pts');
     if (!values.length) continue;
     const hook = naturalHookLine('pts', values);
@@ -830,6 +831,41 @@ test('model and board accuracy fixes: .5 hook lines, per-player board lines, cam
   assert.ok(lead);
   assert.equal(sidesHtml.includes(lead.name), true);
   assert.match(modelSidesInner(oneSlate, card, 'pts', new Map()), /warming up/);
+  const cameo: PlayerSample = {
+    min: Array(40).fill(4),
+    pts: Array(40).fill(0),
+    reb: Array(40).fill(0),
+    ast: Array(40).fill(0),
+    tpm: Array(40).fill(0),
+  };
+  const scorer: PlayerSample = {
+    min: Array(40).fill(34),
+    pts: Array(40).fill(22),
+    reb: Array(40).fill(6),
+    ast: Array(40).fill(5),
+    tpm: Array(40).fill(2),
+  };
+  assert.equal(propEligible(cameo, 'pts'), false);
+  assert.equal(propEligible(scorer, 'pts'), true);
+  const spiked: PlayerSample = {
+    min: Array(40).fill(18),
+    pts: [...Array(32).fill(0), ...Array(8).fill(20)],
+    reb: Array(40).fill(2),
+    ast: Array(40).fill(1),
+    tpm: Array(40).fill(0),
+  };
+  assert.equal(propEligible(spiked, 'pts'), false);
+  const cameoPlayer = { ...game.players[0]!, athlete_id: 'cameo', name: 'Cameo Zero', replacement_level: undefined };
+  const scorerPlayer = { ...game.players[1]!, athlete_id: 'scorer', name: 'Star Scorer', replacement_level: undefined };
+  const tinyGame = { ...game, players: [cameoPlayer, scorerPlayer] };
+  const tinyCard = { ...card, games: [tinyGame] };
+  const cameoDraws = new Map<string, Simulation>([
+    [game.event_id, { playerDraws: new Map([['cameo', cameo], ['scorer', scorer]]) } as Simulation],
+  ]);
+  const filtered = slateLeans(oneSlate, tinyCard, 'pts', cameoDraws);
+  assert.deepEqual(filtered.over.map((row) => row.name), ['Star Scorer']);
+  assert.deepEqual(filtered.under.map((row) => row.name), []);
+  assert.equal(modelSidesInner(oneSlate, tinyCard, 'pts', cameoDraws).includes('Cameo Zero'), false);
 
   // 3. Team-changed newcomer with 0 prior-season games and 0 current-team games gets newcomer prior and cameo cap, not phantom 20 min.
   const transfer: RatePlayer = {

@@ -114,6 +114,63 @@ export function playedMean(values: readonly number[]): number | null {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
+/** Expected minutes across every draw, including the games a player sits. */
+function expectedMinutes(sample: PlayerSample): number {
+  if (!sample.min.length) return 0;
+  let total = 0;
+  for (let index = 0; index < sample.min.length; index += 1) {
+    const minutes = sample.min[index];
+    if (minutes > 0) total += minutes;
+  }
+  return total / sample.min.length;
+}
+
+/**
+ * A near-zero stat at a 0.5 hook is an almost automatic under, which is not a prop.
+ * Rotation minutes and a real per-game average are required before a rate is shown or ranked.
+ */
+const ROTATION_MINUTES = 10;
+const STAT_FLOOR: Record<PropMarket, number> = {
+  pts: 4,
+  reb: 2,
+  ast: 1.5,
+  pra: 8,
+  pa: 6,
+  pr: 6,
+  ra: 3.5,
+  tpm: 0.8,
+  stl: 0.4,
+  blk: 0.3,
+  tov: 0.7,
+  dd: 0.25,
+  td: 0.08,
+};
+/** Median hook below this means the typical game is empty, even if a few outliers pull the average up. */
+const LINE_FLOOR: Record<PropMarket, number> = {
+  pts: 4.5,
+  reb: 1.5,
+  ast: 1.5,
+  pra: 7.5,
+  pa: 5.5,
+  pr: 5.5,
+  ra: 2.5,
+  tpm: 0.5,
+  stl: 0.5,
+  blk: 0.5,
+  tov: 0.5,
+  dd: 0.5,
+  td: 0.5,
+};
+
+export function propEligible(sample: PlayerSample, market: PropMarket): boolean {
+  if (statMissing(sample, market)) return false;
+  if (expectedMinutes(sample) < ROTATION_MINUTES) return false;
+  const values = playedValues(sample, market);
+  const mean = playedMean(values);
+  if (mean === null || mean < STAT_FLOOR[market]) return false;
+  return naturalHookLine(market, values) >= LINE_FLOOR[market];
+}
+
 /** Nearest nonnegative half point to the median of the values. */
 export function nearestHalfPoint(values: ArrayLike<number>): number {
   const nums: number[] = [];
@@ -317,7 +374,7 @@ function boardRows(
     let overRate: number | null = null;
     let underRate: number | null = null;
     let edge = '';
-    if (sample && rowLine !== null && !missing && projection !== null) {
+    if (sample && rowLine !== null && !missing && projection !== null && propEligible(sample, form.market)) {
       const pair = chancePair(sample, form.market, rowLine);
       overRate = pair?.over ?? null;
       underRate = pair?.under ?? null;
@@ -400,7 +457,7 @@ export function projectionBoardHtml(
     : '';
   const waiting = simulation ? '' : '<p class="panel-lede">Projection, over, under, and edge stay blank until this game is simulated.</p>';
   const lineBadge = simulation
-    ? `<p class="board-grade-note">${gradedLine !== null ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}Every other line is the half-point under that player's simulated median, not a book number. Over and Under are the share of the 10,000 draws in which the player played.</p>`
+    ? `<p class="board-grade-note">${gradedLine !== null ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}Every other line is the half-point under that player's simulated median, not a book number. Over and Under are the share of the 10,000 draws in which the player played. A player under 10 expected minutes, or whose average for this stat is near zero, is left blank so a 0.5 under is not treated as a lock.</p>`
     : '';
   const hitHead = hasHistory
     ? `<th title="${sideText} hit rate in the last 5 box scores">L5</th><th title="${sideText} hit rate in the last 10 box scores">L10</th><th title="${sideText} hit rate in every stored home game">Home</th><th title="${sideText} hit rate in every stored away game">Away</th>`
@@ -1239,6 +1296,7 @@ export interface SlateLean {
   matchup: string;
   side: 'over' | 'under';
   line: number;
+  projection: number;
   rate: number;
 }
 
@@ -1266,11 +1324,13 @@ export function slateLeans(
     for (const player of rate.players) {
       if (player.replacement_level) continue;
       const sample = simulation.playerDraws.get(player.athlete_id);
-      if (!sample || statMissing(sample, market)) continue;
+      if (!sample || !propEligible(sample, market)) continue;
       const line = defaultMarketLine(market, sample, undefined, player.athlete_id);
-      if (line === null) continue;
+      const projection = playedMean(playedValues(sample, market));
+      if (line === null || projection === null) continue;
       const pair = chancePair(sample, market, line);
       if (!pair || pair.over === null || pair.under === null || pair.over === pair.under) continue;
+      if ((market === 'dd' || market === 'td') && pair.over <= pair.under) continue;
       const lean: SlateLean = {
         eventId: listed.event_id,
         athleteId: player.athlete_id,
@@ -1278,6 +1338,7 @@ export function slateLeans(
         matchup,
         side: pair.over > pair.under ? 'over' : 'under',
         line,
+        projection,
         rate: pair.over > pair.under ? pair.over : pair.under,
       };
       (lean.side === 'over' ? over : under).push(lean);
@@ -1295,7 +1356,7 @@ function leanColumn(title: string, rows: readonly SlateLean[], empty: string): s
         .map((row) => {
           const line = Number.isInteger(row.line) ? row.line.toFixed(1) : String(row.line);
           const side = row.side === 'over' ? 'Over' : 'Under';
-          return `<li><button type="button" class="lean-row" data-projection-player="${escapeHtml(row.athleteId)}" data-projection-event="${escapeHtml(row.eventId)}"><span class="lean-name">${escapeHtml(row.name)}</span><span class="lean-meta">${escapeHtml(row.matchup)} · ${side} ${escapeHtml(line)}</span><strong>${escapeHtml(percent(row.rate))}</strong></button></li>`;
+          return `<li><button type="button" class="lean-row" data-projection-player="${escapeHtml(row.athleteId)}" data-projection-event="${escapeHtml(row.eventId)}"><span class="lean-name">${escapeHtml(row.name)}</span><span class="lean-meta">${escapeHtml(row.matchup)} · proj ${row.projection.toFixed(1)} · ${side} ${escapeHtml(line)}</span><strong>${escapeHtml(percent(row.rate))}</strong></button></li>`;
         })
         .join('')}</ul>`
     : `<p class="prop-note">${empty}</p>`;
@@ -1316,7 +1377,7 @@ export function modelSidesInner(
   const waiting = leans.waiting
     ? `<p class="section-sub">${leans.waiting} ${leans.waiting === 1 ? 'game is' : 'games are'} still simulating.</p>`
     : '';
-  return `<h2>${escapeHtml(marketLabel(market))}</h2><p class="section-sub">The stronger side of each simulated player's own half-point hook. That hook is not a book line, and the percentage is not a price edge. A book price still has to be typed on the player.</p>${waiting}<div class="lean-columns">${leanColumn('Over', leans.over, 'No simulated player leans over.')}${leanColumn('Under', leans.under, 'No simulated player leans under.')}</div>`;
+  return `<h2>${escapeHtml(marketLabel(market))}</h2><p class="section-sub">Rotation players only, on their own half-point hook. Short-minute and near-zero stats are left off, so a player who scores nothing is not listed as a lock. The hook is not a book line.</p>${waiting}<div class="lean-columns">${leanColumn('Over', leans.over, 'No rotation player leans over.')}${leanColumn('Under', leans.under, 'No rotation player leans under.')}</div>`;
 }
 
 function injuryReportHtml(rate: RateGame, game: SlateGame): string {
