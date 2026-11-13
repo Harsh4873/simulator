@@ -25,12 +25,13 @@ import {
 import { gradeProp, quoteProp, type PlayerSample } from '../src/props.ts';
 import {
   defaultMarketLine,
+  gradedPropLine,
   modelChanceHtml,
+  modelSidesInner,
   naturalHookLine,
   nearestHalfPoint,
   playedMean,
   playedValues,
-  modelSidesInner,
   propEligible,
   projectionBoardHtml,
   renderProjections,
@@ -789,7 +790,7 @@ test('model and board accuracy fixes: .5 hook lines, per-player board lines, cam
   const roleSample = sim.playerDraws.get(rolePlayer.athlete_id)!;
   const roleHook = naturalHookLine('pts', playedValues(roleSample, 'pts'));
   assert.ok(roleHook < 20);
-  assert.equal(boardHtml.includes(`<td>${roleHook}</td>`), true);
+  assert.equal(boardHtml.includes(`<td>${roleHook}</td>`), gradedPropLine('pts', roleHook) !== null);
   const overHtml = projectionBoardHtml(
     game,
     sim,
@@ -855,6 +856,20 @@ test('model and board accuracy fixes: .5 hook lines, per-player board lines, cam
     tpm: Array(40).fill(0),
   };
   assert.equal(propEligible(spiked, 'pts'), false);
+  const low: PlayerSample = {
+    min: Array(40).fill(16),
+    pts: [...Array(20).fill(2), ...Array(20).fill(3)],
+    reb: Array(40).fill(1),
+    ast: Array(40).fill(1),
+    tpm: Array(40).fill(0),
+  };
+  assert.equal(naturalHookLine('pts', low.pts), 2.5);
+  assert.equal(defaultMarketLine('pts', low, undefined, 'low'), null);
+  assert.equal(gradedPropLine('pts', 1.5), null);
+  assert.equal(gradedPropLine('pts', 2.5), null);
+  const lowChance = modelChanceHtml(low, 'pts', '2.5');
+  assert.match(lowChance, /not graded/);
+  assert.equal(lowChance.includes('<dd>'), false);
   const cameoPlayer = { ...game.players[0]!, athlete_id: 'cameo', name: 'Cameo Zero', replacement_level: undefined };
   const scorerPlayer = { ...game.players[1]!, athlete_id: 'scorer', name: 'Star Scorer', replacement_level: undefined };
   const tinyGame = { ...game, players: [cameoPlayer, scorerPlayer] };

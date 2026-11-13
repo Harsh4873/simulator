@@ -162,13 +162,21 @@ const LINE_FLOOR: Record<PropMarket, number> = {
   td: 0.5,
 };
 
+/** Lines under this floor are not graded. A 1.5 or 2.5 point hook is one of them. */
+export function gradedPropLine(market: PropMarket, line: number | null): number | null {
+  if (line === null || !Number.isFinite(line)) return null;
+  if (market === 'dd' || market === 'td') return line === 0.5 ? line : null;
+  if (line < LINE_FLOOR[market]) return null;
+  return line;
+}
+
 export function propEligible(sample: PlayerSample, market: PropMarket): boolean {
   if (statMissing(sample, market)) return false;
   if (expectedMinutes(sample) < ROTATION_MINUTES) return false;
   const values = playedValues(sample, market);
   const mean = playedMean(values);
   if (mean === null || mean < STAT_FLOOR[market]) return false;
-  return naturalHookLine(market, values) >= LINE_FLOOR[market];
+  return gradedPropLine(market, naturalHookLine(market, values)) !== null;
 }
 
 /** Nearest nonnegative half point to the median of the values. */
@@ -228,10 +236,10 @@ export function defaultMarketLine(
   if (market === 'dd' || market === 'td') return 0.5;
   if (sample && !statMissing(sample, market)) {
     const values = playedValues(sample, market);
-    if (values.length) return naturalHookLine(market, values);
+    if (values.length) return gradedPropLine(market, naturalHookLine(market, values));
   }
   const recent = l10HistoricalValues(context, athleteId, market);
-  if (recent.length) return naturalHookLine(market, recent);
+  if (recent.length) return gradedPropLine(market, naturalHookLine(market, recent));
   return null;
 }
 
@@ -275,9 +283,13 @@ function chancePair(
 export function modelChanceHtml(sample: PlayerSample | null, market: PropMarket, lineRaw: string): string {
   if (!sample) return '<p class="prop-note">The model chance appears after this game is simulated.</p>';
   if (statMissing(sample, market)) return '<p class="prop-note">This stat is missing from the older card.</p>';
-  const line = validPropLine(lineRaw);
-  if (line === null || ((market === 'dd' || market === 'td') && line !== 0.5)) {
+  const entered = validPropLine(lineRaw);
+  if (entered === null || ((market === 'dd' || market === 'td') && entered !== 0.5)) {
     return '<p class="prop-note">Enter a whole or half-point line to see the over and under model chances.</p>';
+  }
+  const line = gradedPropLine(market, entered);
+  if (line === null) {
+    return '<p class="prop-note">Lines under the floor for this stat are not graded. A 1.5 or 2.5 point hook sits under a small median, so its over percentage is not a pick.</p>';
   }
   const pair = chancePair(sample, market, line);
   if (!pair) return '<p class="prop-note">Enter a whole or half-point line to see the over and under model chances.</p>';
@@ -368,7 +380,10 @@ function boardRows(
     if (simulation && missing) note = 'This stat is missing from the older card.';
     else if (simulation && projection === null) note = 'does not play in the simulations.';
     const ownLine = sample || context ? defaultMarketLine(form.market, sample, context, player.athlete_id) : null;
-    const rowLine = player.athlete_id === athleteId ? validViewer ?? ownLine : ownLine;
+    const rowLine =
+      player.athlete_id === athleteId && validViewer !== null
+        ? gradedPropLine(form.market, validViewer)
+        : ownLine;
     let over = '';
     let under = '';
     let overRate: number | null = null;
@@ -457,7 +472,7 @@ export function projectionBoardHtml(
     : '';
   const waiting = simulation ? '' : '<p class="panel-lede">Projection, over, under, and edge stay blank until this game is simulated.</p>';
   const lineBadge = simulation
-    ? `<p class="board-grade-note">${gradedLine !== null ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}Every other line is the half-point under that player's simulated median, not a book number. Over and Under are the share of the 10,000 draws in which the player played. A player under 10 expected minutes, or whose average for this stat is near zero, is left blank so a 0.5 under is not treated as a lock.</p>`
+    ? `<p class="board-grade-note">${gradedLine !== null && gradedPropLine(form.market, gradedLine) !== null ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}Every other graded line is the half-point under that player's simulated median, not a book number. Points lines under 4.5, including 1.5 and 2.5, are left blank.</p>`
     : '';
   const hitHead = hasHistory
     ? `<th title="${sideText} hit rate in the last 5 box scores">L5</th><th title="${sideText} hit rate in the last 10 box scores">L10</th><th title="${sideText} hit rate in every stored home game">Home</th><th title="${sideText} hit rate in every stored away game">Away</th>`
@@ -675,8 +690,7 @@ export function historySummaryHtml(
   form: PropFormState,
   activeSeason: number,
 ): string {
-  const line = validPropLine(form.line);
-  const graded = line !== null && !((form.market === 'dd' || form.market === 'td') && line !== 0.5) ? line : null;
+  const graded = gradedPropLine(form.market, validPropLine(form.line));
   const validCut = filteredRows
     .map((r) => historicalStatValue(r, form.market))
     .filter((v): v is number => v !== null && Number.isFinite(v));
@@ -788,8 +802,7 @@ export function historyWindowsHtml(
   opponentTeamId: string,
   courtRows: readonly PlayerGameRow[] = filteredRows,
 ): string {
-  const line = validPropLine(form.line);
-  const graded = line !== null && !((form.market === 'dd' || form.market === 'td') && line !== 0.5) ? line : null;
+  const graded = gradedPropLine(form.market, validPropLine(form.line));
   const windows = computeHitWindows(filteredRows, form.market, form.side, graded, activeSeason, opponentTeamId, courtRows);
   const sideLabel = form.side === 'under' ? 'Under' : 'Over';
   const cards = windows
