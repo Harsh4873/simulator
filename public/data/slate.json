@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-14T02:09:35Z",
+  "generated_at": "2026-11-14T03:00:31Z",
   "date": "2026-11-13",
   "timezone": "America/Chicago",
   "games": [
@@ -142,8 +142,8 @@
       "start_time": "2026-11-14T00:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "18",
         "name": "New York Knicks",
@@ -175,8 +175,8 @@
       "start_time": "2026-11-14T00:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "15",
         "name": "Milwaukee Bucks",
@@ -340,7 +340,7 @@
       "start_time": "2026-11-14T02:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "9",
