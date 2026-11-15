@@ -184,6 +184,10 @@ export interface Simulation {
   home: SimulatedTeam;
   upside: ScenarioView;
   playerDraws: Map<string, ToneSeries>;
+  /** Home points minus away points per draw, for a simulation that arrived as published counts (no per-draw scores). */
+  margins?: number[];
+  /** Set on a simulation rebuilt from a published summary: it is not stored in the browser, which can fetch it again. */
+  published?: true;
 }
 
 const COUNT_KEYS = ['min', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'pts', 'reb', 'ast'] as const;
@@ -807,7 +811,7 @@ function bandFrom(values: ArrayLike<number>): PointsBand {
   };
 }
 
-interface ToneSeries {
+export interface ToneSeries {
   fgm?: Uint16Array;
   fga?: Uint16Array;
   tpa?: Uint16Array;

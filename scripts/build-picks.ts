@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { bookKey, parseBookLines, postedLines, type BookLine } from '../src/book-lines.ts';
-import { emptyLedger, ledgerKey, mergeOpen, openRows, parseLedger, serializeLedger, settle, updateClose } from '../src/pick-ledger.ts';
+import { emptyLedger, ledgerKey, mergeOpen, openRows, parseLedger, refreshLast, serializeLedger, settle, updateClose } from '../src/pick-ledger.ts';
 import { buildRecord, gameLeans, LEAN_BUCKETS, MIN_PLAY_SHARE, type Lean, type LedgerFile, type PicksFile } from '../src/picks.ts';
 import { fnv1a } from '../src/rng.ts';
 import { ITERATIONS, simulate } from '../src/simulate.ts';
@@ -79,7 +79,7 @@ export interface PicksInput {
  * Pure step: every file the job writes follows from these inputs. A game is simulated only before its tip and only
  * when its card or its posted lines changed since the previous run.
  */
-export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: number; opened: number; settled: number } {
+export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: number; opened: number; refreshed: number; settled: number } {
   const { slate, card, feed, ledgers, events, previous, now } = input;
   const cardAt = card.generated_at;
   // Only rows from each day's last capture before a tip count as posted: an older row is a market the book pulled.
@@ -103,6 +103,7 @@ export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: nu
   const leans: Lean[] = [];
   let simulated = 0;
   let opened = 0;
+  let refreshed = 0;
   for (const game of slate.games) {
     const posted = byEvent.get(game.event_id);
     const rate = card.games.find((item) => item.event_id === game.event_id);
@@ -126,7 +127,10 @@ export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: nu
     simulated += 1;
     // A replayed day is history rebuilt after the fact. Nothing logged live is ever added to it.
     if (ledger.source === 'live') {
-      opened += mergeOpen(ledger, openRows(game, rate, draws, posted, cardAt));
+      const rows = openRows(game, rate, draws, posted, cardAt);
+      opened += mergeOpen(ledger, rows);
+      // A line logged on an earlier card keeps that opening and takes this card's comparison as its latest.
+      refreshed += refreshLast(ledger, rows);
       if (ledger.rows.length) ledgers.set(game.date, ledger);
     }
     for (const lean of gameLeans(game, rate, draws, posted)) {
@@ -154,7 +158,7 @@ export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: nu
   };
   // Nothing new to say: keep the earlier stamp so an idle run does not rewrite the file.
   if (previous && JSON.stringify({ ...picks, built_at: '' }) === JSON.stringify({ ...previous, built_at: '' })) picks.built_at = previous.built_at;
-  return { picks, simulated, opened, settled };
+  return { picks, simulated, opened, refreshed, settled };
 }
 
 export function serializePicks(picks: PicksFile): string {
@@ -201,7 +205,7 @@ async function main(): Promise<void> {
   let written = 0;
   for (const ledger of ledgers.values()) if (writeIfChanged(join(ledgerDir, `${ledger.date}.json`), serializeLedger(ledger))) written += 1;
   writeIfChanged(picksPath, serializePicks(result.picks));
-  console.log(JSON.stringify({ price_rows: feed.reduce((sum, day) => sum + day.length, 0), priced_games: Object.keys(result.picks.lines).length, simulated: result.simulated, opened: result.opened, settled: result.settled, leans: result.picks.leans.length, graded: result.picks.record.settled, ledger_files_written: written }));
+  console.log(JSON.stringify({ price_rows: feed.reduce((sum, day) => sum + day.length, 0), priced_games: Object.keys(result.picks.lines).length, simulated: result.simulated, opened: result.opened, refreshed: result.refreshed, settled: result.settled, leans: result.picks.leans.length, graded: result.picks.record.settled, ledger_files_written: written }));
 }
 
 function runningAsCli(): boolean {

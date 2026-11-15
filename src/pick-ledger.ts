@@ -77,6 +77,28 @@ export function mergeOpen(file: LedgerFile, rows: readonly LedgerRow[]): number 
 }
 
 /**
+ * A later comparison for a line already logged (a later card, or the same card against a newer price) becomes its `last`
+ * snapshot while the game has not started. The opening snapshot is untouched. Rows that are settled, or whose new
+ * comparison is not later, are left alone.
+ */
+export function refreshLast(file: LedgerFile, rows: readonly LedgerRow[]): number {
+  const known = new Map(file.rows.map((row) => [ledgerKey(row), row]));
+  let changed = 0;
+  for (const fresh of rows) {
+    const row = known.get(ledgerKey(fresh));
+    if (!row || row.result) continue;
+    const at = Date.parse(fresh.open.at);
+    const current = row.last ?? row.open;
+    // Later means a later card, or the same card against a later price.
+    const later = at > Date.parse(current.at) || (at === Date.parse(current.at) && Date.parse(fresh.open.priced_at) > Date.parse(current.priced_at));
+    if (!later || !(at < Date.parse(row.tip))) continue;
+    row.last = fresh.open;
+    changed += 1;
+  }
+  return changed;
+}
+
+/**
  * The last price the feed posted before the tip, when it is later than the opening price. The feed stops refreshing
  * a game once it starts, so this is the last pre-game price it saw, not a confirmed closing line.
  */
@@ -155,9 +177,11 @@ export function parseLedger(text: string): LedgerFile {
   for (const row of file.rows) {
     const open = row?.open;
     if (!row || typeof row.e !== 'string' || typeof row.a !== 'string' || !MARKETS.has(row.m) || !stamp(row.tip) || !open) throw new Error('Invalid pick ledger row');
-    if (!stamp(open.at) || !stamp(open.priced_at) || !finite(open.line) || !finite(open.over) || !finite(open.under) || !finite(open.p) || open.p < 0 || open.p > 1) throw new Error('Invalid pick ledger opening');
-    // A row is evidence only if the model's number was fixed before the game started.
-    if (!(Date.parse(open.at) < Date.parse(row.tip)) || !(Date.parse(open.priced_at) < Date.parse(row.tip))) throw new Error('Pick ledger row opened after the tip');
+    for (const snap of row.last ? [open, row.last] : [open]) {
+      if (!stamp(snap.at) || !stamp(snap.priced_at) || !finite(snap.line) || !finite(snap.over) || !finite(snap.under) || !finite(snap.p) || snap.p < 0 || snap.p > 1) throw new Error('Invalid pick ledger opening');
+      // A row is evidence only if the model's number was fixed before the game started.
+      if (!(Date.parse(snap.at) < Date.parse(row.tip)) || !(Date.parse(snap.priced_at) < Date.parse(row.tip))) throw new Error('Pick ledger row opened after the tip');
+    }
     if (row.close && (!stamp(row.close.priced_at) || !(Date.parse(row.close.priced_at) < Date.parse(row.tip)) || !finite(row.close.line))) throw new Error('Invalid pick ledger close');
     const key = ledgerKey(row);
     if (seen.has(key)) throw new Error('Duplicate pick ledger row');

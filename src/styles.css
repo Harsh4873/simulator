@@ -3026,3 +3026,92 @@ body.sim-open { overflow: hidden; }
 }
 
 .sim-screen button { margin-top: 10px; }
+
+/* Phones: steady sizes, readable text and targets a thumb can hit */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scrollbar-gutter: stable;
+}
+
+/* The ready badge arrives after the page paints; its row keeps the same height with or without it. */
+.game-row-head { min-height: 1.5rem; }
+
+.projection-detail,
+.projection-board { scroll-margin-top: 7.5rem; }
+
+@media (max-width: 1020px) {
+  /* One column in reading order: games first, then the player and the board, then the matchup context. */
+  .projection-layout { display: flex; flex-direction: column; gap: 16px; }
+  .projection-layout > *,
+  .projection-aside > * { min-width: 0; }
+  .projection-aside { display: contents; }
+  .projection-main { order: 1; }
+  .projection-aside > .aside-block { order: 2; }
+  .projection-aside > .aside-games { order: 0; }
+  .aside-games .projection-games {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    scroll-snap-type: x proximity;
+    overscroll-behavior-x: contain;
+  }
+  .aside-games .projection-game { flex: 0 0 11.5rem; scroll-snap-align: start; }
+}
+
+@media (max-width: 800px) {
+  /* The brand and the freshness pill share one row however long the pill's text gets, so the header never grows a row. */
+  .brand { flex: 0 0 auto; }
+  .topbar-tools { flex: 1 1 0; min-width: 0; justify-content: flex-end; }
+  .fresh { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+
+  /* Controls at 16px do not make iOS zoom the page when they are focused. */
+  .prop-form input,
+  .prop-form select,
+  .projection-search input { font-size: 16px; }
+
+  .lean-meta,
+  .lean-odds,
+  .lean-measured,
+  .board-grade-note { font-size: 0.8125rem; }
+  .section-sub,
+  .field-hint,
+  .prop-note { font-size: 0.875rem; }
+  .chip { font-size: 0.8125rem; }
+  .ready-dot { font-size: 0.7rem; }
+  .hit-chip small { font-size: 0.7rem; }
+
+  /* A player's name wraps inside a column of fixed width, so the stat columns keep the screen. */
+  .projection-board th,
+  .projection-board td { padding: 8px 6px; }
+  .projection-board thead th:first-child,
+  .projection-board tbody th:first-child { width: 8.25rem; min-width: 8.25rem; padding-left: 10px; }
+  .projection-board td:last-child,
+  .projection-board th:last-child { padding-right: 10px; }
+  .projection-player {
+    display: block;
+    max-width: 7.5rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+  }
+  .record-table { min-width: 34rem; }
+}
+
+@media (pointer: coarse) {
+  .mini-tab,
+  .slot-tab { min-height: 40px; padding: 8px 12px; }
+  .market-pill { min-height: 48px; }
+  .mate-pill,
+  .line-step button,
+  .mini-action { min-height: 40px; }
+  .side-opt span { padding: 12px 10px; }
+  .projection-player { padding: 6px 0; }
+  .projection-game { min-height: 4.25rem; }
+  .lean-row { padding: 12px 14px; }
+  [data-theme-toggle],
+  [data-back],
+  [data-close] { min-height: 40px; }
+}

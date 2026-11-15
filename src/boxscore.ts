@@ -402,9 +402,16 @@ function keyTiles(game: SlateGame, score: Simulation): string {
   </div>`;
 }
 
+/** Home points minus away points for each draw, from the scores or from published counts. */
+export function marginsOf(score: Pick<Simulation, 'homeTotals' | 'awayTotals' | 'margins'>): number[] {
+  if (score.margins?.length) return score.margins;
+  if (!score.homeTotals?.length || !score.awayTotals?.length) return [];
+  return score.homeTotals.map((h, i) => h - score.awayTotals[i]);
+}
+
 function chartsPanel(game: SlateGame, score: Simulation): string {
-  if (!score.homeTotals?.length || !score.awayTotals?.length) return '';
-  const margins = score.homeTotals.map((h, i) => h - score.awayTotals[i]);
+  const margins = marginsOf(score);
+  if (!margins.length || !score.combinedTotals?.length) return '';
   const away = escapeHtml(teamAbbr(game.away));
   const home = escapeHtml(teamAbbr(game.home));
   return `<div class="charts">

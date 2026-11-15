@@ -6,6 +6,7 @@ import { freshnessIssue } from './validate-card.ts';
 import {
   DEFAULT_SIDE_SORTS,
   isColumnKey,
+  marginsOf,
   nextBoxSort,
   DEFAULT_PROP_FORM,
   renderBoxScore,
@@ -51,6 +52,7 @@ import {
   type SupportMode,
 } from './projections.ts';
 import { unpackPlayerGames, type DefenseSlot } from './projection-context.ts';
+import { fetchPublishedIndex, fetchPublishedSimulation, type PublishedExpectation } from './published-sim.ts';
 import { hydrateSimulationCache, persistSimulationEntry } from './simulation-cache.ts';
 import { escapeHtml, renderSlate } from './slate.ts';
 import { ITERATIONS, type Simulation } from './simulate.ts';
@@ -106,6 +108,10 @@ let picks: PicksFile | null = null;
 let bookLines: Map<string, BookLine> = new Map();
 /** Leans compared in this browser, per cached simulation. Reset whenever the posted lines are reloaded. */
 let localLeans = new WeakMap<Simulation, Lean[]>();
+/** Games whose 10,000 draws were published with this card, so they are fetched instead of simulated. */
+let publishedEvents = new Set<string>();
+const publishedInFlight = new Map<string, Promise<Simulation | null>>();
+let prefetchingPublished = false;
 /** Set only while this game's worker is drawing. A cache hit never sets it. */
 let drawingEvent: string | null = null;
 let drawingProgress = 0;
@@ -167,7 +173,17 @@ function paintFreshness(): void {
   const stale = freshnessIssue(slate, card, now, health) !== null;
   pill.hidden = false;
   pill.dataset.state = stale ? 'stale' : 'fresh';
-  pill.textContent = stale ? `Data stale · checked ${age}` : `Data checked ${age}`;
+  const full = stale ? `Data stale · checked ${age}` : `Data checked ${age}`;
+  // On a phone the pill is short so the header stays one row; the dot's color and the title carry the rest.
+  pill.textContent = window.matchMedia('(max-width: 560px)').matches ? (stale ? `Stale · ${age}` : age) : full;
+  pill.title = full;
+}
+
+/** On a phone the detail and the board sit below the list that was tapped, so bring the one just opened into view. */
+function reveal(selector: string): void {
+  if (!window.matchMedia('(max-width: 1020px)').matches) return;
+  const target = projectionsRoot?.querySelector<HTMLElement>(selector);
+  if (target && typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: 'start', behavior: 'auto' });
 }
 
 function rateGame(eventId: string): RateGame | null {
@@ -192,7 +208,56 @@ function storeCachedSimulation(key: string, result: Simulation): void {
   while (simulationCache.size > MEMORY_CACHE_LIMIT) {
     simulationCache.delete(simulationCache.keys().next().value!);
   }
-  if (card) void persistSimulationEntry(key, generationKey(), result);
+  // A published game is a small file to fetch again. Storing it would only copy its arrays into the browser's database.
+  if (card && !result.published) void persistSimulationEntry(key, generationKey(), result);
+}
+
+async function getData(name: string): Promise<string | null> {
+  const response = await fetch(`${DATA_BASE}${name}`, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+  return response.ok ? response.text() : null;
+}
+
+function publishedExpectation(eventId: string): PublishedExpectation | null {
+  if (!card) return null;
+  return {
+    event_id: eventId,
+    generated_at: card.generated_at,
+    input_hash: card.input_hash ?? null,
+    model_hash: card.model_hash ?? null,
+    seed: fnv1a(`${eventId}:${card.generated_at ?? ''}`),
+    iterations: ITERATIONS,
+  };
+}
+
+async function loadPublishedIndex(): Promise<void> {
+  publishedEvents = new Set();
+  publishedInFlight.clear();
+  const expected = publishedExpectation('0');
+  if (!expected) return;
+  const { event_id: _event, seed: _seed, ...rest } = expected;
+  void _event;
+  void _seed;
+  publishedEvents = await fetchPublishedIndex(getData, rest);
+}
+
+/**
+ * The game's 10,000 draws as published with this card, or null to draw them here. A viewer's lineup calls change the
+ * game, so a called game is always drawn here.
+ */
+function publishedSimulation(eventId: string): Promise<Simulation | null> {
+  const expected = publishedExpectation(eventId);
+  if (!expected || !publishedEvents.has(eventId) || Object.keys(editsFor(eventId)).length) return Promise.resolve(null);
+  let pending = publishedInFlight.get(eventId);
+  if (!pending) {
+    pending = fetchPublishedSimulation(getData, expected).then((result) => {
+      publishedInFlight.delete(eventId);
+      // A file that could not be read is not asked for again; the game is drawn here.
+      if (!result) publishedEvents.delete(eventId);
+      return result;
+    });
+    publishedInFlight.set(eventId, pending);
+  }
+  return pending;
 }
 
 function cachedSimulation(eventId: string): Simulation | null {
@@ -437,8 +502,28 @@ function stopPrefetch(): void {
   cancelPrefetch?.();
 }
 
+/** What the page does when a game's draws arrive in the background, whether fetched or simulated. */
+function prefetched(eventId: string, key: string, result: Simulation): void {
+  storeCachedSimulation(key, result);
+  if (desk?.dataset.mode !== 'projections') return;
+  if (projectionEvent === eventId) {
+    if (projectionAthlete && (propForm.line.trim() === '' || projectionAutoLine)) {
+      applyDefaultLine(propForm.market, result.playerDraws.get(projectionAthlete) ?? null, projectionEvent, projectionAthlete);
+      projectionAutoLine = false;
+    }
+    paintProjection();
+  } else {
+    const btn = projectionsRoot?.querySelector<HTMLElement>(`button[data-projection-game="${CSS.escape(eventId)}"] .game-row-head`);
+    if (btn && !btn.querySelector('.ready-dot')) {
+      btn.insertAdjacentHTML('beforeend', '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>');
+    }
+    paintModelSides();
+  }
+  scheduleNextPrefetch();
+}
+
 function scheduleNextPrefetch(): void {
-  if (prefetchTimer || prefetchWorker || running || desk?.dataset.mode !== 'projections') return;
+  if (prefetchTimer || prefetchWorker || prefetchingPublished || running || desk?.dataset.mode !== 'projections') return;
   if (typeof indexedDB === 'undefined') return;
   if (!slate || !card || freshnessIssue(slate, card, new Date(), health)) return;
   const candidates = [...slate.games].sort((a, b) => {
@@ -463,6 +548,15 @@ function scheduleNextPrefetch(): void {
     const overrides = editsFor(nextGame.event_id);
     const rates = applyLineupOverrides(base, overrides);
     const key = simulationKey(nextGame.event_id, overrides);
+    if (publishedEvents.has(nextGame.event_id) && !Object.keys(overrides).length) {
+      prefetchingPublished = true;
+      void publishedSimulation(nextGame.event_id).then((result) => {
+        prefetchingPublished = false;
+        if (result && !cachedSimulation(nextGame.event_id)) prefetched(nextGame.event_id, key, result);
+        else scheduleNextPrefetch();
+      });
+      return;
+    }
     const worker = new Worker(new URL('./simulation-worker.ts', import.meta.url), { type: 'module' });
     prefetchWorker = worker;
     const finish = () => {
@@ -474,25 +568,7 @@ function scheduleNextPrefetch(): void {
     worker.onmessage = (event: MessageEvent<{ result?: Simulation; error?: string; progress?: number }>) => {
       if (event.data.progress !== undefined) return;
       finish();
-      if (event.data.result) {
-        storeCachedSimulation(key, event.data.result);
-        if (desk?.dataset.mode === 'projections') {
-          if (projectionEvent === nextGame.event_id) {
-            if (projectionAthlete && (propForm.line.trim() === '' || projectionAutoLine)) {
-              applyDefaultLine(propForm.market, event.data.result.playerDraws.get(projectionAthlete) ?? null, projectionEvent, projectionAthlete);
-              projectionAutoLine = false;
-            }
-            paintProjection();
-          } else {
-            const btn = projectionsRoot?.querySelector<HTMLElement>(`button[data-projection-game="${CSS.escape(nextGame.event_id)}"] .game-row-head`);
-            if (btn && !btn.querySelector('.ready-dot')) {
-              btn.insertAdjacentHTML('beforeend', '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>');
-            }
-            paintModelSides();
-          }
-          scheduleNextPrefetch();
-        }
-      }
+      if (event.data.result) prefetched(nextGame.event_id, key, event.data.result);
     };
     worker.onerror = () => finish();
     worker.postMessage({ game: rates, seed: fnv1a(`${nextGame.event_id}:${card.generated_at ?? ''}`), iterations: ITERATIONS });
@@ -735,6 +811,17 @@ async function runSimulation(
     storeCachedSimulation(key, cached);
     view = { game, rates, result: cached };
     return cached;
+  }
+  if (!Object.keys(overrides).length && publishedEvents.has(eventId)) {
+    const epoch = simulationEpoch;
+    const published = await publishedSimulation(eventId);
+    if (published && epoch === simulationEpoch) {
+      const stored = simulationCache.get(key) ?? published;
+      if (!simulationCache.has(key)) storeCachedSimulation(key, published);
+      view = { game, rates, result: stored };
+      return stored;
+    }
+    if (published) return null;
   }
   if (running) {
     if (options.modalClock !== false || !cancelRun) return null;
@@ -1045,15 +1132,18 @@ function onDeskClick(event: Event): void {
         drawingProgress = 0;
       }
       paintProjection();
+      reveal('.projection-detail');
       return;
     }
     if (running && drawingEvent === eventId) {
       paintProjection();
+      reveal('.projection-detail');
       return;
     }
     drawingEvent = eventId;
     drawingProgress = 0;
     paintProjection();
+    reveal('.projection-detail');
     void simulateProjection(eventId);
     return;
   }
@@ -1065,6 +1155,7 @@ function onDeskClick(event: Event): void {
     projectionEvent = eventId;
     projectionAthlete = null;
     paintProjection();
+    reveal('.projection-board');
     if (!cachedSimulation(eventId) && !(running && drawingEvent === eventId)) {
       drawingEvent = eventId;
       drawingProgress = 0;
@@ -1171,7 +1262,7 @@ function paintPropResults(): void {
 
 function onPropEdit(event: Event): void {
   if(event.target instanceof HTMLInputElement&&event.target.matches('[data-game-line]')&&view){
-    const kind=event.target.dataset.gameLine,values=kind==='total'?view.result.combinedTotals:view.result.homeTotals.map((x,i)=>x-view!.result.awayTotals[i]);
+    const kind=event.target.dataset.gameLine,values=kind==='total'?view.result.combinedTotals:marginsOf(view.result);
     const result=document.querySelector(`[data-line-result="${kind}"]`);
     if(result){const line=Number(event.target.value);if(!event.target.value||!Number.isFinite(line)){result.textContent='Enter a line.';return;}const p=lineProbability(values,line);result.textContent=`Above ${(p.over*100).toFixed(1)}%; below ${(p.under*100).toFixed(1)}%; push ${(p.push*100).toFixed(1)}%.`;}
     return;
@@ -1313,6 +1404,7 @@ async function load(): Promise<void> {
     },async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join(''));
     slate=loaded.slate;card=loaded.card;health=loaded.health;
     await loadPicks();
+    await loadPublishedIndex();
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
     await hydrateSimulationCache(generationKey(), simulationCache);

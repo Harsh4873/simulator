@@ -97,6 +97,18 @@ export interface SideTotals {
 }
 
 /** One posted line a simulation was first compared with, and what happened. `p` is the model chance of the over. */
+/** One comparison of the model with a posted line, fixed at the card that made it. */
+export interface LedgerSnapshot {
+  at: string;
+  priced_at: string;
+  line: number;
+  over: number;
+  under: number;
+  p: number;
+  play: number;
+  min: number;
+}
+
 export interface LedgerRow {
   e: string;
   a: string;
@@ -105,7 +117,13 @@ export interface LedgerRow {
   team: string;
   tip: string;
   book: string;
-  open: { at: string; priced_at: string; line: number; over: number; under: number; p: number; play: number; min: number };
+  /** The first comparison logged for this line. Never rewritten. */
+  open: LedgerSnapshot;
+  /**
+   * The latest comparison logged before the tip, when a later card made one. This is the forecast the page showed last,
+   * and the one the record grades: it is what a replay of the last pre-tip card measures, and what the list lists.
+   */
+  last?: LedgerSnapshot;
   close?: { priced_at: string; line: number; over: number; under: number };
   result?: { actual: number; min: number } | { void: 'dnp' };
 }
@@ -238,20 +256,21 @@ export interface GradedLean {
   live: boolean;
 }
 
-/** A ledger row as a graded lean at the line and price it opened with. Null while unsettled, void or pushed. */
+/** A ledger row as a graded lean at the line and price of its latest pre-tip comparison. Null while unsettled, void or pushed. */
 export function gradeRow(row: LedgerRow, date: string, live: boolean): GradedLean | null {
   if (!row.result || 'void' in row.result) return null;
   const actual = row.result.actual;
-  if (!Number.isFinite(actual) || actual === row.open.line) return null;
-  const lean = leanSide(row.open.p, { over_odds: row.open.over, under_odds: row.open.under });
-  const odds = lean.side === 'over' ? row.open.over : row.open.under;
+  const snap = row.last ?? row.open;
+  if (!Number.isFinite(actual) || actual === snap.line) return null;
+  const lean = leanSide(snap.p, { over_odds: snap.over, under_odds: snap.under });
+  const odds = lean.side === 'over' ? snap.over : snap.under;
   return {
     date,
     side: lean.side,
     claimed: lean.claimed,
     need: lean.need,
     odds,
-    win: lean.side === 'over' ? actual > row.open.line : actual < row.open.line,
+    win: lean.side === 'over' ? actual > snap.line : actual < snap.line,
     live,
   };
 }

@@ -1292,7 +1292,7 @@ function gamesHtml(view: ProjectionView, game: SlateGame | null, rate: RateGame 
     .join('');
   return `<aside class="projection-aside">
       ${contextRail}
-      <section class="aside-block">
+      <section class="aside-block aside-games">
         <h2>Games</h2>
         <div class="projection-games">${games}</div>
       </section>

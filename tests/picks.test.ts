@@ -4,7 +4,7 @@ import test from 'node:test';
 import { buildPicks, serializePicks, type Draws } from '../scripts/build-picks.ts';
 import { validateArtifact } from '../scripts/validate-artifact.mjs';
 import { bookKey, currentLines, parseBookLines, postedLines, type BookLine } from '../src/book-lines.ts';
-import { boxValue, emptyLedger, mergeOpen, openRows, parseLedger, serializeLedger, settle, updateClose } from '../src/pick-ledger.ts';
+import { boxValue, emptyLedger, mergeOpen, openRows, parseLedger, refreshLast, serializeLedger, settle, updateClose } from '../src/pick-ledger.ts';
 import {
   bucketOf,
   buildRecord,
@@ -174,8 +174,17 @@ test('the ledger logs a line once before the tip, tracks the last posted price, 
   const ledger = emptyLedger('2026-11-02');
   assert.equal(mergeOpen(ledger, opened), 2);
   // A later card with a different model chance never rewrites the opening row.
-  assert.equal(mergeOpen(ledger, opened.map((item) => ({ ...item, open: { ...item.open, p: 0.1 } }))), 0);
+  const later = opened.map((item) => ({ ...item, open: { ...item.open, at: '2026-11-02T23:00:00Z', line: 18.5, p: 0.1 } }));
+  assert.equal(mergeOpen(ledger, later), 0);
   assert.equal(ledger.rows[0].open.p, 0.6);
+  // It becomes the row's latest comparison instead, once, and only while the game has not started.
+  assert.equal(refreshLast(ledger, later), 2);
+  assert.deepEqual(ledger.rows[0].last, later[0].open);
+  assert.equal(ledger.rows[0].open.line, 17.5);
+  assert.equal(refreshLast(ledger, later), 0);
+  assert.equal(refreshLast(ledger, [{ ...later[0], open: { ...later[0].open, at: '2026-11-02T22:30:00Z' } }]), 0);
+  assert.equal(refreshLast(ledger, [{ ...later[0], open: { ...later[0].open, at: '2026-11-03T00:10:00Z' } }]), 0);
+  assert.equal(refreshLast(ledger, [{ ...later[0], a: 'unknown' }]), 0);
 
   // The price moved before the tip: that is the close. A stamp after the tip, or an older one, is ignored.
   assert.equal(updateClose(ledger, [post(first.athlete_id, 18.5, '2026-11-02T23:10:00Z'), post(second.athlete_id, 9.5, '2026-11-03T00:10:00Z'), post(second.athlete_id, 8.5, '2026-11-02T19:00:00Z')]), 1);
@@ -189,6 +198,8 @@ test('the ledger logs a line once before the tip, tracks the last posted price, 
   assert.equal(settle(ledger, new Map()), 0);
   assert.equal(settle(ledger, new Map([[game.event_id, event]])), 2);
   assert.deepEqual(ledger.rows[0].result, { actual: 21, min: 31 });
+  // A settled row takes no later comparison.
+  assert.equal(refreshLast(ledger, [{ ...later[0], open: { ...later[0].open, at: '2026-11-02T23:30:00Z' } }]), 0);
   // The second player is not in the final box, so his line is void.
   assert.deepEqual(ledger.rows[1].result, { void: 'dnp' });
   // A settled row is final: neither the close nor the result changes afterwards.
@@ -200,6 +211,7 @@ test('the ledger logs a line once before the tip, tracks the last posted price, 
   assert.deepEqual(parseLedger(text), { ...ledger, rows: [...ledger.rows].sort((a, b) => a.a.localeCompare(b.a)) });
   assert.equal(serializeLedger(parseLedger(text)), text);
   assert.throws(() => parseLedger(text.replace('"at":"2026-11-02T22:00:00Z"', '"at":"2026-11-03T02:00:00Z"')), /opened after the tip/);
+  assert.throws(() => parseLedger(text.replace('"last":{"at":"2026-11-02T23:00:00Z"', '"last":{"at":"2026-11-03T02:00:00Z"')), /opened after the tip/);
   assert.throws(() => parseLedger(text.replace('"source":"live"', '"source":"guess"')), /Invalid pick ledger/);
   assert.equal(serializeLedger(emptyLedger('2026-11-02')), '{"schema_version":1,"date":"2026-11-02","source":"live","rows":[\n\n]}\n');
   assert.deepEqual(parseLedger(serializeLedger(emptyLedger('2026-11-02'))).rows, []);
@@ -213,6 +225,11 @@ test('the record grades each lean at its opening price and never lets a stronger
   // An under lean (model 30% over) at -110 that stayed under wins; a push and a sit-out are not graded.
   const win = gradeRow(row('1', { p: 0.3, actual: 8 }), '2026-11-02', true)!;
   assert.deepEqual({ side: win.side, win: win.win, odds: win.odds }, { side: 'under', win: true, odds: -110 });
+  // The latest comparison decides it: the model chance flipped from an under lean to an over lean on a later card.
+  const reversed = { ...row('5', { p: 0.3, actual: 13 }), last: { at: '2026-11-02T23:00:00Z', priced_at: '2026-11-02T22:50:00Z', line: 12.5, over: 100, under: -120, p: 0.8, play: 0.97, min: 30 } };
+  const latest = gradeRow(reversed, '2026-11-02', true)!;
+  assert.deepEqual({ side: latest.side, win: latest.win, odds: latest.odds }, { side: 'over', win: true, odds: 100 });
+  assert.equal(gradeRow({ ...reversed, result: { actual: 12.5 === 12.5 ? 12 : 0, min: 30 } }, '2026-11-02', true)!.win, false);
   assert.equal(gradeRow(row('2', { p: 0.3, line: 10, actual: 10 }), '2026-11-02', true), null);
   assert.equal(gradeRow(row('3', { p: 0.3, void: true }), '2026-11-02', true), null);
   assert.equal(gradeRow(row('4', { p: 0.3 }), '2026-11-02', true), null);
@@ -338,8 +355,10 @@ test('the picks step simulates only games that have not tipped, reuses an unchan
   const afterMove = run(firstRun.picks, new Date('2026-11-02T23:00:00Z'), moved);
   assert.equal(calls, 2);
   assert.equal(afterMove.opened, 0);
+  assert.equal(afterMove.refreshed, 2);
   const logged = ledgers.get('2026-11-02')!.rows.find((item) => item.a === first.athlete_id)!;
   assert.equal(logged.open.line, 17.5);
+  assert.deepEqual({ at: logged.last!.at, line: logged.last!.line }, { at: cardAt, line: 18.5 });
   assert.deepEqual(logged.close, { priced_at: '2026-11-02T22:50:00Z', line: 18.5, over: 100, under: -120 });
   assert.equal(afterMove.picks.leans.find((lean) => lean.athlete_id === first.athlete_id)?.line, 18.5);
   // A new card is a new forecast, so it is simulated again.

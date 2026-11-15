@@ -11,6 +11,11 @@ export interface PlayerSample {
   stl?: ArrayLike<number>;
   blk?: ArrayLike<number>;
   tov?: ArrayLike<number>;
+  /**
+   * Draws of a stat counted on their own, for a sample that arrived as published counts. Two stats there are not
+   * paired by draw, so a combined stat or a milestone cannot be added up from its parts and is read from here.
+   */
+  markets?: Partial<Record<PropMarket, ArrayLike<number> | undefined>>;
 }
 
 export interface PropGrade {
@@ -161,6 +166,8 @@ export function fairAmericanOdds(probability: number): number | null {
 }
 
 export function valueAt(sample: PlayerSample, index: number, market: PropMarket): number {
+  const counted = sample.markets?.[market];
+  if (counted) return counted[index];
   if(market==='pa')return sample.pts[index]+sample.ast[index];
   if(market==='pr')return sample.pts[index]+sample.reb[index];
   if(market==='ra')return sample.reb[index]+sample.ast[index];
@@ -177,7 +184,7 @@ export function gradeProp(sample: PlayerSample, market: PropMarket, side: PropSi
   if(!Number.isFinite(line)||line<0||!Number.isInteger(line*2))throw new Error('Line must be a nonnegative whole or half point');
   const count = sample.min.length;
   const keys=market==='pra'?['pts','reb','ast']:market==='pa'?['pts','ast']:market==='pr'?['pts','reb']:market==='ra'?['reb','ast']:market==='dd'||market==='td'?['pts','reb','ast','stl','blk']:[market];
-  const series=keys.map(k=>sample[k as keyof PlayerSample]);
+  const series=keys.map(k=>sample[k as Exclude<keyof PlayerSample,'markets'>]);
   if((market==='dd'||market==='td')&&line!==.5)throw new Error('Milestones settle as yes over 0.5 or no under 0.5');
   if(series.some(xs=>!xs||xs.length!==count||Array.from(xs).some(v=>!Number.isFinite(v)||v<0)))throw new Error('Missing or invalid stat samples');
   const grade: PropGrade = { wins: 0, losses: 0, pushes: 0, voids: 0 };
