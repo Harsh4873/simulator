@@ -50,6 +50,10 @@ jobs:
           else
             GENERATOR_SHA="$(git rev-parse HEAD)" npm run rate-card -- --cached-summaries
           fi
+      - name: Compare with posted lines and grade earlier leans
+        # Prices are read after the draws exist and never reach the fit. A failure here leaves the rate card as built.
+        continue-on-error: true
+        run: npm run picks
       - name: Verify before publication
         run: |
           npm test
@@ -67,7 +71,7 @@ jobs:
           git fetch origin main
           # Never copy an old build onto a newer generator revision. A later run rebuilds.
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-          git add -- public/data/slate.json public/data/rate-card.json public/data/manifest.json data/shooting-cache.json data/play-history.json.gz data/forecast-archive data/market-archive
+          git add -- public/data/slate.json public/data/rate-card.json public/data/manifest.json public/data/picks.json data/shooting-cache.json data/play-history.json.gz data/forecast-archive data/market-archive data/pick-ledger
           if ! git diff --cached --quiet; then
             git commit -m 'chore(data): refresh validated simulator generation'
             AUTHOR=$(git show -s --format='%an' HEAD)

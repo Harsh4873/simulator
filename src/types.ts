@@ -99,7 +99,7 @@ export interface RatePlayer {
   starter_rate?: number | null;
   closing_rate?: number | null;
   minutes_residual_sd?:number|null;
-  participation_model?: import('./participation-model.ts').ParticipationFit & {applied:boolean;healthy_calibration?:import('./participation-model.ts').HealthyCalibration};
+  participation_model?: import('./participation-model.ts').ParticipationFit & {applied:boolean;healthy_calibration?:import('./participation-model.ts').PublishedHealthyCalibration};
   role_context?:{window:number;half_life:number|null;team_changed:boolean;return_from_injury:'unknown'|'observed'};
   participation_coverage?: {known:number;unknown:number;absent?:number;source:"explicit-DNP"|"scenario-prior"|"team-boxes"};
   /** Average minutes per team game this season, zeros included: the lineup behind the fitted team rating. */
@@ -203,6 +203,8 @@ export interface MatchupContext {
   lead_effect?:import('./lead-effect.ts').LeadEffectModel;
   usage_concentration?:import('./usage-concentration.ts').UsageConcentration;
   rebound_credit?:import('./rebound-credit.ts').ReboundCredit;
+  /** Fitted spread of minutes around the card's role minutes, by minutes tier. Older cards fall back to the gamma multiplier. */
+  minutes_spread?:import('./role-model.ts').MinutesSpread;
   fouls?:import('./game-state-model.ts').FoulModel;
   residual_diagnostics?:import('./residual-model.ts').ResidualDiagnostics;
   lineup_effects?:import('./lineup-effects.ts').LineupEffects;

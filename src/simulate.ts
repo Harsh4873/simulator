@@ -6,6 +6,7 @@ import { drawPossessions } from './possessions.ts';
 import { typicalityBucket, winCounts, type TypicalityBucket, type WinCounts } from './display.ts';
 import type { RateGame, RatePlayer } from './types.ts';
 import { binomial, gamma, gammaMean1, iterationSeed, mulberry32, normal, poisson, type Rng } from './rng.ts';
+import { sampleMinutesRatio, type MinutesSpread } from './role-model.ts';
 
 export const ITERATIONS = 10000;
 export const REGULATION_MINUTES = 240;
@@ -27,6 +28,13 @@ export const UNOBSERVED_MAX_GAMES = 3;
 export const UNOBSERVED_PLAY_PROBABILITY = 0.2;
 export const UNOBSERVED_MINUTE_CAP = 12;
 export const PLAYER_CAP_REGULATION = 48;
+/**
+ * How far a player's expected regulation minutes may stretch past his role when teammates sit: twelve more minutes or
+ * 1.6 times the role, whichever is larger. Rescaling a short-handed rotation to 240 without it gave three 20-minute
+ * reserves 42 to 44 minutes each on a night seven teammates were out, when a team in that spot plays nine or ten men.
+ */
+export const ROLE_STRETCH_MINUTES = 12;
+export const ROLE_STRETCH_RATIO = 1.6;
 export const PLAYER_CAP_PER_OT = 5;
 export const MAX_OT_PERIODS = 8;
 
@@ -411,12 +419,60 @@ function restedLine(player: RatePlayer): DrawnPlayer {
   };
 }
 
-function rawMinutes(players: RatePlayer[], budget: number, rng: Rng): number[] {
+/** The most regulation minutes a player's role is expected to stretch to tonight, before game-to-game noise. */
+export function roleStretch(player: AppearancePlayer): number {
+  const role = conditionalMinutes(player);
+  return Math.max(role + ROLE_STRETCH_MINUTES, role * ROLE_STRETCH_RATIO);
+}
+
+/** The same limit held to the player's hard cap: what he can really supply toward the 240 minutes. */
+export function stretchLimit(player: Parameters<typeof minuteCap>[0] & AppearancePlayer): number {
+  return Math.min(minuteCap(player), roleStretch(player));
+}
+
+/**
+ * Expected regulation minutes for the players who play. Ordinarily each role is scaled to the 240-minute budget.
+ * When that would push someone past his stretch limit, he is held there and the rest share what is left, and only if
+ * everyone is at his limit are the limits relaxed, because the minutes have to be played by someone.
+ */
+export function expectedMinutes(targets: readonly number[], limits: readonly number[], budget: number): number[] {
+  const total = targets.reduce((a,b)=>a+b,0);
+  const plain = targets.map(target => total>0 ? target*budget/total : budget/targets.length);
+  if (plain.every((value,i) => value <= limits[i])) return plain;
+  const out = targets.map(() => 0);
+  let open = targets.map((_,i) => i);
+  let left = budget;
+  while (open.length && left > 1e-9) {
+    const weight = open.reduce((sum,i) => sum + targets[i], 0);
+    const share = open.map(i => weight > 0 ? left*targets[i]/weight : left/open.length);
+    const held = open.filter((i,j) => share[j] >= limits[i]);
+    if (!held.length) { open.forEach((i,j) => { out[i] = share[j]; }); left = 0; break; }
+    for (const i of held) { out[i] = limits[i]; left -= limits[i]; }
+    open = open.filter(i => !held.includes(i));
+  }
+  if (left > 1e-9) {
+    const sum = out.reduce((a,b)=>a+b,0);
+    return out.map(value => sum > 0 ? value*budget/sum : budget/out.length);
+  }
+  return out;
+}
+
+function rawMinutes(players: RatePlayer[], budget: number, rng: Rng, spread?: MinutesSpread): number[] {
   if (players.length === 0 || !(budget > 0)) throw new InsufficientRosterError(players[0]?.team_id ?? 'unknown');
   const targets = players.map(p => conditionalMinutes(p));
   const total = targets.reduce((a,b)=>a+b,0);
+  // Overtime has its own five-minute caps, so only regulation is held to the stretch limits. Hard caps (48, a reported
+  // restriction, an unobserved player's 12) are applied after the noise as before, so an ordinary rotation is unchanged.
+  const baselines = budget === REGULATION_MINUTES ? expectedMinutes(targets, players.map(roleStretch), budget) : null;
   return players.map((p,i) => {
-    const baseline = total>0 ? targets[i]*budget/total : budget/players.length;
+    const baseline = baselines ? baselines[i] : total>0 ? targets[i]*budget/total : budget/players.length;
+    if (spread && baseline > 0) {
+      // Regulation minutes follow the fitted spread for this player's minutes tier: narrow and capped for starters,
+      // a long low tail for reserves. One uniform draw per player keeps the stream the same length for every roster.
+      let value = baseline * sampleMinutesRatio(spread, targets[i], rng());
+      if(p.questionable_widen)value*=Math.exp(normal(rng)*QUESTIONABLE_SIGMA-QUESTIONABLE_SIGMA**2/2);
+      return value;
+    }
     // Smooth exposure noise; no 24-minute branch or athlete-ordered residual dumping.
     const sd = (p.minutes_residual_sd??(2 + 4*Math.exp(-baseline/12)))*Math.sqrt(budget/240);
     // Mean-preserving nonnegative noise: a gamma multiplier with the fitted residual SD.
@@ -492,22 +548,43 @@ function playingRoster(roster: RatePlayer[], playingIds: Set<string>): RatePlaye
   return roster.filter((player) => playingIds.has(player.athlete_id)).sort(byAthleteId);
 }
 
-function allocate(players: RatePlayer[], caps: number[], budget: number, rng: Rng): number[] {
-  const raw = rawMinutes(players, budget, rng);
+function allocate(players: RatePlayer[], caps: number[], budget: number, rng: Rng, spread?: MinutesSpread): number[] {
+  const raw = rawMinutes(players, budget, rng, spread);
   return cappedMinutes(
     players.map((player, index) => ({ athlete_id: player.athlete_id, raw: raw[index] ?? 0, cap: caps[index] ?? 0 })),
     budget,
   );
 }
 
-function drawSquad(roster: RatePlayer[], playingIds: Set<string>, rng: Rng, possessionMode = false): SquadState {
+/**
+ * A short-handed rotation cannot cover 240 minutes at plausible loads, so the next healthy players enter, by role
+ * minutes. The availability draw alone leaves a never-used reserve on the bench even on a night when half the roster
+ * is out and he has to play. A player who missed his draw on an uncertain designation stays out, as he does when a
+ * foul-out empties the rotation.
+ */
+function fillDepleted(roster: RatePlayer[], playingIds: Set<string>): void {
+  let capacity = 0;
+  for (const player of roster) if (playingIds.has(player.athlete_id)) capacity += stretchLimit(player);
+  if (capacity >= REGULATION_MINUTES) return;
+  const bench = roster
+    .filter(player => healthyReserve(player) && !playingIds.has(player.athlete_id) && stretchLimit(player) > 0)
+    .sort((a,b) => b.minutes_mean - a.minutes_mean || byAthleteId(a,b));
+  for (const reserve of bench) {
+    playingIds.add(reserve.athlete_id);
+    capacity += stretchLimit(reserve);
+    if (capacity >= REGULATION_MINUTES) return;
+  }
+}
+
+function drawSquad(roster: RatePlayer[], playingIds: Set<string>, rng: Rng, possessionMode = false, spread?: MinutesSpread): SquadState {
   const z = normal(rng);
   // Mean-1 lognormal shock shared by the team's volume rates.
   const shock = Math.exp(TEAM_SHOCK_SIGMA * z - (TEAM_SHOCK_SIGMA ** 2) / 2);
+  fillDepleted(roster, playingIds);
   const playing = playingRoster(roster, playingIds);
   const originalCaps = playing.map((player) => minuteCap(player));
   const caps = relaxMinuteCaps(originalCaps, playing.map(() => 48), REGULATION_MINUTES, roster[0]?.team_id ?? 'unknown');
-  const minutes = allocate(playing, caps, REGULATION_MINUTES, rng);
+  const minutes = allocate(playing, caps, REGULATION_MINUTES, rng, spread);
   const lines: DrawnPlayer[] = [];
   for (let i = 0; i < playing.length; i += 1) {
     const player = playing[i];
@@ -648,8 +725,10 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
   const awayRoster = game.players.filter((player) => player.team_id === game.away_team_id);
   const homeRoster = game.players.filter((player) => player.team_id === game.home_team_id);
   const playingIds = participation(awayRoster, homeRoster, rng);
-  const away = drawSquad(awayRoster, playingIds, rng, !!game.context);
-  const home = drawSquad(homeRoster, playingIds, rng, !!game.context);
+  // Overtime keeps the gamma multiplier: five-minute periods have no fitted spread.
+  const spread = game.context?.minutes_spread?.status === 'fitted' ? game.context.minutes_spread : undefined;
+  const away = drawSquad(awayRoster, playingIds, rng, !!game.context, spread);
+  const home = drawSquad(homeRoster, playingIds, rng, !!game.context, spread);
   const regulationMinutes = new Map<string, number>();
   for (const line of [...away.lines, ...home.lines]) {
     regulationMinutes.set(`${line.team_id}:${line.athlete_id}`, line.min);

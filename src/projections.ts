@@ -25,6 +25,8 @@ import {
   type ProjectionContext,
   type TeammateSplit,
 } from './projection-context.ts';
+import { bookKey, type BookLine } from './book-lines.ts';
+import { EXTREME_CLAIM, leanSide, rankLeans, tierFor, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
 import { gradeProp, parseBookPrice, quoteProp, valueAt, type PlayerSample, type PropMarket } from './props.ts';
 import type { Simulation } from './simulate.ts';
 import { escapeHtml, statusLabel } from './slate.ts';
@@ -72,8 +74,14 @@ export interface ProjectionView {
   supportMode?: SupportMode;
   selectedTeammateId?: string | null;
   defenseSlot?: DefenseSlot | null;
-  /** Simulations already cached, keyed by event id. Absent games are still warming up. */
-  cachedSimulations?: ReadonlyMap<string, Simulation>;
+  /** Posted sportsbook over/under lines for the slate, keyed by event, athlete and market. */
+  lines?: ReadonlyMap<string, BookLine>;
+  /** Leans for games that have not started: published with the card, or recomputed here after a lineup call. */
+  leans?: readonly Lean[];
+  /** Games with posted lines whose simulations are not ready yet. */
+  leansWaiting?: number;
+  record?: PickRecord | null;
+  book?: string | null;
 }
 
 export function isPropMarket(value: string): value is PropMarket {
@@ -114,69 +122,11 @@ export function playedMean(values: readonly number[]): number | null {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
-/** Expected minutes across every draw, including the games a player sits. */
-function expectedMinutes(sample: PlayerSample): number {
-  if (!sample.min.length) return 0;
-  let total = 0;
-  for (let index = 0; index < sample.min.length; index += 1) {
-    const minutes = sample.min[index];
-    if (minutes > 0) total += minutes;
-  }
-  return total / sample.min.length;
-}
-
-/**
- * A near-zero stat at a 0.5 hook is an almost automatic under, which is not a prop.
- * Rotation minutes and a real per-game average are required before a rate is shown or ranked.
- */
-const ROTATION_MINUTES = 10;
-const STAT_FLOOR: Record<PropMarket, number> = {
-  pts: 4,
-  reb: 2,
-  ast: 1.5,
-  pra: 8,
-  pa: 6,
-  pr: 6,
-  ra: 3.5,
-  tpm: 0.8,
-  stl: 0.4,
-  blk: 0.3,
-  tov: 0.7,
-  dd: 0.25,
-  td: 0.08,
-};
-/** Median hook below this means the typical game is empty, even if a few outliers pull the average up. */
-const LINE_FLOOR: Record<PropMarket, number> = {
-  pts: 4.5,
-  reb: 1.5,
-  ast: 1.5,
-  pra: 7.5,
-  pa: 5.5,
-  pr: 5.5,
-  ra: 2.5,
-  tpm: 0.5,
-  stl: 0.5,
-  blk: 0.5,
-  tov: 0.5,
-  dd: 0.5,
-  td: 0.5,
-};
-
-/** Lines under this floor are not graded. A 1.5 or 2.5 point hook is one of them. */
+/** Milestones settle at 0.5 only. Every other whole or half-point line can be graded. */
 export function gradedPropLine(market: PropMarket, line: number | null): number | null {
   if (line === null || !Number.isFinite(line)) return null;
   if (market === 'dd' || market === 'td') return line === 0.5 ? line : null;
-  if (line < LINE_FLOOR[market]) return null;
   return line;
-}
-
-export function propEligible(sample: PlayerSample, market: PropMarket): boolean {
-  if (statMissing(sample, market)) return false;
-  if (expectedMinutes(sample) < ROTATION_MINUTES) return false;
-  const values = playedValues(sample, market);
-  const mean = playedMean(values);
-  if (mean === null || mean < STAT_FLOOR[market]) return false;
-  return gradedPropLine(market, naturalHookLine(market, values)) !== null;
 }
 
 /** Nearest nonnegative half point to the median of the values. */
@@ -212,35 +162,51 @@ export function l10HistoricalValues(
     .slice(-10);
 }
 
-/** Nearest .5 hook to the median of the values (never a whole integer, so pushes do not distort prop rates). */
-export function naturalHookLine(market: PropMarket, values: ArrayLike<number>): number {
+/**
+ * The half point nearest the average of the values. A line set just under a player's own simulated median makes the
+ * over at least 50% by construction, which is an artifact and not a lean, so no default line is placed that way.
+ */
+export function nearestHook(market: PropMarket, values: ArrayLike<number>): number {
   if (market === 'dd' || market === 'td') return 0.5;
-  const nums: number[] = [];
+  let total = 0;
+  let count = 0;
   for (let index = 0; index < values.length; index += 1) {
     const value = values[index];
-    if (Number.isFinite(value)) nums.push(value);
+    if (!Number.isFinite(value)) continue;
+    total += value;
+    count += 1;
   }
-  if (!nums.length) return 0.5;
-  nums.sort((a, b) => a - b);
-  const mid = Math.floor(nums.length / 2);
-  const median = nums.length % 2 === 1 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
-  return Math.max(0.5, Math.ceil(median) - 0.5);
+  if (!count) return 0.5;
+  return Math.max(0.5, Math.floor(total / count) + 0.5);
 }
 
+/** The line a player opens with: the posted line when there is one, otherwise the half point nearest his projection. */
 export function defaultMarketLine(
   market: PropMarket,
   sample: PlayerSample | null,
   context: ProjectionContext | undefined,
   athleteId: string | null,
+  book: BookLine | null = null,
 ): number | null {
   if (market === 'dd' || market === 'td') return 0.5;
+  if (book) return book.line;
   if (sample && !statMissing(sample, market)) {
     const values = playedValues(sample, market);
-    if (values.length) return gradedPropLine(market, naturalHookLine(market, values));
+    if (values.length) return nearestHook(market, values);
   }
   const recent = l10HistoricalValues(context, athleteId, market);
-  if (recent.length) return gradedPropLine(market, naturalHookLine(market, recent));
+  if (recent.length) return nearestHook(market, recent);
   return null;
+}
+
+export function bookLineFor(
+  lines: ReadonlyMap<string, BookLine> | undefined,
+  eventId: string | null,
+  athleteId: string | null,
+  market: PropMarket,
+): BookLine | null {
+  if (!lines || !eventId || !athleteId) return null;
+  return lines.get(bookKey({ event_id: eventId, athlete_id: athleteId, market })) ?? null;
 }
 
 function marketLabel(market: PropMarket): string {
@@ -287,11 +253,7 @@ export function modelChanceHtml(sample: PlayerSample | null, market: PropMarket,
   if (entered === null || ((market === 'dd' || market === 'td') && entered !== 0.5)) {
     return '<p class="prop-note">Enter a whole or half-point line to see the over and under model chances.</p>';
   }
-  const line = gradedPropLine(market, entered);
-  if (line === null) {
-    return '<p class="prop-note">Lines under the floor for this stat are not graded. A 1.5 or 2.5 point hook sits under a small median, so its over percentage is not a pick.</p>';
-  }
-  const pair = chancePair(sample, market, line);
+  const pair = chancePair(sample, market, entered);
   if (!pair) return '<p class="prop-note">Enter a whole or half-point line to see the over and under model chances.</p>';
   const over = pair.over === null ? '—' : percent(pair.over);
   const under = pair.under === null ? '—' : percent(pair.under);
@@ -341,6 +303,8 @@ interface BoardRow {
   minutes: number;
   projection: number | null;
   line: number | null;
+  /** Set when the row is graded at the posted line, so its price can be shown beside the model chance. */
+  book: BookLine | null;
   over: string;
   under: string;
   overRate: number | null;
@@ -361,6 +325,14 @@ function byRate(key: 'overRate' | 'underRate') {
   };
 }
 
+export function americanText(odds: number): string {
+  return odds > 0 ? `+${odds}` : String(odds);
+}
+
+function lineText(line: number): string {
+  return Number.isInteger(line) ? line.toFixed(1) : String(line);
+}
+
 function boardRows(
   game: RateGame,
   simulation: Simulation | null,
@@ -368,6 +340,7 @@ function boardRows(
   athleteId: string | null,
   context: ProjectionContext | undefined,
   sort: BoardSort,
+  lines: ReadonlyMap<string, BookLine> | undefined,
 ): BoardRow[] {
   const viewerGraded = validPropLine(form.line);
   const validViewer = viewerGraded !== null && !((form.market === 'dd' || form.market === 'td') && viewerGraded !== 0.5) ? viewerGraded : null;
@@ -379,23 +352,29 @@ function boardRows(
     let note: string | null = null;
     if (simulation && missing) note = 'This stat is missing from the older card.';
     else if (simulation && projection === null) note = 'does not play in the simulations.';
-    const ownLine = sample || context ? defaultMarketLine(form.market, sample, context, player.athlete_id) : null;
-    const rowLine =
-      player.athlete_id === athleteId && validViewer !== null
-        ? gradedPropLine(form.market, validViewer)
-        : ownLine;
+    const posted = bookLineFor(lines, game.event_id, player.athlete_id, form.market);
+    const selected = player.athlete_id === athleteId;
+    // The selected player is graded at the line in the form. Everyone else is graded at the posted line or not at all:
+    // a line placed from a player's own simulated median says nothing about which side to take.
+    const milestone = form.market === 'dd' || form.market === 'td' ? 0.5 : null;
+    const rowLine = selected && validViewer !== null ? validViewer : posted?.line ?? milestone;
+    const book = posted && rowLine === posted.line ? posted : null;
     let over = '';
     let under = '';
     let overRate: number | null = null;
     let underRate: number | null = null;
     let edge = '';
-    if (sample && rowLine !== null && !missing && projection !== null && propEligible(sample, form.market)) {
+    if (sample && rowLine !== null && !missing && projection !== null) {
       const pair = chancePair(sample, form.market, rowLine);
       overRate = pair?.over ?? null;
       underRate = pair?.under ?? null;
       over = overRate === null ? '' : percent(overRate);
       under = underRate === null ? '' : percent(underRate);
-      edge = edgeText(sample, form.market, form, rowLine);
+      if (selected && form.odds.trim() !== '') edge = edgeText(sample, form.market, form, rowLine);
+      else if (book && overRate !== null) {
+        const lean = leanSide(overRate, book);
+        edge = `${lean.side === 'over' ? 'Over' : 'Under'} ${signedEdge(lean.claimed)}`;
+      }
     }
     const games = context ? unpackPlayerGames(context.players[player.athlete_id]?.games) : [];
     return {
@@ -404,6 +383,7 @@ function boardRows(
       minutes: player.minutes_mean,
       projection,
       line: projection === null && simulation ? null : rowLine,
+      book,
       over,
       under,
       overRate,
@@ -442,27 +422,35 @@ export function projectionBoardHtml(
   athleteId: string | null,
   context?: ProjectionContext,
   sort: BoardSort = 'projection',
+  lines?: ReadonlyMap<string, BookLine>,
 ): string {
-  const rows = boardRows(game, simulation, form, athleteId, context, sort);
+  const rows = boardRows(game, simulation, form, athleteId, context, sort, lines);
   const hasHistory = Boolean(context);
   const line = validPropLine(form.line);
   const gradedLine = line !== null && !((form.market === 'dd' || form.market === 'td') && line !== 0.5) ? line : null;
   const sideText = form.side === 'under' ? 'Under' : 'Over';
+  const posted = rows.filter((row) => row.book !== null);
   const body = rows
     .map((row) => {
       const selected = row.athleteId === athleteId;
       const projection = row.note ?? (row.projection === null ? '' : row.projection.toFixed(1));
-      const lineCell = row.line === null ? '' : Number.isInteger(row.line) ? row.line.toFixed(1) : String(row.line);
+      const lineCell =
+        row.line === null
+          ? ''
+          : row.book
+            ? `<span class="line-posted" title="${escapeHtml(`${row.book.book}, priced ${formatTip(row.book.priced_at)}`)}">${escapeHtml(lineText(row.line))}</span>`
+            : escapeHtml(lineText(row.line));
+      const price = (odds: number | undefined) => (odds === undefined ? '' : ` <small class="line-price">${escapeHtml(americanText(odds))}</small>`);
       const historyCols = hasHistory
         ? `${compactHitCell(row.games, form, row.line, 5)}${compactHitCell(row.games, form, row.line, 10)}${compactHitCell(row.games.filter((gameRow) => gameRow.home), form, row.line)}${compactHitCell(row.games.filter((gameRow) => !gameRow.home), form, row.line)}`
         : '';
       return `<tr${selected ? ' class="is-selected"' : ''}>
         <th scope="row"><button type="button" class="projection-player" data-projection-player="${escapeHtml(row.athleteId)}" data-projection-event="${escapeHtml(eventId)}" aria-pressed="${selected ? 'true' : 'false'}">${escapeHtml(row.name)}</button></th>
         <td>${escapeHtml(projection)}</td>
-        <td>${escapeHtml(lineCell)}</td>
+        <td>${lineCell}</td>
         ${historyCols}
-        <td>${row.over}</td>
-        <td>${row.under}</td>
+        <td>${row.over}${row.over ? price(row.book?.over_odds) : ''}</td>
+        <td>${row.under}${row.under ? price(row.book?.under_odds) : ''}</td>
         <td>${row.edge ? escapeHtml(row.edge) : ''}</td>
       </tr>`;
     })
@@ -471,8 +459,14 @@ export function projectionBoardHtml(
     ? '<p class="panel-lede">Pick any player below to run 10,000 simulations and load their game log, hit windows, and on/off floor splits.</p>'
     : '';
   const waiting = simulation ? '' : '<p class="panel-lede">Projection, over, under, and edge stay blank until this game is simulated.</p>';
+  const milestone = form.market === 'dd' || form.market === 'td';
+  const source = milestone
+    ? 'Double-doubles and triple-doubles settle at 0.5. No price is posted for them here.'
+    : posted.length
+      ? `Lines are the posted ${escapeHtml(posted[0].book!.book)} over/under for this stat, with the price beside each model chance. Edge is the model chance of its better side minus that price's break-even. Players with no posted line show the projection only.`
+      : 'No posted line is in for this stat in this game, so only the projection is shown. Select a player to grade a line of your own.';
   const lineBadge = simulation
-    ? `<p class="board-grade-note">${gradedLine !== null && gradedPropLine(form.market, gradedLine) !== null ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}Every other graded line is the half-point under that player's simulated median, not a book number. Points lines under 4.5, including 1.5 and 2.5, are left blank.</p>`
+    ? `<p class="board-grade-note">${gradedLine !== null && athleteId ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}${source}</p>`
     : '';
   const hitHead = hasHistory
     ? `<th title="${sideText} hit rate in the last 5 box scores">L5</th><th title="${sideText} hit rate in the last 10 box scores">L10</th><th title="${sideText} hit rate in every stored home game">Home</th><th title="${sideText} hit rate in every stored away game">Away</th>`
@@ -1210,9 +1204,10 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
   const sample = view.simulation?.playerDraws.get(player.athlete_id) ?? null;
   const form = view.form.market === 'dd' || view.form.market === 'td' ? { ...view.form, line: '0.5' } : view.form;
   const results = view.simulation
-    ? renderPropResults(view.simulation, player.athlete_id, form, player)
+    ? renderPropResults(view.simulation, player.athlete_id, form, player, view.record ?? null)
     : '<div class="prop-prompt"><p class="prop-prompt-title">Add a line and a price</p><p class="prop-note">The price comparison appears after this game is simulated.</p></div>';
   const l10Ready = l10HistoricalValues(context, player.athlete_id, form.market).length > 0;
+  const posted = bookLineFor(view.lines, game.event_id, player.athlete_id, form.market);
   const historyHtml = context ? historyPanelHtml(view, game, player, form, context) : '';
   const onOffHtml = context ? onOffPanelHtml(rate, player, view.overrides, context, view.selectedTeammateId) : '';
   const logHtml = context ? gameLogPanelHtml(view, player, form, context) : '';
@@ -1240,9 +1235,11 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
       }
       ${lineTools(form, Boolean(sample && playedValues(sample, form.market).length), l10Ready)}
       <div class="projection-form">
+        <div data-posted>${postedLineHtml(posted, form)}</div>
         ${propFormMarkup(form)}
         <div data-model-chances>${modelChanceHtml(sample, form.market, form.line)}</div>
         <div data-prop-results aria-live="polite">${results}</div>
+        <div data-measured>${measuredNoteHtml(sample, form, view.record)}</div>
         <div data-projection-chart>${projectionChartHtml(sample, form.market, form.line)}</div>
       </div>
     </article>
@@ -1302,95 +1299,176 @@ function gamesHtml(view: ProjectionView, game: SlateGame | null, rate: RateGame 
     </aside>`;
 }
 
-export interface SlateLean {
-  eventId: string;
-  athleteId: string;
-  name: string;
-  matchup: string;
-  side: 'over' | 'under';
-  line: number;
-  projection: number;
-  rate: number;
+function points(value: number): string {
+  const text = (value * 100).toFixed(1);
+  return `${value >= 0 ? '+' : ''}${text} pp`;
 }
 
-const SLATE_LEAN_LIMIT = 5;
+function tierLabel(tier: Pick<TierRecord, 'lo' | 'hi'>): string {
+  if (tier.lo === null) return 'below 0';
+  const lo = Math.round(tier.lo * 100);
+  return tier.hi === null ? `${lo}+` : `${lo} to ${Math.round(tier.hi * 100)}`;
+}
 
-/** Stronger side of each simulated player's own half-point hook. Games with no cached simulation are counted as waiting. */
-export function slateLeans(
-  slate: Slate,
-  card: RateCard,
-  market: PropMarket,
-  simulations: ReadonlyMap<string, Simulation>,
-): { over: SlateLean[]; under: SlateLean[]; waiting: number } {
-  const over: SlateLean[] = [];
-  const under: SlateLean[] = [];
-  let waiting = 0;
-  for (const listed of slate.games) {
-    const rate = card.games.find((item) => item.event_id === listed.event_id);
-    if (!rate || rate.simulation_error) continue;
-    const simulation = simulations.get(listed.event_id);
-    if (!simulation) {
-      waiting += 1;
-      continue;
-    }
-    const matchup = `${sideAbbr(listed.away)} @ ${sideAbbr(listed.home)}`;
-    for (const player of rate.players) {
-      if (player.replacement_level) continue;
-      const sample = simulation.playerDraws.get(player.athlete_id);
-      if (!sample || !propEligible(sample, market)) continue;
-      const line = defaultMarketLine(market, sample, undefined, player.athlete_id);
-      const projection = playedMean(playedValues(sample, market));
-      if (line === null || projection === null) continue;
-      const pair = chancePair(sample, market, line);
-      if (!pair || pair.over === null || pair.under === null || pair.over === pair.under) continue;
-      if ((market === 'dd' || market === 'td') && pair.over <= pair.under) continue;
-      const lean: SlateLean = {
-        eventId: listed.event_id,
-        athleteId: player.athlete_id,
-        name: player.name,
-        matchup,
-        side: pair.over > pair.under ? 'over' : 'under',
-        line,
-        projection,
-        rate: pair.over > pair.under ? pair.over : pair.under,
-      };
-      (lean.side === 'over' ? over : under).push(lean);
-    }
+function leanRowHtml(lean: RankedLean, record: PickRecord | null | undefined): string {
+  const side = lean.side === 'over' ? 'Over' : 'Under';
+  const odds = lean.side === 'over' ? lean.over_odds : lean.under_odds;
+  const tier = tierFor(record, lean.side, lean.claimed);
+  const measured = lean.claimed >= EXTREME_CLAIM
+    ? `<span class="lean-measured edge-down">A gap of ${Math.round(EXTREME_CLAIM * 100)} points or more is too large to trust. It usually means the price or the card is missing news${tier && tier.n > 0 ? `: ${tier.n.toLocaleString('en-US')} graded gaps this size hit ${escapeHtml(percent(tier.wins / tier.n))}` : ''}</span>`
+    : tier && tier.pooled > 0
+      ? `<span class="lean-measured ${tier.edge > 0 ? 'edge-up' : 'edge-down'}">Leans this strong: ${points(tier.edge)} against the price, ${tier.pooled.toLocaleString('en-US')} graded</span>`
+      : '<span class="lean-measured">No graded leans of this strength yet</span>';
+  return `<li><button type="button" class="lean-row" data-projection-player="${escapeHtml(lean.athlete_id)}" data-projection-event="${escapeHtml(lean.event_id)}" data-lean-market="${escapeHtml(lean.market)}" data-lean-side="${lean.side}">
+      <span class="lean-name">${escapeHtml(lean.name)}</span>
+      <span class="lean-call">${side} ${escapeHtml(lineText(lean.line))} ${escapeHtml(marketShort(lean.market))} <small>${escapeHtml(americanText(odds))}</small></span>
+      <span class="lean-meta">${escapeHtml(lean.matchup)} · projection ${lean.projection.toFixed(1)} in ${lean.minutes.toFixed(0)} min${lean.play < 0.9 ? ` · plays in ${escapeHtml(percent(lean.play))} of simulations, and a sit-out voids the line` : ''}</span>
+      <span class="lean-odds">Model ${escapeHtml(percent(lean.model))} · price needs ${escapeHtml(percent(lean.need))}${lean.also ? ` · ${lean.also} more of his lines ${lean.also === 1 ? 'leans' : 'lean'} ${lean.side}` : ''}</span>
+      ${measured}
+    </button></li>`;
+}
+
+function sideSummary(record: PickRecord | null | undefined, side: 'over' | 'under'): { n: number; edge: number } | null {
+  if (!record) return null;
+  let n = 0;
+  let sum = 0;
+  for (const tier of record.tiers) {
+    if (tier.side !== side || tier.lo === null) continue;
+    n += tier.n;
+    sum += tier.wins - tier.need * tier.n;
   }
-  const byRate = (a: SlateLean, b: SlateLean) => b.rate - a.rate || a.name.localeCompare(b.name);
-  over.sort(byRate);
-  under.sort(byRate);
-  return { over: over.slice(0, SLATE_LEAN_LIMIT), under: under.slice(0, SLATE_LEAN_LIMIT), waiting };
+  return n ? { n, edge: sum / n } : null;
 }
 
-function leanColumn(title: string, rows: readonly SlateLean[], empty: string): string {
-  const body = rows.length
-    ? `<ul>${rows
-        .map((row) => {
-          const line = Number.isInteger(row.line) ? row.line.toFixed(1) : String(row.line);
-          const side = row.side === 'over' ? 'Over' : 'Under';
-          return `<li><button type="button" class="lean-row" data-projection-player="${escapeHtml(row.athleteId)}" data-projection-event="${escapeHtml(row.eventId)}"><span class="lean-name">${escapeHtml(row.name)}</span><span class="lean-meta">${escapeHtml(row.matchup)} · proj ${row.projection.toFixed(1)} · ${side} ${escapeHtml(line)}</span><strong>${escapeHtml(percent(row.rate))}</strong></button></li>`;
-        })
-        .join('')}</ul>`
-    : `<p class="prop-note">${empty}</p>`;
+function leanColumnHtml(title: string, side: 'over' | 'under', rows: readonly RankedLean[], count: number, players: number, record: PickRecord | null | undefined, anyLeans: boolean): string {
+  const summary = sideSummary(record, side);
+  let body: string;
+  if (rows.length) {
+    const more = players > rows.length ? `<p class="prop-note">${count} ${side} leans across ${players} players clear the bar. Each player's strongest is shown for the first ${rows.length}; the board for a game has the rest.</p>` : '';
+    body = `<ul>${rows.map((row) => leanRowHtml(row, record)).join('')}</ul>${more}`;
+  } else if (summary && summary.edge < 0 && anyLeans) {
+    body = `<p class="prop-note">No ${side} lean is listed. ${title} leans have settled ${points(summary.edge)} against the posted price across ${summary.n.toLocaleString('en-US')} graded leans, so a high ${side} percentage here has not been a reason to take it.</p>`;
+  } else {
+    body = `<p class="prop-note">No ${side} lean clears the bar right now.</p>`;
+  }
   return `<div><h3>${title}</h3>${body}</div>`;
 }
 
-export function modelSidesInner(
-  slate: Slate,
-  card: RateCard,
-  market: PropMarket,
-  simulations: ReadonlyMap<string, Simulation>,
-): string {
-  const leans = slateLeans(slate, card, market, simulations);
-  const ready = leans.over.length + leans.under.length;
-  if (!ready && leans.waiting > 0) {
-    return `<h2>${escapeHtml(marketLabel(market))}</h2><p class="section-sub">Simulations are still warming up. This list fills as each game finishes, so the slate does not have to be opened one game at a time.</p>`;
+function shortDate(iso: string | null): string {
+  if (!iso) return '';
+  const [, month, day] = iso.split('-');
+  return `${Number(month)}/${Number(day)}`;
+}
+
+export function recordHtml(record: PickRecord | null | undefined): string {
+  if (!record || !record.settled) {
+    return '<details class="lean-record"><summary>Record</summary><p class="prop-note">No lean has been graded yet. Each one is logged before its game tips and graded from the final box score.</p></details>';
   }
-  const waiting = leans.waiting
-    ? `<p class="section-sub">${leans.waiting} ${leans.waiting === 1 ? 'game is' : 'games are'} still simulating.</p>`
+  const rows = record.tiers
+    .filter((tier) => tier.n > 0)
+    .map((tier) => {
+      const hit = tier.wins / tier.n;
+      const raw = hit - tier.need;
+      return `<tr>
+          <th scope="row">${tier.side === 'over' ? 'Over' : 'Under'}</th>
+          <td>${escapeHtml(tierLabel(tier))}</td>
+          <td>${tier.n.toLocaleString('en-US')}</td>
+          <td>${escapeHtml(percent(hit))}</td>
+          <td>${escapeHtml(percent(tier.need))}</td>
+          <td class="${raw > 0 ? 'edge-up' : raw < 0 ? 'edge-down' : ''}">${escapeHtml(points(raw))}</td>
+          <td class="${tier.units > 0 ? 'edge-up' : tier.units < 0 ? 'edge-down' : ''}">${tier.units >= 0 ? '+' : ''}${tier.units.toFixed(1)}</td>
+          <td class="${tier.lo !== null && tier.lo >= EXTREME_CLAIM ? '' : tier.edge > 0 ? 'edge-up' : 'edge-down'}">${tier.lo !== null && tier.lo >= EXTREME_CLAIM ? 'never listed' : escapeHtml(points(tier.edge))}</td>
+        </tr>`;
+    })
+    .join('');
+  const liveCount = record.live.over.n + record.live.under.n;
+  const replayCount = record.replayed.over.n + record.replayed.under.n;
+  const span = (totals: PickRecord['live']) => (totals.from && totals.through ? ` (${shortDate(totals.from)} to ${shortDate(totals.through)})` : '');
+  const sources = [
+    replayCount ? `${replayCount.toLocaleString('en-US')} were rebuilt from archived pre-tip inputs with the current model${span(record.replayed)}` : '',
+    `${liveCount.toLocaleString('en-US')} were logged live before the tip${span(record.live)}`,
+  ].filter(Boolean).join('. ');
+  const moved = record.moves.toward + record.moves.away;
+  const held = record.moves.same_line
+    ? ` On ${record.moves.same_line.toLocaleString('en-US')} more the line held and the no-vig price moved ${escapeHtml(points(record.moves.price_toward / record.moves.same_line))} toward the lean on average.`
     : '';
-  return `<h2>${escapeHtml(marketLabel(market))}</h2><p class="section-sub">Rotation players only, on their own half-point hook. Short-minute and near-zero stats are left off, so a player who scores nothing is not listed as a lock. The hook is not a book line.</p>${waiting}<div class="lean-columns">${leanColumn('Over', leans.over, 'No rotation player leans over.')}${leanColumn('Under', leans.under, 'No rotation player leans under.')}</div>`;
+  const moves = moved || record.moves.same_line
+    ? `<p class="prop-note">${moved ? `After a lean was logged, the posted line later moved on ${moved.toLocaleString('en-US')} props, ${escapeHtml(percent(record.moves.toward / moved))} of them toward the lean.` : ''}${held} The later price is the last one posted before the tip, not a confirmed closing line.</p>`
+    : '';
+  const days = record.days.length
+    ? `<p class="prop-note">Last ${record.days.length} graded days, leans the price did not already beat: ${record.days.map((day) => `${shortDate(day.date)} ${day.wins}-${day.n - day.wins}`).join(' · ')}</p>`
+    : '';
+  return `<details class="lean-record">
+      <summary>Record: ${record.settled.toLocaleString('en-US')} graded leans</summary>
+      <p class="prop-note">Every posted over/under line is logged with the model's side before the game tips, then graded from the final box score at the price it was logged with. ${escapeHtml(sources)}. A player who sits voids the line (${record.voids.toLocaleString('en-US')} so far).</p>
+      <div class="table-scroll"><table class="record-table">
+        <thead><tr><th>Side</th><th title="Model chance of the side minus the break-even of its price, in probability points">Claimed edge</th><th>Graded</th><th>Hit</th><th title="Average break-even of the posted prices">Needed</th><th title="Hit rate minus the break-even needed">Against price</th><th title="Profit at the posted prices, one unit a lean">Units</th><th title="Pooled so it never falls as the claim grows, then pulled toward the side's overall result">Measured</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      ${moves}
+      ${days}
+    </details>`;
+}
+
+export interface LeanPanelInput {
+  leans: readonly Lean[];
+  waiting: number;
+  record: PickRecord | null | undefined;
+  book: string | null | undefined;
+  /** Whether any posted line exists for a game that has not started. */
+  open: boolean;
+  /** Whether any posted line exists on the slate at all. */
+  posted: boolean;
+}
+
+export function leanPanelInner(input: LeanPanelInput): string {
+  const book = input.book?.trim() || 'sportsbook';
+  const head = '<h2>Leans against the posted lines</h2>';
+  const lede = `<p class="section-sub">The simulation's side at the posted ${escapeHtml(book)} over/under lines, for games that have not started. A lean is listed only while graded leans of that side and strength have been beating the posted price. The model percentage is the claim. The measured line under it is how claims like it have settled.</p>`;
+  if (!input.posted) {
+    return `${head}${lede}<p class="prop-note">No posted line is in for this slate yet. They usually arrive late morning Central, and this list fills at the next refresh.</p>${recordHtml(input.record)}`;
+  }
+  if (!input.open) {
+    return `${head}${lede}<p class="prop-note">Every game with a posted line has started. Leans are logged before the tip and graded after the final.</p>${recordHtml(input.record)}`;
+  }
+  const board = rankLeans(input.leans, input.record);
+  const waiting = input.waiting
+    ? `<p class="section-sub">${input.waiting} ${input.waiting === 1 ? 'game is' : 'games are'} still simulating.</p>`
+    : '';
+  const any = input.leans.length > 0;
+  const unlistedCount = board.unlisted.over.length + board.unlisted.under.length;
+  const unlisted = unlistedCount
+    ? `<details class="lean-unlisted">
+        <summary>Strongest model claims that are not listed (${unlistedCount})</summary>
+        <p class="prop-note">These are the simulation's largest gaps to the posted price on sides that have not been beating it. They are shown so the claim and its record can be read together.</p>
+        <div class="lean-columns">
+          <div><h3>Under</h3>${board.unlisted.under.length ? `<ul>${board.unlisted.under.map((row) => leanRowHtml(row, input.record)).join('')}</ul>` : '<p class="prop-note">None.</p>'}</div>
+          <div><h3>Over</h3>${board.unlisted.over.length ? `<ul>${board.unlisted.over.map((row) => leanRowHtml(row, input.record)).join('')}</ul>` : '<p class="prop-note">None.</p>'}</div>
+        </div>
+      </details>`
+    : '';
+  return `${head}${lede}${waiting}<div class="lean-columns">${leanColumnHtml('Under', 'under', board.listed.under, board.counts.under, board.players.under, input.record, any)}${leanColumnHtml('Over', 'over', board.listed.over, board.counts.over, board.players.over, input.record, any)}</div>${unlisted}${recordHtml(input.record)}`;
+}
+
+/** How claims like the one in the form have settled, shown under the verdict. */
+export function measuredNoteHtml(sample: PlayerSample | null, form: PropFormState, record: PickRecord | null | undefined): string {
+  if (!sample || !record || form.odds.trim() === '') return '';
+  const line = validPropLine(form.line);
+  const price = parseBookPrice(form.odds, form.style);
+  if (line === null || !price) return '';
+  const quote = quoteProp(sample, form.market, form.side, line, price, null);
+  if (!quote || quote.edge === null) return '';
+  const tier = tierFor(record, form.side, quote.edge);
+  if (!tier || tier.pooled <= 0 || quote.edge >= EXTREME_CLAIM) return '';
+  const side = form.side === 'over' ? 'Over' : 'Under';
+  const claim = tier.lo === null ? `${side} sides the posted price already beats` : `${side} claims of ${escapeHtml(tierLabel(tier))} points against the price`;
+  return `<p class="prop-note measured-note">${claim} have settled <strong class="${tier.edge > 0 ? 'edge-up' : 'edge-down'}">${escapeHtml(points(tier.edge))}</strong> against it across ${tier.pooled.toLocaleString('en-US')} graded leans.</p>`;
+}
+
+export function postedLineHtml(book: BookLine | null, form: PropFormState): string {
+  if (!book) return '';
+  const using = validPropLine(form.line) === book.line;
+  return `<p class="prop-note posted-line" data-posted-line>${escapeHtml(book.book)} has ${escapeHtml(lineText(book.line))} at over ${escapeHtml(americanText(book.over_odds))}, under ${escapeHtml(americanText(book.under_odds))}, priced ${escapeHtml(formatTip(book.priced_at))}.${using ? '' : ' <button type="button" class="ghost mini-action" data-use-posted>Use the posted line</button>'}</p>`;
 }
 
 function injuryReportHtml(rate: RateGame, game: SlateGame): string {
@@ -1425,6 +1503,29 @@ function injuryReportHtml(rate: RateGame, game: SlateGame): string {
   return `<section class="injury-report" aria-label="Injury report"><h3>Injury report</h3><p class="section-sub">Designations on the published card. The simulator already sits players from this report.</p>${body}</section>`;
 }
 
+/** Games that have not started and have at least one posted line: the only games a lean can be logged for. */
+export function openLeanEvents(slate: Slate, lines: ReadonlyMap<string, BookLine> | undefined, now: Date): Set<string> {
+  const open = new Set<string>();
+  if (!lines) return open;
+  const priced = new Set<string>();
+  for (const line of lines.values()) priced.add(line.event_id);
+  for (const game of slate.games) {
+    if (priced.has(game.event_id) && game.status_state === 'pre' && Date.parse(game.start_time) > now.getTime()) open.add(game.event_id);
+  }
+  return open;
+}
+
+export function leanPanelHtml(view: Pick<ProjectionView, 'slate' | 'now' | 'lines' | 'leans' | 'leansWaiting' | 'record' | 'book'>): string {
+  return leanPanelInner({
+    leans: view.leans ?? [],
+    waiting: view.leansWaiting ?? 0,
+    record: view.record,
+    book: view.book,
+    open: openLeanEvents(view.slate, view.lines, view.now).size > 0,
+    posted: (view.lines?.size ?? 0) > 0,
+  });
+}
+
 export function renderProjections(view: ProjectionView): string {
   const game = view.slate.games.find((item) => item.event_id === view.eventId) ?? null;
   const rate = view.card.games.find((item) => item.event_id === view.eventId) ?? null;
@@ -1432,18 +1533,18 @@ export function renderProjections(view: ProjectionView): string {
   const boardMeter = view.drawing && !view.athleteId ? inlineDrawingHtml(view.drawProgress) : '';
   const board =
     game && rate
-      ? `${boardMeter}<section class="team-box projection-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2>${injuryReportHtml(rate, game)}<div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection')}</div></section>`
+      ? `${boardMeter}<section class="team-box projection-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2>${injuryReportHtml(rate, game)}<div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines)}</div></section>`
       : '<p class="state">Search a player, or pick a game. Historical trends load right away, and 10,000 simulations warm in the background.</p>';
   return `<div class="projection-page">
       <header class="projection-intro">
         <h2>Projections</h2>
-        <p class="projection-note">A simulator, not a betting ticket. 10,000 simulated games paired with ESPN box-score history and reconstructed lineup stints. The line is the viewer's line; a spread under a game is display only and the simulator does not read it.</p>
+        <p class="projection-note">A simulator, not a betting ticket. 10,000 simulated games paired with ESPN box-score history and reconstructed lineup stints. Posted lines and prices are compared after the games are drawn; the simulator does not read them, or the spread under a game.</p>
       </header>
       <div class="projection-layout">
         <div class="projection-main">
           <label class="field projection-search"><span class="field-label">Player</span><input data-projection-search type="search" value="${escapeHtml(view.query)}" placeholder="Search a player on the slate" autocomplete="off"></label>
           <div data-projection-hits class="projection-hits">${searchHitsHtml(view.slate, view.card, view.query)}</div>
-          <section class="model-sides" data-model-sides aria-label="Where the simulations lean">${modelSidesInner(view.slate, view.card, view.form.market, view.cachedSimulations ?? new Map())}</section>
+          <section class="model-sides" data-model-sides aria-label="Leans against the posted lines">${leanPanelHtml(view)}</section>
           ${detail}
           ${board}
         </div>

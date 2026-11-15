@@ -14,6 +14,7 @@ import {
   type PropMarket,
   type PropSide,
 } from './props.ts';
+import { MIN_TIER_LEANS, tierFor, type PickRecord } from './picks.ts';
 import type { MarginForecast, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
 import type { ColumnKey, RatePlayer, SlateGame, TeamSide } from './types.ts';
 
@@ -740,6 +741,7 @@ export function renderPropResults(
   athleteId: string,
   form: PropFormState,
   player: Parameters<typeof propContextFromPlayer>[0] = null,
+  record: PickRecord | null = null,
 ): string {
   const sample = score.playerDraws?.get(athleteId) ?? null;
   if (!sample) return propPrompt('This player\'s simulations are not in the data.');
@@ -757,7 +759,9 @@ export function renderPropResults(
   if (!quote || quote.breakEven === null || quote.expectedReturn === null) {
     return propPrompt(priceError(form.odds, form.style));
   }
-  const verdict = decideVerdict(quote, propContextFromPlayer(player), form.market);
+  const tier = quote.edge === null ? null : tierFor(record, form.side, quote.edge);
+  const measured = tier && tier.pooled >= MIN_TIER_LEANS ? { measured: { edge: tier.edge, graded: tier.pooled } } : {};
+  const verdict = decideVerdict(quote, { ...propContextFromPlayer(player), ...measured }, form.market);
   if (!verdict) return propPrompt(priceError(form.odds, form.style));
   const edgeAttr = quote.edge !== null && quote.edge > 0 ? ' class="edge-up"' : quote.edge !== null && quote.edge < 0 ? ' class="edge-down"' : '';
   const modelPct = quote.modelProbability === null ? '—' : percent(quote.modelProbability);
@@ -856,6 +860,7 @@ export function renderPlayerPanel(
   athleteId: string,
   tab: PanelTab = 'forecast',
   form: PropFormState = DEFAULT_PROP_FORM,
+  record: PickRecord | null = null,
 ): string {
   const shown = score;
   const line = findLine(shown, athleteId);
@@ -901,7 +906,7 @@ export function renderPlayerPanel(
           <h3>Price a prop</h3>
           <p class="panel-lede">The sportsbook is compared after the 10,000 games. It does not change them.</p>
           ${propFormMarkup(form)}
-          <div data-prop-results aria-live="polite">${renderPropResults(score, athleteId, form, row)}</div>
+          <div data-prop-results aria-live="polite">${renderPropResults(score, athleteId, form, row, record)}</div>
         </section>
       </div>
     </div>

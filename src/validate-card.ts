@@ -35,6 +35,11 @@ export function validateGame(game: RateGame): void {
     if(c.fouls?.status==='fitted'){distribution(c.fouls.probabilities);for(const xs of Object.values(c.fouls.by_count))distribution(xs);}
     if(c.usage_concentration?.status==='fitted'&&[c.usage_concentration.shots,c.usage_concentration.trips,c.usage_concentration.assists??1,c.usage_concentration.rebounds??1].some(x=>!Number.isFinite(x)||x<USAGE_EXPONENT_RANGE[0]||x>USAGE_EXPONENT_RANGE[1]))throw new Error('Invalid usage concentration');
     if(c.rebound_credit?.status==='fitted'&&(!Number.isFinite(c.rebound_credit.defensive)||c.rebound_credit.defensive<MIN_DEFENSIVE_CREDIT||c.rebound_credit.defensive>1))throw new Error('Invalid rebound credit');
+    if(c.minutes_spread?.status==='fitted'){
+      const m=c.minutes_spread;
+      if(!Array.isArray(m.edges)||!Array.isArray(m.quantiles)||m.quantiles.length!==m.edges.length+1||m.edges.some((x,i)=>!Number.isFinite(x)||x<=0||(i>0&&x<=m.edges[i-1])))throw new Error('Invalid minutes spread');
+      for(const q of m.quantiles)if(!Array.isArray(q)||q.length<3||q.some((x,i)=>!Number.isFinite(x)||x<0||x>8||(i>0&&x<q[i-1])))throw new Error('Invalid minutes spread');
+    }
     if(c.lead_effect?.status==='fitted'&&[c.lead_effect.early,c.lead_effect.late].some(x=>!Number.isFinite(x)||x<0||x>MAX_LEAD_TILT))throw new Error('Invalid lead effect');
     if(c.rotation_state?.status==='fitted'){for(const p of [...Object.values(c.rotation_state.shares),...Object.values(c.rotation_state.baseline)])if(!Number.isFinite(p)||p<=0||p>=1)throw new Error('Invalid fitted rotation probability');}
     if(c.free_throws?.status==='fitted'){
@@ -62,7 +67,7 @@ export function validateGeneration(slate: Slate, card: RateCard): void {
   if (slate?.schema_version !== 1 || card?.schema_version !== 1 || !Array.isArray(slate.games) || !Array.isArray(card.games)) throw new Error('Invalid data schema');
   if (!slate.generated_at || !Number.isFinite(Date.parse(slate.generated_at)) || slate.generated_at !== card.generated_at || slate.date !== card.date) throw new Error('Mismatched data generations');
   if(card.generator_sha==='local-uncommitted')throw new Error('Uncommitted generator provenance is not publishable');
-  if(card.model_version&&!['possessions-v1','possessions-v2','possessions-v3','possessions-v4','possessions-v5','possessions-v6','possessions-v7','possessions-v8'].includes(card.model_version))throw new Error('Unsupported model version');
+  if(card.model_version&&!['possessions-v1','possessions-v2','possessions-v3','possessions-v4','possessions-v5','possessions-v6','possessions-v7','possessions-v8','possessions-v9'].includes(card.model_version))throw new Error('Unsupported model version');
   if (slate.timezone !== 'America/Chicago' || card.iterations !== 10000 || !Array.isArray(card.columns)) throw new Error('Invalid simulation contract');
   if (slate.games.length !== card.games.length || new Set(card.games.map(g => g.event_id)).size !== card.games.length || new Set(slate.games.map(g => g.event_id)).size !== slate.games.length) throw new Error('Incomplete slate coverage');
   if(!['min','fgm','fga','tpm','tpa','ftm','fta','pts','reb','ast'].every(k=>card.columns.includes(k as typeof card.columns[number])))throw new Error('Missing display columns');

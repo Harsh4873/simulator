@@ -8,15 +8,15 @@ import {fitFreeThrows} from './free-throw-model.ts';
 import {fitLeadEffect,runningMargins,type LeadEffectModel} from './lead-effect.ts';
 import {fitUsageConcentration,type UsageConcentration} from './usage-concentration.ts';
 import {fitReboundCredit,type ReboundCredit} from './rebound-credit.ts';
-import {fitParticipation,participationProbability,participationFeatures,ParticipationTracker,calibrateHealthy,applyHealthyCalibration} from './participation-model.ts';
+import {fitParticipation,participationProbability,participationFeatures,ParticipationTracker,calibrateHealthy,applyHealthyCalibration,publishedCalibration} from './participation-model.ts';
 import {fitAvailability,type AvailabilityObservation} from './model-evidence.ts';
-import { selectRolePrior } from './role-model.ts';
+import { selectRolePrior, fitMinutesSpread, type MinutesSpread } from './role-model.ts';
 import { fitTeamEffects, restDays } from './team-effects.ts';
 import { chicagoDate } from './date.ts';
 import type { CompletedEvent } from './parse-summary.ts';
 import type { MatchupContext, RatePlayer, SlateGame, TeamProfile } from './types.ts';
 
-export const MODEL_VERSION = 'possessions-v8';
+export const MODEL_VERSION = 'possessions-v9';
 // Shrinkage strengths are modeling priors, not fitted calibration coefficients.
 const TEAM_PRIOR_GAMES = 12;
 // Pace settles faster than efficiency; a six-game prior beat twelve on walk-forward total error.
@@ -34,7 +34,7 @@ export function eligibleEvents(events: CompletedEvent[], cutoff: string): Comple
   // No historical final timestamps: conservatively exclude the entire target Chicago date.
   return events.filter(e => e.season_type === 2 && Date.parse(e.start_time) < Date.parse(cutoff) && chicagoDate(new Date(e.start_time)) < chicagoDate(new Date(cutoff)));
 }
-const fitCache=new WeakMap<CompletedEvent[],{cutoff:string;rotation:ReturnType<typeof fitRotationState>;fouls:ReturnType<typeof fitFouls>;residual:ReturnType<typeof fitResidualDiagnostics>;usage:ReturnType<typeof fitUsageEffects>;effects:ReturnType<typeof fitTeamEffects>;freeThrows:ReturnType<typeof fitFreeThrows>;lineups:ReturnType<typeof fitLineupEffects>;lead:LeadEffectModel;usageShare:UsageConcentration;reboundCredit:ReboundCredit}>();
+const fitCache=new WeakMap<CompletedEvent[],{cutoff:string;rotation:ReturnType<typeof fitRotationState>;fouls:ReturnType<typeof fitFouls>;residual:ReturnType<typeof fitResidualDiagnostics>;usage:ReturnType<typeof fitUsageEffects>;effects:ReturnType<typeof fitTeamEffects>;freeThrows:ReturnType<typeof fitFreeThrows>;lineups:ReturnType<typeof fitLineupEffects>;lead:LeadEffectModel;usageShare:UsageConcentration;reboundCredit:ReboundCredit;minutesSpread:MinutesSpread}>();
 
 /** Lead give-back fitted on the same history, with an out-of-sample running rating as the strength control. */
 export function fitGameLeadEffect(history:CompletedEvent[]):LeadEffectModel{
@@ -50,7 +50,7 @@ export function fitMatchup(events: CompletedEvent[], game: SlateGame, cutoff: st
   const history = eligibleEvents(events,cutoff).filter(e => e.players.every(p => p.tov !== undefined && p.orb !== undefined));
   if (!history.length) throw new Error('No completed possession history');
   let cached=fitCache.get(events);
-  if(!cached||cached.cutoff!==cutoff){const effects=fitTeamEffects(history,eventPossessions);cached={cutoff,rotation:fitRotationState(history),fouls:fitFouls(history),residual:fitResidualDiagnostics(history,eventPossessions),usage:fitUsageEffects(history),effects,freeThrows:fitFreeThrows(history),lineups:fitLineupEffects(history),lead:fitGameLeadEffect(history),usageShare:fitUsageConcentration(history),reboundCredit:fitReboundCredit(history)};fitCache.set(events,cached);}
+  if(!cached||cached.cutoff!==cutoff){const effects=fitTeamEffects(history,eventPossessions);cached={cutoff,rotation:fitRotationState(history),fouls:fitFouls(history),residual:fitResidualDiagnostics(history,eventPossessions),usage:fitUsageEffects(history),effects,freeThrows:fitFreeThrows(history),lineups:fitLineupEffects(history),lead:fitGameLeadEffect(history),usageShare:fitUsageConcentration(history),reboundCredit:fitReboundCredit(history),minutesSpread:fitMinutesSpread(history,game.season,selectRolePrior(history,game.season))};fitCache.set(events,cached);}
   const effects=cached.effects;
   const samples = history.flatMap(e => [e.away_team_id,e.home_team_id].map(team => {
     const rows = e.players.filter(p => p.team_id === team);
@@ -84,7 +84,7 @@ export function fitMatchup(events: CompletedEvent[], game: SlateGame, cutoff: st
       schedule:scheduleContext(xs.at(-1)?.e??null,game.start_time,game.venue),games:xs.length, rest_days:Number.isFinite(last)?restDays(new Date(last).toISOString(),game.start_time):null };
   };
   const paceSD = Math.sqrt(mean(samples.map(x => (x.pace-pace)**2)));
-  return {lead_effect:cached.lead,usage_concentration:cached.usageShare,rebound_credit:cached.reboundCredit,rotation_state:cached.rotation,fouls:cached.fouls,residual_diagnostics:cached.residual,usage_effects:cached.usage,free_throws:cached.freeThrows,lineup_effects:cached.lineups,away:profile(game.away.team_id),home:profile(game.home.team_id),league_efficiency:league,pace_sd:paceSD,home_log_advantage:effects.home,rest_coefficient:effects.rest,workload_coefficient:effects.workload,travel_coefficient:effects.travel,timezone_coefficient:effects.timezone,neutral:game.neutral_site===true,training_games:history.length};
+  return {lead_effect:cached.lead,usage_concentration:cached.usageShare,rebound_credit:cached.reboundCredit,minutes_spread:cached.minutesSpread,rotation_state:cached.rotation,fouls:cached.fouls,residual_diagnostics:cached.residual,usage_effects:cached.usage,free_throws:cached.freeThrows,lineup_effects:cached.lineups,away:profile(game.away.team_id),home:profile(game.home.team_id),league_efficiency:league,pace_sd:paceSD,home_log_advantage:effects.home,rest_coefficient:effects.rest,workload_coefficient:effects.workload,travel_coefficient:effects.travel,timezone_coefficient:effects.timezone,neutral:game.neutral_site===true,training_games:history.length};
 }
 
 /** Minutes in a player's first appearances when no earlier NBA appearance exists in the permitted history. */
@@ -153,6 +153,7 @@ export function fitCurrentRoles(players: RatePlayer[], events: CompletedEvent[],
     }
   }
   const healthyCalibration=calibrateHealthy(calibrationRows);
+  const cardCalibration=publishedCalibration(healthyCalibration);
   const newcomer=newcomerMinutes(events,season);
   const closing=events.map(e=>({e,stint:historicalStints(e).stints.filter(s=>s.period===4&&s.end_seconds===0).at(-1)})).filter(x=>x.stint);
 
@@ -236,7 +237,7 @@ export function fitCurrentRoles(players: RatePlayer[], events: CompletedEvent[],
     });
     if(predicted!==null)play=predicted;
     p.participation_coverage={known:known.length,unknown:teamEvents.length-known.length,absent:history?.filter(s=>s.absent).length??0,source:predicted!==null?'team-boxes':known.length?'explicit-DNP':'scenario-prior'};
-    p.participation_model={...participationFit,applied:predicted!==null,healthy_calibration:healthyCalibration};
+    p.participation_model={...participationFit,applied:predicted!==null,healthy_calibration:cardCalibration};
     p.role_context={window:selection.window,half_life:selection.half_life,team_changed:events.some(e=>e.season===season&&e.players.some(r=>r.athlete_id===p.athlete_id&&r.team_id!==p.team_id)),return_from_injury:'unknown'};
     const status = p.injury_status;
     // A designation-level rate never replaces a healthy player's own history; it calibrates uncertain designations only.

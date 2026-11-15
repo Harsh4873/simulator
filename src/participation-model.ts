@@ -148,6 +148,49 @@ export interface HealthyCalibration {
   log_loss: number | null;
   baseline_log_loss: number | null;
   reason: string | null;
+  /** Monotone step after the logistic map, kept only when it lowers log loss on the later archived games. */
+  isotonic?: IsotonicMap & {log_loss:number;logistic_log_loss:number};
+}
+export interface IsotonicMap {x:number[];y:number[]}
+/** The copy carried on each player. Only the builder applies the step, so the card keeps its summary, not its knots. */
+export type PublishedHealthyCalibration=Omit<HealthyCalibration,'isotonic'>&{isotonic?:{knots:number;log_loss:number;logistic_log_loss:number}};
+export function publishedCalibration(calibration:HealthyCalibration):PublishedHealthyCalibration{
+ const {isotonic,...rest}=calibration;
+ return isotonic?{...rest,isotonic:{knots:isotonic.x.length,log_loss:isotonic.log_loss,logistic_log_loss:isotonic.logistic_log_loss}}:rest;
+}
+export const MIN_ISOTONIC_BLOCK=60;
+/**
+ * Pool-adjacent-violators over equal-count blocks of the calibrated probability. A logistic map cannot bend twice:
+ * it left healthy regulars near 95% when they play about 99% of the time and fringe players too low. Each knot is a
+ * block's mean probability and its smoothed play rate.
+ */
+export function isotonicKnots(pairs:{p:number;y:number}[]):IsotonicMap|null{
+ const sorted=pairs.filter(r=>Number.isFinite(r.p)&&(r.y===0||r.y===1)).sort((a,b)=>a.p-b.p);
+ if(sorted.length<MIN_ISOTONIC_BLOCK*3)return null;
+ const blocks:{n:number;wins:number;sum:number}[]=[];
+ for(let i=0;i<sorted.length;i+=MIN_ISOTONIC_BLOCK){
+  const chunk=sorted.slice(i,i+MIN_ISOTONIC_BLOCK),block={n:chunk.length,wins:chunk.reduce((s,r)=>s+r.y,0),sum:chunk.reduce((s,r)=>s+r.p,0)};
+  if(chunk.length<MIN_ISOTONIC_BLOCK&&blocks.length){const last=blocks[blocks.length-1];last.n+=block.n;last.wins+=block.wins;last.sum+=block.sum;}
+  else blocks.push(block);
+ }
+ for(let i=0;i<blocks.length-1;){
+  if(blocks[i].wins/blocks[i].n>blocks[i+1].wins/blocks[i+1].n){
+   blocks[i]={n:blocks[i].n+blocks[i+1].n,wins:blocks[i].wins+blocks[i+1].wins,sum:blocks[i].sum+blocks[i+1].sum};
+   blocks.splice(i+1,1);if(i>0)i--;
+  }else i++;
+ }
+ if(blocks.length<2)return null;
+ // Half a pseudo-game each way keeps a block that never missed below certainty.
+ return {x:blocks.map(b=>b.sum/b.n),y:blocks.map(b=>(b.wins+.5)/(b.n+1))};
+}
+export function applyIsotonic(map:IsotonicMap|null|undefined,p:number):number{
+ if(!map||map.x.length<2||map.x.length!==map.y.length)return p;
+ if(p<=map.x[0])return map.y[0];
+ const last=map.x.length-1;
+ if(p>=map.x[last])return map.y[last];
+ let i=1;while(map.x[i]<p)i++;
+ const span=map.x[i]-map.x[i-1];
+ return span>0?map.y[i-1]+(map.y[i]-map.y[i-1])*(p-map.x[i-1])/span:map.y[i];
 }
 const logit=(p:number)=>{const q=Math.min(1-1e-6,Math.max(1e-6,p));return Math.log(q/(1-q));};
 export const MIN_CALIBRATION_ROWS=300;
@@ -190,18 +233,28 @@ export function calibrateHealthy(rows:HealthyCalibrationRow[]):HealthyCalibratio
   if(lossMulti<baseline&&lossMulti<=loss1d&&coefHold[1]>0){
    const [fa,fb]=fitLogistic(design1d(sorted),0.01);
    const finalCoef=fitLogistic(sorted.map(r=>({x:healthyFeatures(r.p,r),y:r.y})),chosenPenalty);
-   return {status:'fitted',a:fa,b:fb,coefficients:finalCoef,penalty:chosenPenalty,rows:sorted.length,heldout_rows:hold.length,log_loss:lossMulti,baseline_log_loss:baseline,reason:null};
+   const score=(coef:number[])=>(r:HealthyCalibrationRow)=>sigmoid(healthyFeatures(r.p,r).reduce((s,v,i)=>s+v*coef[i],0));
+   return {status:'fitted',a:fa,b:fb,coefficients:finalCoef,penalty:chosenPenalty,rows:sorted.length,heldout_rows:hold.length,log_loss:lossMulti,baseline_log_loss:baseline,reason:null,...isotonicStage(fit,hold,sorted,score(coefHold),score(finalCoef),lossMulti)};
   }
  }
  if(!(loss1d<baseline)||!(b>0))return {...empty,heldout_rows:hold.length,log_loss:loss1d,baseline_log_loss:baseline,reason:'Calibration did not improve later archived games'};
  const [fa,fb]=fitLogistic(design1d(sorted),0.01);
- return {status:'fitted',a:fa,b:fb,rows:sorted.length,heldout_rows:hold.length,log_loss:loss1d,baseline_log_loss:baseline,reason:null};
+ return {status:'fitted',a:fa,b:fb,rows:sorted.length,heldout_rows:hold.length,log_loss:loss1d,baseline_log_loss:baseline,reason:null,...isotonicStage(fit,hold,sorted,r=>sigmoid(a+b*logit(r.p)),r=>sigmoid(fa+fb*logit(r.p)),loss1d)};
+}
+/** Fits the monotone step on the earlier games, keeps it only if the later games score better, then refits it on every row. */
+function isotonicStage(fit:HealthyCalibrationRow[],hold:HealthyCalibrationRow[],all:HealthyCalibrationRow[],early:(r:HealthyCalibrationRow)=>number,final:(r:HealthyCalibrationRow)=>number,logisticLoss:number):{isotonic?:HealthyCalibration['isotonic']}{
+ const trial=isotonicKnots(fit.map(r=>({p:early(r),y:r.y})));
+ if(!trial)return {};
+ const loss=hold.reduce((s,r)=>s+logLoss(applyIsotonic(trial,early(r)),r.y),0)/hold.length;
+ if(!(loss<logisticLoss))return {};
+ const map=isotonicKnots(all.map(r=>({p:final(r),y:r.y})));
+ return map?{isotonic:{...map,log_loss:loss,logistic_log_loss:logisticLoss}}:{};
 }
 export function applyHealthyCalibration(calibration:HealthyCalibration|null|undefined,p:number,context?:HealthyCalibrationContext):number{
  if(calibration?.status!=='fitted')return p;
  if(context&&Array.isArray(calibration.coefficients)&&calibration.coefficients.length===6){
   const feats=healthyFeatures(p,context);
-  return sigmoid(feats.reduce((s,v,i)=>s+v*calibration.coefficients![i],0));
+  return applyIsotonic(calibration.isotonic,sigmoid(feats.reduce((s,v,i)=>s+v*calibration.coefficients![i],0)));
  }
- return sigmoid(calibration.a+calibration.b*logit(p));
+ return applyIsotonic(calibration.isotonic,sigmoid(calibration.a+calibration.b*logit(p)));
 }

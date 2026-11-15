@@ -20,7 +20,10 @@ import { renderLineupEditor } from './lineup-editor.ts';
 import { applyLineupOverrides, cleanOverrides, isLineupChoice, LINEUP_STORAGE_KEY, overridesKey, readStoredLineups, summarizeOverrides, type LineupOverrides } from './lineup-overrides.ts';
 import { healthyCheck } from './generation.ts';
 import { fnv1a } from './rng.ts';
+import type { BookLine } from './book-lines.ts';
+import { gameLeans, LEAN_BUCKETS, linesByKey, MIN_PLAY_SHARE, parsePicksFile, type Lean, type PicksFile } from './picks.ts';
 import {
+  bookLineFor,
   defaultMarketLine,
   gameLogRowsHtml,
   historyChartBlockHtml,
@@ -31,9 +34,12 @@ import {
   isHistorySplit,
   isPropMarket,
   l10HistoricalValues,
+  leanPanelHtml,
+  measuredNoteHtml,
   modelChanceHtml,
-  modelSidesInner,
+  openLeanEvents,
   playedValues,
+  postedLineHtml,
   projectionBoardHtml,
   projectionChartHtml,
   renderProjections,
@@ -93,6 +99,13 @@ let projectionSupportMode: SupportMode = 'avg';
 let projectionTeammate: string | null = null;
 let projectionDefenseSlot: DefenseSlot | null = null;
 let projectionAutoLine = false;
+/** True while the price boxes hold the posted price rather than something the viewer typed. */
+let projectionAutoPrice = false;
+/** Published lines, leans and record. Optional: the page works without it. */
+let picks: PicksFile | null = null;
+let bookLines: Map<string, BookLine> = new Map();
+/** Leans compared in this browser, per cached simulation. Reset whenever the posted lines are reloaded. */
+let localLeans = new WeakMap<Simulation, Lean[]>();
 /** Set only while this game's worker is drawing. A cache hit never sets it. */
 let drawingEvent: string | null = null;
 let drawingProgress = 0;
@@ -238,24 +251,72 @@ function projectionView(): ProjectionView | null {
     supportMode: projectionSupportMode,
     selectedTeammateId: projectionTeammate,
     defenseSlot: projectionDefenseSlot,
-    cachedSimulations: cachedByEvent(),
+    lines: bookLines,
+    ...slateLeans(),
+    record: picks?.record ?? null,
+    book: picks?.book ?? null,
   };
 }
 
-function cachedByEvent(): Map<string, Simulation> {
-  const map = new Map<string, Simulation>();
-  if (!slate) return map;
-  for (const game of slate.games) {
-    const sim = cachedSimulation(game.event_id);
-    if (sim) map.set(game.event_id, sim);
+function postedLine(eventId: string | null, athleteId: string | null, market: PropFormState['market']): BookLine | null {
+  return bookLineFor(bookLines, eventId, athleteId, market);
+}
+
+/**
+ * Leans for games that have not started. A game simulated in this browser is compared here, so a lineup call shows
+ * up in its leans. Any other game uses the leans published with the same card. A game with neither is still waiting.
+ */
+function slateLeans(): { leans: Lean[]; leansWaiting: number } {
+  const leans: Lean[] = [];
+  let leansWaiting = 0;
+  if (!slate || !card) return { leans, leansWaiting };
+  const published = picks !== null && picks.generated_at === card.generated_at && picks.model_hash === (card.model_hash ?? null);
+  for (const eventId of openLeanEvents(slate, bookLines, new Date())) {
+    const game = slate.games.find((item) => item.event_id === eventId);
+    const base = rateGame(eventId);
+    if (!game || !base || base.simulation_error) continue;
+    const overrides = editsFor(eventId);
+    const simulation = cachedSimulation(eventId);
+    if (simulation) {
+      let mine = localLeans.get(simulation);
+      if (!mine) {
+        mine = gameLeans(game, applyLineupOverrides(base, overrides), simulation.playerDraws, bookLines).filter(
+          (lean) => lean.claimed >= LEAN_BUCKETS[1] && lean.play >= MIN_PLAY_SHARE,
+        );
+        localLeans.set(simulation, mine);
+      }
+      leans.push(...mine);
+    } else if (published && Object.keys(overrides).length === 0) {
+      for (const lean of picks!.leans) if (lean.event_id === eventId) leans.push(lean);
+    } else leansWaiting += 1;
   }
-  return map;
+  return { leans, leansWaiting };
 }
 
 function paintModelSides(): void {
   const el = projectionsRoot?.querySelector<HTMLElement>('[data-model-sides]');
   if (!el || !slate || !card) return;
-  el.innerHTML = modelSidesInner(slate, card, propForm.market, cachedByEvent());
+  const open = el.querySelectorAll<HTMLDetailsElement>('details[open]');
+  const keep = new Set(Array.from(open, (item) => item.className));
+  el.innerHTML = leanPanelHtml({ slate, now: new Date(), lines: bookLines, ...slateLeans(), record: picks?.record ?? null, book: picks?.book ?? null });
+  for (const details of el.querySelectorAll<HTMLDetailsElement>('details')) if (keep.has(details.className)) details.open = true;
+}
+
+/** Fills the line, and the price when one is posted, for the player and stat now in view. */
+function applyDefaultLine(market: PropFormState['market'], sample: Parameters<typeof defaultMarketLine>[1], eventId: string | null, athleteId: string | null): void {
+  const posted = postedLine(eventId, athleteId, market);
+  const auto = defaultMarketLine(market, sample, card?.projection_context, athleteId, posted);
+  projectionAutoLine = sample === null && auto !== null && !posted;
+  // A line carried over from the last player or stat would grade this one at someone else's number.
+  const line = auto !== null ? String(auto) : market === 'dd' || market === 'td' ? '0.5' : '';
+  if (posted) {
+    const over = propForm.side !== 'under';
+    propForm = { ...propForm, market, line, style: 'american', odds: String(over ? posted.over_odds : posted.under_odds), opposite: String(over ? posted.under_odds : posted.over_odds) };
+    projectionAutoPrice = true;
+  } else {
+    propForm = projectionAutoPrice ? { ...propForm, market, line, odds: '', opposite: '' } : { ...propForm, market, line };
+    projectionAutoPrice = false;
+  }
 }
 
 function lockMilestoneLine(): void {
@@ -300,7 +361,9 @@ function paintProjection(): void {
   const viewModel = projectionView();
   if (!projectionsRoot || !viewModel) return;
   const caret = projectionCaret();
+  const keep = new Set(Array.from(projectionsRoot.querySelectorAll<HTMLDetailsElement>('[data-model-sides] details[open]'), (item) => item.className));
   projectionsRoot.innerHTML = renderProjections(viewModel);
+  for (const details of projectionsRoot.querySelectorAll<HTMLDetailsElement>('[data-model-sides] details')) if (keep.has(details.className)) details.open = true;
   lockMilestoneLine();
   restoreProjectionCaret(caret);
 }
@@ -317,13 +380,17 @@ function paintProjectionFigures(): void {
   const chart = projectionsRoot.querySelector<HTMLElement>('[data-projection-chart]');
   if (chart) chart.innerHTML = projectionChartHtml(sample, form.market, form.line);
   const board = projectionsRoot.querySelector<HTMLElement>('[data-projection-board]');
-  if (board && rate) board.innerHTML = projectionBoardHtml(rate, simulation, form, projectionEvent, projectionAthlete, card.projection_context, projectionBoardSort);
+  if (board && rate) board.innerHTML = projectionBoardHtml(rate, simulation, form, projectionEvent, projectionAthlete, card.projection_context, projectionBoardSort, bookLines);
+  const postedEl = projectionsRoot.querySelector<HTMLElement>('[data-posted]');
+  if (postedEl) postedEl.innerHTML = postedLineHtml(postedLine(projectionEvent, projectionAthlete, form.market), form);
+  const measuredEl = projectionsRoot.querySelector<HTMLElement>('[data-measured]');
+  if (measuredEl) measuredEl.innerHTML = measuredNoteHtml(sample, form, picks?.record ?? null);
   const player = projectionAthlete ? rate?.players.find((item) => item.athlete_id === projectionAthlete) ?? null : null;
   const results = projectionsRoot.querySelector<HTMLElement>('[data-prop-results]');
   if (results && simulation && projectionAthlete) {
     const open = results.querySelector('details.prop-advanced');
     const keepOpen = open instanceof HTMLDetailsElement && open.open;
-    results.innerHTML = renderPropResults(simulation, projectionAthlete, form, player);
+    results.innerHTML = renderPropResults(simulation, projectionAthlete, form, player, picks?.record ?? null);
     const details = results.querySelector('details.prop-advanced');
     if (keepOpen && details instanceof HTMLDetailsElement) details.open = true;
   }
@@ -412,9 +479,7 @@ function scheduleNextPrefetch(): void {
         if (desk?.dataset.mode === 'projections') {
           if (projectionEvent === nextGame.event_id) {
             if (projectionAthlete && (propForm.line.trim() === '' || projectionAutoLine)) {
-              const sample = event.data.result.playerDraws.get(projectionAthlete) ?? null;
-              const auto = defaultMarketLine(propForm.market, sample, card?.projection_context, projectionAthlete);
-              if (auto !== null) propForm = { ...propForm, line: String(auto) };
+              applyDefaultLine(propForm.market, event.data.result.playerDraws.get(projectionAthlete) ?? null, projectionEvent, projectionAthlete);
               projectionAutoLine = false;
             }
             paintProjection();
@@ -526,6 +591,7 @@ function syncPanel(): void {
     panelAthlete,
     panelTab,
     propForm,
+    picks?.record ?? null,
   );
 }
 
@@ -753,9 +819,7 @@ async function simulateProjection(eventId: string): Promise<void> {
     }
     if (desk?.dataset.mode !== 'projections') return;
     if (result && projectionAthlete && (propForm.line.trim() === '' || projectionAutoLine)) {
-      const sample = result.playerDraws.get(projectionAthlete) ?? null;
-      const auto = defaultMarketLine(propForm.market, sample, card?.projection_context, projectionAthlete);
-      if (auto !== null) propForm = { ...propForm, line: String(auto) };
+      applyDefaultLine(propForm.market, result.playerDraws.get(projectionAthlete) ?? null, projectionEvent, projectionAthlete);
       projectionAutoLine = false;
     }
     paintProjection();
@@ -849,12 +913,17 @@ function onDeskClick(event: Event): void {
   if (projectionMarket instanceof HTMLButtonElement && isPropMarket(projectionMarket.dataset.projectionMarket ?? '')) {
     const market = projectionMarket.dataset.projectionMarket as typeof propForm.market;
     const sample = projectionEvent && projectionAthlete ? cachedSimulation(projectionEvent)?.playerDraws.get(projectionAthlete) ?? null : null;
-    const auto = defaultMarketLine(market, sample, card?.projection_context, projectionAthlete);
     projectionSelectedBar = null;
-    projectionAutoLine = sample === null && auto !== null;
-    propForm = { ...propForm, market, line: auto !== null ? String(auto) : market === 'dd' || market === 'td' ? '0.5' : propForm.line };
+    applyDefaultLine(market, sample, projectionEvent, projectionAthlete);
     paintProjection();
     projectionsRoot?.querySelector<HTMLButtonElement>(`[data-projection-market="${CSS.escape(market)}"]`)?.focus();
+    return;
+  }
+  if (target.closest('button[data-use-posted]')) {
+    const sample = projectionEvent && projectionAthlete ? cachedSimulation(projectionEvent)?.playerDraws.get(projectionAthlete) ?? null : null;
+    applyDefaultLine(propForm.market, sample, projectionEvent, projectionAthlete);
+    paintProjection();
+    projectionsRoot?.querySelector<HTMLInputElement>('[data-prop-line]')?.focus();
     return;
   }
   const l10Btn = target.closest('button[data-line-l10]');
@@ -964,12 +1033,12 @@ function onDeskClick(event: Event): void {
     projectionSelectedBar = null;
     projectionTeammate = null;
     projectionDefenseSlot = null;
+    // A lean row opens its own stat and side, so the form shows the same comparison the row did.
+    const leanMarket = projectionPlayer.dataset.leanMarket ?? '';
+    const leanSideChoice = projectionPlayer.dataset.leanSide;
+    if (isPropMarket(leanMarket)) propForm = { ...propForm, market: leanMarket, side: leanSideChoice === 'under' ? 'under' : 'over' };
     const cached = cachedSimulation(eventId);
-    const sample = cached?.playerDraws.get(athleteId) ?? null;
-    const auto = defaultMarketLine(propForm.market, sample, card?.projection_context, athleteId);
-    projectionAutoLine = sample === null && auto !== null;
-    if (auto !== null) propForm = { ...propForm, line: String(auto) };
-    else if (propForm.market === 'dd' || propForm.market === 'td') propForm = { ...propForm, line: '0.5' };
+    applyDefaultLine(propForm.market, cached?.playerDraws.get(athleteId) ?? null, eventId, athleteId);
     if (cached) {
       if (drawingEvent === eventId) {
         drawingEvent = null;
@@ -1095,7 +1164,7 @@ function paintPropResults(): void {
   const open = results.querySelector('details.prop-advanced');
   const keepOpen = open instanceof HTMLDetailsElement && open.open;
   const player = view.rates.players.find((item) => item.athlete_id === panelAthlete) ?? null;
-  results.innerHTML = renderPropResults(view.result, panelAthlete, propForm, player);
+  results.innerHTML = renderPropResults(view.result, panelAthlete, propForm, player, picks?.record ?? null);
   const details = results.querySelector('details.prop-advanced');
   if (keepOpen && details instanceof HTMLDetailsElement) details.open = true;
 }
@@ -1118,9 +1187,28 @@ function onPropEdit(event: Event): void {
   readPropForm();
   if (desk?.dataset.mode === 'projections') {
     if (target instanceof HTMLInputElement && target.matches('[data-prop-line]')) projectionAutoLine = false;
+    if (target instanceof HTMLInputElement && (target.matches('[data-prop-odds]') || target.matches('[data-prop-opposite]'))) projectionAutoPrice = false;
+    if (target instanceof HTMLSelectElement && target.matches('[data-prop-style]')) projectionAutoPrice = false;
     if (propForm.market === 'dd' || propForm.market === 'td') propForm = { ...propForm, line: '0.5' };
+    if (target instanceof HTMLInputElement && target.matches('[data-prop-side]') && projectionAutoPrice) {
+      // The boxes hold the posted price, so the other side brings its own price with it.
+      const posted = postedLine(projectionEvent, projectionAthlete, propForm.market);
+      if (posted) {
+        const over = propForm.side !== 'under';
+        propForm = { ...propForm, odds: String(over ? posted.over_odds : posted.under_odds), opposite: String(over ? posted.under_odds : posted.over_odds) };
+        const odds = projectionsRoot?.querySelector<HTMLInputElement>('[data-prop-odds]');
+        const opposite = projectionsRoot?.querySelector<HTMLInputElement>('[data-prop-opposite]');
+        if (odds) odds.value = propForm.odds;
+        if (opposite) opposite.value = propForm.opposite;
+      }
+    }
     const structural = target instanceof HTMLSelectElement && (target.matches('[data-prop-market]') || target.matches('[data-prop-style]'));
     if (structural) {
+      if (target.matches('[data-prop-market]')) {
+        const sample = projectionEvent && projectionAthlete ? cachedSimulation(projectionEvent)?.playerDraws.get(projectionAthlete) ?? null : null;
+        projectionSelectedBar = null;
+        applyDefaultLine(propForm.market, sample, projectionEvent, projectionAthlete);
+      }
       paintProjection();
       const selector = target.matches('[data-prop-style]') ? '[data-prop-style]' : '[data-prop-market]';
       projectionsRoot?.querySelector<HTMLElement>(selector)?.focus();
@@ -1196,6 +1284,22 @@ function bind(): void {
   document.addEventListener('keydown', onKey);
 }
 
+/** Posted lines, published leans and the graded record. The page still simulates and projects when this is missing. */
+async function loadPicks(): Promise<void> {
+  picks = null;
+  bookLines = new Map();
+  localLeans = new WeakMap();
+  try {
+    const response = await fetch(`${DATA_BASE}picks.json`, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+    if (!response.ok) return;
+    picks = parsePicksFile(await response.text());
+    bookLines = linesByKey(picks);
+  } catch {
+    picks = null;
+    bookLines = new Map();
+  }
+}
+
 async function load(): Promise<void> {
   if (!slateRoot) return;
   try {
@@ -1208,6 +1312,7 @@ async function load(): Promise<void> {
       return text;
     },async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join(''));
     slate=loaded.slate;card=loaded.card;health=loaded.health;
+    await loadPicks();
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
     await hydrateSimulationCache(generationKey(), simulationCache);

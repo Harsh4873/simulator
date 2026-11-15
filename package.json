@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "rate-card": "node --experimental-strip-types scripts/build-rate-card.ts",
+    "picks": "node --experimental-strip-types scripts/build-picks.ts",
+    "picks:backfill": "node --experimental-strip-types scripts/backfill-picks.ts",
     "backtest": "node --experimental-strip-types scripts/backtest.ts",
     "sanity": "node --experimental-strip-types scripts/sanity.ts",
     "validate-artifact": "node scripts/validate-artifact.mjs",

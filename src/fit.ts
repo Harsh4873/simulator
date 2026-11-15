@@ -16,6 +16,14 @@ export const K_FG2 = 60;
 export const K_TP = 40;
 export const K_FT = 30;
 export const POSITION_TEAM_WEIGHT = 0.75;
+/**
+ * A reserve shoots, rebounds and passes less per minute than a starter. Pulling a 10-minute player toward the team
+ * average, which is mostly starters' minutes, credited reserves with about 5% to 12% more points per minute than they
+ * scored on archived pre-tip games and starters with less. Counting rates now shrink toward players in the same
+ * minutes-per-game tier and position, scaled by the team's level.
+ */
+export const ROLE_TIER_EDGES = [12, 20, 28] as const;
+export const MIN_ROLE_POOL_MINUTES = 2000;
 
 const OUT_STATUSES = new Set(['out', 'injured reserve', 'suspension', 'suspended', 'inactive', 'out for season']);
 
@@ -116,16 +124,27 @@ export function shrinkRate(input: {
   position: Exposure | null;
   player: Exposure;
   blendPosition: boolean;
+  /** Players in the same minutes tier (and position when known). Replaces the team/position blend as the prior level. */
+  role?: Exposure | null;
 }): number | null {
   if (!(input.league.e > 0)) return null;
   const leagueRate = input.league.s / input.league.e;
   const teamRate = (input.team.s + input.k * leagueRate) / (input.team.e + input.k);
   let target = teamRate;
-  if (input.blendPosition && input.position) {
+  if (input.role && input.role.e >= MIN_ROLE_POOL_MINUTES && leagueRate > 0) {
+    // The role sets the level; the team keeps its own tilt relative to the league.
+    target = (input.role.s / input.role.e) * (teamRate / leagueRate);
+  } else if (input.blendPosition && input.position) {
     const positionRate = (input.position.s + input.k * leagueRate) / (input.position.e + input.k);
     target = POSITION_TEAM_WEIGHT * teamRate + (1 - POSITION_TEAM_WEIGHT) * positionRate;
   }
   return (input.player.s + input.k * target) / (input.player.e + input.k);
+}
+
+export function roleTier(minutesPerGame: number): number {
+  let tier = 0;
+  while (tier < ROLE_TIER_EDGES.length && minutesPerGame >= ROLE_TIER_EDGES[tier]) tier++;
+  return tier;
 }
 
 function emptyPool(): Pool {
@@ -271,6 +290,32 @@ export function fitPlayers(input: FitInput): FitResult {
 
   const publish = ft.league.e > 0 && fg2.league.e > 0 && tp.league.e > 0 && tpaShare.league.e > 0;
 
+  // Minutes per game played sets each player's tier; a player with no logged game has none and keeps the team prior.
+  const tierOf = (athleteId: string): number | null => {
+    const logged = minutes.player.get(athleteId);
+    return logged && logged.e > 0 ? roleTier(logged.s / logged.e) : null;
+  };
+  const rolePools = new Map<Pool, Map<string, Exposure>>();
+  for (const pool of [fga, fta, reb, ast, stl, blk, tov]) {
+    const byRole = new Map<string, Exposure>();
+    for (const [athleteId, exposure] of pool.player) {
+      const tier = tierOf(athleteId);
+      if (tier === null) continue;
+      bump(byRole, `${tier}|`, exposure.s, exposure.e);
+      const group = groupFor(athleteId);
+      if (group) bump(byRole, `${tier}|${group}`, exposure.s, exposure.e);
+    }
+    rolePools.set(pool, byRole);
+  }
+  const roleExposure = (pool: Pool, athleteId: string, group: PositionGroup): Exposure | null => {
+    const tier = tierOf(athleteId);
+    const byRole = rolePools.get(pool);
+    if (tier === null || !byRole) return null;
+    const withPosition = group ? byRole.get(`${tier}|${group}`) : undefined;
+    if (withPosition && withPosition.e >= MIN_ROLE_POOL_MINUTES) return withPosition;
+    return byRole.get(`${tier}|`) ?? null;
+  };
+
   const rate = (pool: Pool, k: number, athleteId: string, teamId: string, group: PositionGroup): number | null =>
     shrinkRate({
       k,
@@ -279,6 +324,7 @@ export function fitPlayers(input: FitInput): FitResult {
       position: group ? exposureOf(pool.position, group) : null,
       player: exposureOf(pool.player, athleteId),
       blendPosition: group !== '',
+      role: roleExposure(pool, athleteId, group),
     });
 
   const seen = new Set<string>();

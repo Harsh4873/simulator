@@ -23,19 +23,20 @@ import {
   unpackTeamAllowed,
 } from '../src/projection-context.ts';
 import { gradeProp, quoteProp, type PlayerSample } from '../src/props.ts';
+import type { BookLine } from '../src/book-lines.ts';
+import { buildRecord, gameLeans, type LedgerFile, type LedgerRow } from '../src/picks.ts';
 import {
   defaultMarketLine,
   gradedPropLine,
+  leanPanelInner,
+  measuredNoteHtml,
   modelChanceHtml,
-  modelSidesInner,
-  naturalHookLine,
+  nearestHook,
   nearestHalfPoint,
   playedMean,
   playedValues,
-  propEligible,
   projectionBoardHtml,
   renderProjections,
-  slateLeans,
   searchHitsHtml,
   viewerLine,
   type ProjectionView,
@@ -685,10 +686,56 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     terminate() {}
   }
   globals.Worker = FakeWorker;
-  globals.fetch = async (url: string) =>
-    new Response(url.endsWith('/slate.json') ? JSON.stringify(domSlate) : url.endsWith('/rate-card.json') ? JSON.stringify(domCard) : '', {
-      status: url.endsWith('/slate.json') || url.endsWith('/rate-card.json') ? 200 : 404,
-    });
+  // Published with the card: one posted line the star cannot reach, the lean it makes, and a record where unders
+  // that claimed a large edge have been beating the price.
+  const postedAt = new Date(now.getTime() - 1800000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const starPoints = playedValues(simResult.playerDraws.get(star.athlete_id)!, 'pts');
+  const underShare = (line: number) => starPoints.filter((value) => value < line).length / starPoints.length;
+  // The first half point where about two thirds of the simulated games stay under: a 10-to-20-point claim at -110.
+  let starLine = 0.5;
+  while (underShare(starLine) - 110 / 210 < 0.1) starLine += 1;
+  assert.ok(underShare(starLine) - 110 / 210 < 0.24, `under claim ${underShare(starLine) - 110 / 210}`);
+  const domPicks = {
+    schema_version: 1,
+    generated_at: domCard.generated_at,
+    input_hash: domCard.input_hash ?? null,
+    model_hash: null,
+    built_at: domCard.generated_at,
+    book: 'DraftKings',
+    lines: { [g0.event_id]: [[star.athlete_id, 'pts', starLine, -112, -110, postedAt]] },
+    leans: [
+      {
+        event_id: g0.event_id,
+        athlete_id: star.athlete_id,
+        name: star.name,
+        matchup: 'AWY @ HME',
+        tip: domSlate.games[0].start_time,
+        market: 'pts',
+        line: starLine,
+        over_odds: -112,
+        under_odds: -110,
+        book: 'DraftKings',
+        priced_at: postedAt,
+        side: 'under',
+        model: underShare(starLine),
+        need: 110 / 210,
+        claimed: underShare(starLine) - 110 / 210,
+        projection: 20,
+        minutes: 33,
+        play: 0.98,
+      },
+    ],
+    record: buildRecord([
+      recordFile('2026-10-30', [
+        { p: 0.3, over: 100, under: -120, line: 10.5, actual: 8, count: 180 },
+        { p: 0.3, over: 100, under: -120, line: 10.5, actual: 13, count: 120 },
+      ]),
+    ]),
+  };
+  globals.fetch = async (url: string) => {
+    const body = url.endsWith('/slate.json') ? JSON.stringify(domSlate) : url.endsWith('/rate-card.json') ? JSON.stringify(domCard) : url.endsWith('/picks.json') ? JSON.stringify(domPicks) : '';
+    return new Response(body, { status: body ? 200 : 404 });
+  };
 
   const flush = () => new Promise((r) => setTimeout(r, 25));
   try {
@@ -697,6 +744,15 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     await flush();
 
     assert.equal(document.querySelector('#desk')?.getAttribute('data-mode'), 'projections');
+    // The published lean is on the page before any game is simulated here, with its measured record beside it.
+    const sides = () => document.querySelector('[data-model-sides]')?.textContent ?? '';
+    assert.match(sides(), /Leans against the posted lines/);
+    assert.ok(sides().includes(star.name));
+    assert.ok(sides().includes(`Under ${starLine} PTS -110`));
+    assert.match(sides(), /Leans this strong: \+\d+\.\d pp against the price, 300 graded/);
+    assert.match(sides(), /No over lean clears the bar right now/);
+    assert.match(sides(), /Record: 300 graded leans/);
+    assert.equal(workers, 0);
     const searchInput = document.querySelector<HTMLInputElement>('[data-projection-search]');
     assert.ok(searchInput);
     searchInput.value = star.name.split(' ')[0]!;
@@ -715,6 +771,32 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     assert.ok(document.querySelector('.ready-dot'));
     assert.equal(document.querySelector('[data-projection-hits]')?.innerHTML, '');
     assert.match(document.querySelector('.who-name')?.textContent ?? '', new RegExp(star.name.split(' ')[0]!));
+
+    // The star opened at the posted line with the posted price already in the form, so the verdict needs no typing.
+    const formValue = (selector: string) => document.querySelector<HTMLInputElement>(`#projections ${selector}`)?.value;
+    assert.equal(formValue('[data-prop-line]'), String(starLine));
+    assert.equal(formValue('[data-prop-odds]'), '-112');
+    assert.equal(formValue('[data-prop-opposite]'), '-110');
+    assert.ok((document.querySelector('[data-posted-line]')?.textContent ?? '').includes(`DraftKings has ${starLine} at over -112, under -110`));
+    assert.ok(document.querySelector('#projections .verdict-mark'));
+    assert.ok(document.querySelector('#projections .line-posted'));
+    // Opening the lean itself switches to its side and brings that side's price.
+    const leanRow = document.querySelector<HTMLButtonElement>(`[data-model-sides] button.lean-row[data-projection-player="${star.athlete_id}"]`);
+    assert.ok(leanRow, 'the game simulated here still lists the lean');
+    leanRow.click();
+    assert.equal(formValue('[data-prop-odds]'), '-110');
+    assert.equal(formValue('[data-prop-opposite]'), '-112');
+    assert.ok(document.querySelector('#projections [data-prop-side][value="under"]')?.hasAttribute('checked'));
+    assert.match(document.querySelector('[data-measured]')?.textContent ?? '', /Under claims of \d+ to \d+ points against the price have settled \+\d+\.\d pp/);
+    // Typing another line offers the posted one back.
+    const lineInput = document.querySelector<HTMLInputElement>('#projections [data-prop-line]')!;
+    lineInput.value = '22.5';
+    lineInput.dispatchEvent(new window.Event('input', { bubbles: true }));
+    const usePosted = document.querySelector<HTMLButtonElement>('[data-use-posted]');
+    assert.ok(usePosted);
+    usePosted.click();
+    assert.equal(formValue('[data-prop-line]'), String(starLine));
+    assert.equal(workers, 1);
 
     // Switch market to DD -> line locks at 0.5 and defense header shows PRA
     document.querySelector<HTMLButtonElement>('[data-projection-market="dd"]')?.click();
@@ -757,11 +839,36 @@ test('DOM interactions on #projections drive search, markets, history splits, on
   }
 });
 
-test('model and board accuracy fixes: .5 hook lines, per-player board lines, cameo transfer cap, orb_share, and context healthy calibration', () => {
-  // 1. Default lines snap to .5 hooks (never whole integers) so push mass does not distort prop chances.
-  assert.equal(naturalHookLine('pts', [20, 20, 20]), 19.5);
-  assert.equal(naturalHookLine('pts', [20, 21]), 20.5);
-  assert.equal(naturalHookLine('dd', [0, 1]), 0.5);
+/** Graded ledger rows that put one side's leans above or below the price. */
+function recordFile(date: string, rows: { p: number; over: number; under: number; line: number; actual: number; count: number }[]): LedgerFile {
+  const out: LedgerRow[] = [];
+  let id = 0;
+  for (const spec of rows) {
+    for (let i = 0; i < spec.count; i += 1) {
+      id += 1;
+      out.push({
+        e: `rec-${date}`,
+        a: String(id),
+        m: 'pts',
+        name: `Player ${id}`,
+        team: '1',
+        tip: `${date}T23:00:00Z`,
+        book: 'DraftKings',
+        open: { at: `${date}T20:00:00Z`, priced_at: `${date}T19:00:00Z`, line: spec.line, over: spec.over, under: spec.under, p: spec.p, play: 0.98, min: 30 },
+        result: { actual: spec.actual, min: 30 },
+      });
+    }
+  }
+  return { schema_version: 1, date, source: 'replay', rows: out };
+}
+
+test('board and lean accuracy fixes: posted lines, no self-placed hooks, measured leans, cameo transfer cap, orb_share, and context healthy calibration', () => {
+  // 1. A default line is the posted line, or the half point nearest the projection. It is never placed under a
+  // player's own simulated median, where the over is at least 50% by construction.
+  assert.equal(nearestHook('pts', [20, 21]), 20.5);
+  assert.equal(nearestHook('pts', [2, 2, 3]), 2.5);
+  assert.equal(nearestHook('pts', [0, 0, 0]), 0.5);
+  assert.equal(nearestHook('dd', [0, 1]), 0.5);
   const sim = simulate(game, seed, draws);
   const sorted = [...game.players].sort(
     (a, b) =>
@@ -769,93 +876,24 @@ test('model and board accuracy fixes: .5 hook lines, per-player board lines, cam
       (playedMean(playedValues(sim.playerDraws.get(a.athlete_id)!, 'pts')) ?? 0),
   );
   const top = sorted[0]!;
-  const auto = defaultMarketLine('pts', sim.playerDraws.get(top.athlete_id) ?? null, undefined, top.athlete_id);
-  assert.ok(auto !== null && auto % 1 === 0.5, `expected .5 hook, got ${auto}`);
-
-  // 2. Game Props Board grades each non-selected player against their own .5 line while preserving the viewer's line for the selected player.
-  const rolePlayer = sorted.find((p) => {
-    const m = playedMean(playedValues(sim.playerDraws.get(p.athlete_id)!, 'pts')) ?? 0;
-    return m > 4 && m < 14;
+  const topSample = sim.playerDraws.get(top.athlete_id)!;
+  const auto = defaultMarketLine('pts', topSample, undefined, top.athlete_id);
+  assert.ok(auto !== null && auto % 1 === 0.5, `expected a half point, got ${auto}`);
+  assert.ok(Math.abs(auto - (playedMean(playedValues(topSample, 'pts')) ?? 0)) <= 0.5);
+  const post = (athleteId: string, line: number, over = -110, under = -110): BookLine => ({
+    event_id: game.event_id,
+    athlete_id: athleteId,
+    market: 'pts',
+    line,
+    over_odds: over,
+    under_odds: under,
+    priced_at: '2026-11-02T20:00:00Z',
+    book: 'DraftKings',
   });
-  assert.ok(rolePlayer);
-  const boardHtml = projectionBoardHtml(
-    game,
-    sim,
-    { market: 'pts', side: 'over', line: '29.5', style: 'american', odds: '-110', opposite: '' },
-    game.event_id,
-    top.athlete_id,
-  );
-  assert.match(boardHtml, /<th>Line<\/th>/);
-  assert.match(boardHtml, /29\.5/);
-  const roleSample = sim.playerDraws.get(rolePlayer.athlete_id)!;
-  const roleHook = naturalHookLine('pts', playedValues(roleSample, 'pts'));
-  assert.ok(roleHook < 20);
-  assert.equal(boardHtml.includes(`<td>${roleHook}</td>`), gradedPropLine('pts', roleHook) !== null);
-  const overHtml = projectionBoardHtml(
-    game,
-    sim,
-    { market: 'pts', side: 'over', line: '', style: 'american', odds: '', opposite: '' },
-    game.event_id,
-    null,
-    undefined,
-    'over',
-  );
-  assert.match(overHtml, /data-board-sort="over" aria-pressed="true"/);
-  let bestName = '';
-  let bestRate = -1;
-  for (const player of game.players) {
-    const sample = sim.playerDraws.get(player.athlete_id);
-    if (!sample || !propEligible(sample, 'pts')) continue;
-    const values = playedValues(sample, 'pts');
-    if (!values.length) continue;
-    const hook = naturalHookLine('pts', values);
-    const grade = gradeProp(sample, 'pts', 'over', hook);
-    const decided = grade.wins + grade.losses;
-    if (!decided) continue;
-    const rate = grade.wins / decided;
-    if (rate > bestRate || (rate === bestRate && (bestName === '' || player.name.localeCompare(bestName) < 0))) {
-      bestRate = rate;
-      bestName = player.name;
-    }
-  }
-  const firstName = overHtml.match(/<th scope="row"><button[^>]*>([^<]+)<\/button>/);
-  assert.equal(firstName?.[1], bestName);
-  assert.ok(slateGame);
-  const oneSlate = { ...slate, games: [slateGame] };
-  const cached = new Map([[game.event_id, sim]]);
-  const leans = slateLeans(oneSlate, card, 'pts', cached);
-  assert.ok(leans.over.length + leans.under.length > 0);
-  assert.equal(slateLeans(oneSlate, card, 'pts', new Map()).waiting, 1);
-  const sidesHtml = modelSidesInner(oneSlate, card, 'pts', cached);
-  assert.match(sidesHtml, /not a book line/);
-  const lead = leans.over[0] ?? leans.under[0];
-  assert.ok(lead);
-  assert.equal(sidesHtml.includes(lead.name), true);
-  assert.match(modelSidesInner(oneSlate, card, 'pts', new Map()), /warming up/);
-  const cameo: PlayerSample = {
-    min: Array(40).fill(4),
-    pts: Array(40).fill(0),
-    reb: Array(40).fill(0),
-    ast: Array(40).fill(0),
-    tpm: Array(40).fill(0),
-  };
-  const scorer: PlayerSample = {
-    min: Array(40).fill(34),
-    pts: Array(40).fill(22),
-    reb: Array(40).fill(6),
-    ast: Array(40).fill(5),
-    tpm: Array(40).fill(2),
-  };
-  assert.equal(propEligible(cameo, 'pts'), false);
-  assert.equal(propEligible(scorer, 'pts'), true);
-  const spiked: PlayerSample = {
-    min: Array(40).fill(18),
-    pts: [...Array(32).fill(0), ...Array(8).fill(20)],
-    reb: Array(40).fill(2),
-    ast: Array(40).fill(1),
-    tpm: Array(40).fill(0),
-  };
-  assert.equal(propEligible(spiked, 'pts'), false);
+  assert.equal(defaultMarketLine('pts', topSample, undefined, top.athlete_id, post(top.athlete_id, 31.5)), 31.5);
+  // A low line is the viewer's to grade. Nothing is hidden behind a floor any more.
+  assert.equal(gradedPropLine('pts', 1.5), 1.5);
+  assert.equal(gradedPropLine('dd', 1.5), null);
   const low: PlayerSample = {
     min: Array(40).fill(16),
     pts: [...Array(20).fill(2), ...Array(20).fill(3)],
@@ -863,24 +901,88 @@ test('model and board accuracy fixes: .5 hook lines, per-player board lines, cam
     ast: Array(40).fill(1),
     tpm: Array(40).fill(0),
   };
-  assert.equal(naturalHookLine('pts', low.pts), 2.5);
-  assert.equal(defaultMarketLine('pts', low, undefined, 'low'), null);
-  assert.equal(gradedPropLine('pts', 1.5), null);
-  assert.equal(gradedPropLine('pts', 2.5), null);
-  const lowChance = modelChanceHtml(low, 'pts', '2.5');
-  assert.match(lowChance, /not graded/);
-  assert.equal(lowChance.includes('<dd>'), false);
-  const cameoPlayer = { ...game.players[0]!, athlete_id: 'cameo', name: 'Cameo Zero', replacement_level: undefined };
-  const scorerPlayer = { ...game.players[1]!, athlete_id: 'scorer', name: 'Star Scorer', replacement_level: undefined };
-  const tinyGame = { ...game, players: [cameoPlayer, scorerPlayer] };
-  const tinyCard = { ...card, games: [tinyGame] };
-  const cameoDraws = new Map<string, Simulation>([
-    [game.event_id, { playerDraws: new Map([['cameo', cameo], ['scorer', scorer]]) } as Simulation],
+  assert.equal(defaultMarketLine('pts', low, undefined, 'low'), 2.5);
+  assert.match(modelChanceHtml(low, 'pts', '2.5'), /<dt>Over<\/dt><dd>50%<\/dd>/);
+
+  // 2. The board grades the selected player at the viewer's line and everyone else at the posted line or not at all.
+  const role = sorted.filter((p) => {
+    const m = playedMean(playedValues(sim.playerDraws.get(p.athlete_id)!, 'pts')) ?? 0;
+    return m > 4 && m < 14;
+  });
+  assert.ok(role.length >= 2);
+  const [roleA, roleB] = role;
+  const form: PropFormState = { market: 'pts', side: 'over', line: '29.5', style: 'american', odds: '-110', opposite: '' };
+  const bare = projectionBoardHtml(game, sim, form, game.event_id, top.athlete_id);
+  assert.match(bare, /<th>Line<\/th>/);
+  assert.match(bare, /<td>29\.5<\/td>/);
+  assert.equal((bare.match(/class="line-posted"/g) ?? []).length, 0);
+  assert.match(bare, /No posted line is in for this stat/);
+  // Without a posted line a role player has a projection and no line, over, under or edge.
+  const roleRow = bare.split('<tr').find((row) => row.includes(`data-projection-player="${roleA.athlete_id}"`))!;
+  assert.deepEqual([...roleRow.matchAll(/<td>([^<]*)<\/td>/g)].map((m) => m[1]).slice(1), ['', '', '', '']);
+  const meanOf = (id: string) => playedMean(playedValues(sim.playerDraws.get(id)!, 'pts')) ?? 0;
+  // One line far under a projection and one far over it, so each side has a clear leader.
+  const lines = new Map<string, BookLine>();
+  const lowLine = Math.max(0.5, Math.floor(meanOf(roleA.athlete_id)) - 2.5);
+  const highLine = Math.floor(meanOf(roleB.athlete_id)) + 3.5;
+  lines.set(`${game.event_id}:${roleA.athlete_id}:pts`, post(roleA.athlete_id, lowLine, -125, 105));
+  lines.set(`${game.event_id}:${roleB.athlete_id}:pts`, post(roleB.athlete_id, highLine, 100, -120));
+  const open: PropFormState = { market: 'pts', side: 'over', line: '', style: 'american', odds: '', opposite: '' };
+  const overHtml = projectionBoardHtml(game, sim, open, game.event_id, null, undefined, 'over', lines);
+  assert.match(overHtml, /data-board-sort="over" aria-pressed="true"/);
+  assert.equal((overHtml.match(/class="line-posted"/g) ?? []).length, 2);
+  assert.match(overHtml, /Lines are the posted DraftKings over\/under for this stat/);
+  assert.match(overHtml, /<small class="line-price">-125<\/small>/);
+  assert.match(overHtml, /Over \+\d+\.\d pp|Over -\d+\.\d pp|Under \+\d+\.\d pp|Under -\d+\.\d pp/);
+  const firstOf = (html: string) => html.match(/<th scope="row"><button[^>]*>([^<]+)<\/button>/)?.[1];
+  assert.equal(firstOf(overHtml), roleA.name);
+  assert.equal(firstOf(projectionBoardHtml(game, sim, open, game.event_id, null, undefined, 'under', lines)), roleB.name);
+
+  // A lean is the side whose model chance clears its own price by more. It is listed only while graded leans of
+  // that side and strength have been beating the price, and the measured number is shown beside the claim.
+  assert.ok(slateGame);
+  const leans = gameLeans(slateGame, game, sim.playerDraws, lines);
+  assert.equal(leans.length, 2);
+  const overLean = leans.find((lean) => lean.athlete_id === roleA.athlete_id)!;
+  const underLean = leans.find((lean) => lean.athlete_id === roleB.athlete_id)!;
+  assert.equal(overLean.side, 'over');
+  assert.equal(underLean.side, 'under');
+  assert.ok(Math.abs(overLean.claimed - (overLean.model - 125 / 225)) < 1e-9);
+  // Unders that claimed 15 points won 60% at -120. Overs that claimed 18 won 40% at -110.
+  const record = buildRecord([
+    recordFile('2026-10-30', [
+      { p: 0.3, over: 100, under: -120, line: 10.5, actual: 8, count: 180 },
+      { p: 0.3, over: 100, under: -120, line: 10.5, actual: 13, count: 120 },
+      { p: 0.7, over: -110, under: -110, line: 10.5, actual: 13, count: 120 },
+      { p: 0.7, over: -110, under: -110, line: 10.5, actual: 8, count: 180 },
+    ]),
   ]);
-  const filtered = slateLeans(oneSlate, tinyCard, 'pts', cameoDraws);
-  assert.deepEqual(filtered.over.map((row) => row.name), ['Star Scorer']);
-  assert.deepEqual(filtered.under.map((row) => row.name), []);
-  assert.equal(modelSidesInner(oneSlate, tinyCard, 'pts', cameoDraws).includes('Cameo Zero'), false);
+  assert.equal(record.settled, 600);
+  const panel = leanPanelInner({ leans, waiting: 0, record, book: 'DraftKings', open: true, posted: true });
+  const [underCol, overCol] = panel.split('<h3>Over</h3>');
+  assert.equal(underCol.includes(underLean.name), underLean.claimed >= 0.03);
+  assert.match(overCol.split('<details')[0], /No over lean is listed\. Over leans have settled -\d+\.\d pp against the posted price across 300 graded leans/);
+  assert.equal(overCol.split('<details')[0].includes(overLean.name), false);
+  assert.match(panel, /Strongest model claims that are not listed/);
+  assert.match(panel, /Record: 600 graded leans/);
+  assert.match(panel, /rebuilt from archived pre-tip inputs with the current model/);
+  assert.match(panel, /0 were logged live before the tip/);
+  if (underLean.claimed >= 0.03) {
+    assert.match(underCol, new RegExp(`data-projection-player="${underLean.athlete_id}"[^>]*data-lean-market="pts" data-lean-side="under"`));
+    assert.match(underCol, /Leans this strong: \+\d+\.\d pp against the price, 300 graded/);
+  }
+  assert.match(leanPanelInner({ leans: [], waiting: 2, record, book: 'DraftKings', open: true, posted: true }), /2 games are still simulating/);
+  assert.match(leanPanelInner({ leans: [], waiting: 0, record, book: null, open: false, posted: false }), /No posted line is in for this slate yet/);
+  assert.match(leanPanelInner({ leans: [], waiting: 0, record: null, book: 'DraftKings', open: false, posted: true }), /Every game with a posted line has started/);
+  // The same measured number sits under a priced line in the form.
+  const note = measuredNoteHtml(sim.playerDraws.get(roleB.athlete_id)!, { market: 'pts', side: 'under', line: String(highLine), style: 'american', odds: '-120', opposite: '' }, record);
+  assert.match(note, /Under claims of [\d+ to]+ points against the price have settled/);
+  // A gap of 25 points or more gets the reliability note in its row instead of a record to lean on.
+  const extremeLean = { ...underLean, athlete_id: 'x', name: 'Stale Price', claimed: 0.41, model: 0.95 };
+  const extremePanel = leanPanelInner({ leans: [extremeLean], waiting: 0, record, book: 'DraftKings', open: true, posted: true });
+  assert.equal(extremePanel.split('<details')[0].includes('Stale Price'), false);
+  assert.match(extremePanel, /A gap of 25 points or more is too large to trust/);
+  assert.equal(measuredNoteHtml(sim.playerDraws.get(roleB.athlete_id)!, { market: 'pts', side: 'under', line: String(highLine), style: 'american', odds: '', opposite: '' }, record), '');
 
   // 3. Team-changed newcomer with 0 prior-season games and 0 current-team games gets newcomer prior and cameo cap, not phantom 20 min.
   const transfer: RatePlayer = {

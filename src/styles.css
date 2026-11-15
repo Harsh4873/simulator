@@ -2208,18 +2208,20 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
 .lean-row {
   display: grid;
   grid-template-columns: 1fr auto;
-  column-gap: 10px;
+  column-gap: 12px;
+  row-gap: 2px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   text-align: left;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-2);
   color: inherit;
   cursor: pointer;
 }
 
-.lean-row:hover {
+.lean-row:hover,
+.lean-row:focus-visible {
   border-color: var(--accent);
 }
 
@@ -2227,16 +2229,88 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
   font-weight: 800;
 }
 
-.lean-meta {
-  grid-column: 1;
-  color: var(--muted);
-  font-size: 0.75rem;
+.lean-call {
+  justify-self: end;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.lean-row strong {
-  grid-row: 1 / span 2;
-  align-self: center;
+.lean-call small {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.lean-meta,
+.lean-odds,
+.lean-measured {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.78rem;
   font-variant-numeric: tabular-nums;
+}
+
+.lean-measured {
+  font-weight: 700;
+}
+
+.lean-measured.edge-up { color: var(--accent); }
+.lean-measured.edge-down { color: var(--danger); }
+
+.lean-unlisted,
+.lean-record {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--card);
+}
+
+.lean-unlisted > summary,
+.lean-record > summary {
+  cursor: pointer;
+  font-weight: 800;
+  font-size: 0.875rem;
+}
+
+.lean-unlisted[open] > summary,
+.lean-record[open] > summary {
+  margin-bottom: 8px;
+}
+
+.lean-unlisted .lean-columns,
+.lean-record .table-scroll {
+  margin-top: 8px;
+}
+
+.lean-record .prop-note + .prop-note,
+.lean-record .table-scroll + .prop-note {
+  margin-top: 8px;
+}
+
+.record-table td,
+.record-table th {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.line-posted {
+  font-weight: 800;
+  border-bottom: 1px dotted var(--border-strong);
+  cursor: help;
+}
+
+.line-price {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.posted-line {
+  margin-bottom: 8px;
+}
+
+.measured-note {
+  margin-top: 8px;
 }
 
 @media (min-width: 720px) {

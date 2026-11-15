@@ -248,6 +248,8 @@ export interface PropContext {
   calibration?: CalibrationArtifact | null;
   modelVersion?: string;
   cutoff?: string;
+  /** How graded leans of this side and claimed edge have settled against the posted price, when enough exist. */
+  measured?: { edge: number; graded: number };
 }
 
 export interface VerdictResult {
@@ -327,6 +329,13 @@ export function decideVerdict(
   }
   if (usesShooting(market) && context.missingShooting) {
     return pass('Shot rates for this player are a prior, so this price is hard to trust.');
+  }
+  // The model's own gap is a claim. When graded claims of this side and size have lost to the price, the claim is
+  // not an advantage, however large it is.
+  if (context.measured && context.measured.edge < 0) {
+    return pass(
+      `Leans of this side and strength have settled ${(Math.abs(context.measured.edge) * 100).toFixed(1)} points short of the posted price across ${context.measured.graded.toLocaleString('en-US')} graded leans, so this gap has not been an advantage.`,
+    );
   }
   const strong =
     context.calibration !== undefined && context.calibration !== null && calibrationIssue(context.calibration,context.modelVersion??'',market,context.cutoff??'')===null &&
