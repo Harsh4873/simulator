@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-15T23:36:23Z",
+  "generated_at": "2026-11-15T23:59:08Z",
   "date": "2026-11-15",
   "timezone": "America/Chicago",
   "games": [
@@ -208,8 +208,8 @@
       "start_time": "2026-11-15T21:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "13",
         "name": "Los Angeles Lakers",
@@ -241,8 +241,8 @@
       "start_time": "2026-11-15T21:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "30",
         "name": "Charlotte Hornets",
