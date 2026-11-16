@@ -40,6 +40,37 @@ function sideAbbr(side: TeamSide): string {
   return side.name.trim();
 }
 
+/** Home arena as words. A missing neutral flag is a home site. Venue ids are never shown. */
+export function placeLine(game: Pick<SlateGame, 'neutral_site' | 'home'>): string {
+  if (game.neutral_site === true) return 'Neutral site';
+  const name = game.home.name.trim() || game.home.abbreviation.trim() || 'Home team';
+  return `At ${name}`;
+}
+
+/** Away or Home, the team, then at the opponent only for the away side of a home site. */
+export function playerSideLine(
+  game: Pick<SlateGame, 'neutral_site' | 'home'>,
+  side: 'away' | 'home',
+  team: string,
+  opponent: string,
+): string {
+  const role = side === 'away' ? 'Away' : 'Home';
+  if (game.neutral_site === true) return `${role} · ${team} · ${placeLine(game)} vs ${opponent}`;
+  if (side === 'away') return `${role} · ${team} at ${opponent}`;
+  return `${role} · ${team} vs ${opponent}`;
+}
+
+export function viewToggles(blocks: readonly { id: string; label: string }[]): string {
+  if (!blocks.length) return '';
+  const buttons = blocks
+    .map(
+      (block) =>
+        `<button type="button" data-block-toggle="${escapeHtml(block.id)}" aria-pressed="true">${escapeHtml(block.label)}</button>`,
+    )
+    .join('');
+  return `<div class="view-toggles" role="group" aria-label="Show or hide sections">${buttons}</div>`;
+}
+
 export function teamLogoMarkup(side: TeamSide): string {
   const url = teamLogoUrl(side);
   const mono = `<span class="mono"${url ? ' hidden' : ''}>${escapeHtml(sideAbbr(side))}</span>`;
@@ -60,8 +91,8 @@ export function avatarMarkup(name: string, athleteId: string, headshot?: string 
   return `<span class="avatar" aria-hidden="true">${image}<span class="mono"${url ? ' hidden' : ''}>${escapeHtml(initials(name))}</span></span>`;
 }
 
-function matchupSide(side: TeamSide): string {
-  return `<span class="side">${teamLogoMarkup(side)}<span class="side-copy"><span class="abbr">${escapeHtml(sideAbbr(side))}</span><span class="name">${escapeHtml(sideLabel(side))}</span></span></span>`;
+function matchupSide(side: TeamSide, role: 'Away' | 'Home'): string {
+  return `<span class="side">${teamLogoMarkup(side)}<span class="side-copy"><span class="side-role">${role}</span><span class="abbr">${escapeHtml(sideAbbr(side))}</span><span class="name">${escapeHtml(sideLabel(side))}</span></span></span>`;
 }
 
 function stateChip(game: SlateGame, now: Date): string {
@@ -91,7 +122,8 @@ function renderCard(game: SlateGame, card: RateCard, now: Date, capturedAt: stri
   const lineups = rate && rate.players.length ? `<button type="button" class="ghost" data-lineup="${escapeHtml(game.event_id)}">Lineups</button>` : '';
   return `<article class="game-card" style="${paletteStyle(game.away, game.home)}">
     <div class="card-top"><span class="chip chip-time">${escapeHtml(tipClock(game.start_time))}</span>${stateChip(game, now)}</div>
-    <h2 class="matchup">${matchupSide(game.away)}<span class="at">@</span>${matchupSide(game.home)}</h2>
+    <h2 class="matchup">${matchupSide(game.away, 'Away')}<span class="at">@</span>${matchupSide(game.home, 'Home')}</h2>
+    <p class="where">${escapeHtml(placeLine(game))}</p>
     <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
     <p class="status">${escapeHtml(statusLabel(game, now, capturedAt))}</p>
     ${season}

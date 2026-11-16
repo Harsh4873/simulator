@@ -27,9 +27,10 @@ export function histogramSvg(values: ArrayLike<number>, options: HistogramOption
   }
   const peak = Math.max(1, ...counts);
   const W = 320;
-  const H = 118;
+  const H = 132;
   const top = 8;
   const base = 96;
+  const tickY = 124;
   const x = (value: number) => ((value - lo) / (hi - lo)) * W;
   const median = quantile(sorted, 0.5);
   const p10 = quantile(sorted, 0.1);
@@ -48,14 +49,26 @@ export function histogramSvg(values: ArrayLike<number>, options: HistogramOption
       ? `<line class="split" x1="${x(options.split).toFixed(1)}" x2="${x(options.split).toFixed(1)}" y1="${top}" y2="${base}"></line>`
       : '';
   const label = `${options.label}: median ${format(median)}; 80% of simulations between ${format(p10)} and ${format(p90)}.`;
-  return `<svg class="hist" viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}" preserveAspectRatio="none">
+  const medianX = x(median);
+  const fromLo = medianX;
+  const fromHi = W - medianX;
+  const nearLo = fromLo <= 72;
+  const nearHi = fromHi <= 72;
+  const loLabel = format(lo);
+  const medianLabel = format(median);
+  const hiLabel = format(hi);
+  const ticks =
+    nearLo && (!nearHi || fromLo <= fromHi)
+      ? `<text class="tick mid" x="2" y="${tickY}">${medianLabel}</text><text class="tick" x="${W - 2}" y="${tickY}" text-anchor="end">${hiLabel}</text>`
+      : nearHi
+        ? `<text class="tick" x="2" y="${tickY}">${loLabel}</text><text class="tick mid" x="${W - 2}" y="${tickY}" text-anchor="end">${medianLabel}</text>`
+        : `<text class="tick" x="2" y="${tickY}">${loLabel}</text><text class="tick mid" x="${medianX.toFixed(1)}" y="${tickY}" text-anchor="middle">${medianLabel}</text><text class="tick" x="${W - 2}" y="${tickY}" text-anchor="end">${hiLabel}</text>`;
+  return `<svg class="hist" viewBox="0 0 ${W} ${H}" role="img" aria-label="${label}" preserveAspectRatio="xMidYMid meet">
     <rect class="mid80" x="${x(p10).toFixed(1)}" y="${top}" width="${Math.max(1, x(p90) - x(p10)).toFixed(1)}" height="${base - top}"></rect>
     ${bars}${split}
-    <line class="median" x1="${x(median).toFixed(1)}" x2="${x(median).toFixed(1)}" y1="${top - 4}" y2="${base}"></line>
+    <line class="median" x1="${medianX.toFixed(1)}" x2="${medianX.toFixed(1)}" y1="${top - 4}" y2="${base}"></line>
     <line class="axis" x1="0" x2="${W}" y1="${base}" y2="${base}"></line>
-    <text class="tick" x="2" y="${H - 6}">${format(lo)}</text>
-    <text class="tick mid" x="${x(median).toFixed(1)}" y="${H - 6}" text-anchor="middle">${format(median)}</text>
-    <text class="tick" x="${W - 2}" y="${H - 6}" text-anchor="end">${format(hi)}</text>
+    ${ticks}
   </svg>`;
 }
 
@@ -85,9 +98,10 @@ export function propBarsSvg(playedValues: ArrayLike<number>, line: number | null
   const lo = stats[0];
   const hi = stats[stats.length - 1];
   const W = 320;
-  const H = 118;
+  const H = 132;
   const top = 8;
   const base = 96;
+  const tickY = 124;
   const pad = 8;
   const peak = Math.max(1, ...counts.values());
   const span = Math.max(1, hi - lo);
@@ -108,11 +122,11 @@ export function propBarsSvg(playedValues: ArrayLike<number>, line: number | null
       ? `<line class="prop-line" x1="${xAt(line as number).toFixed(1)}" x2="${xAt(line as number).toFixed(1)}" y1="${top}" y2="${base}"></line>`
       : '';
   const caption = chartText(label);
-  return `<svg class="prop-bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="${caption}" preserveAspectRatio="none">
+  return `<svg class="prop-bars" viewBox="0 0 ${W} ${H}" role="img" aria-label="${caption}" preserveAspectRatio="xMidYMid meet">
     ${bars}${mark}
     <line class="axis" x1="0" x2="${W}" y1="${base}" y2="${base}"></line>
-    <text class="tick" x="2" y="${H - 6}">${lo}</text>
-    <text class="tick" x="${W - 2}" y="${H - 6}" text-anchor="end">${hi}</text>
+    <text class="tick" x="2" y="${tickY}">${lo}</text>
+    <text class="tick" x="${W - 2}" y="${tickY}" text-anchor="end">${hi}</text>
   </svg>`;
 }
 

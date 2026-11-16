@@ -29,7 +29,7 @@ import { bookKey, type BookLine } from './book-lines.ts';
 import { EXTREME_CLAIM, leanSide, rankLeans, tierFor, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
 import { gradeProp, parseBookPrice, quoteProp, valueAt, type PlayerSample, type PropMarket } from './props.ts';
 import type { Simulation } from './simulate.ts';
-import { escapeHtml, statusLabel } from './slate.ts';
+import { escapeHtml, placeLine, playerSideLine, statusLabel, viewToggles } from './slate.ts';
 import type { RateCard, RateGame, RatePlayer, Slate, SlateGame, TeamSide } from './types.ts';
 
 const MARKETS: { value: PropMarket; label: string; short: string }[] = [
@@ -848,7 +848,7 @@ function historyPanelHtml(
   const filtered = filterRowsByLocation(allRows, split);
   const team = player.team_id === game.away.team_id ? game.away : game.home;
   const opponent = player.team_id === game.away.team_id ? game.home : game.away;
-  return `<section class="projection-card history-panel" aria-label="Historical game record">
+  return `<section class="projection-card history-panel" data-block="proj-history" aria-label="Historical game record">
       <div class="section-head">
         <div>
           <h3 class="section-kicker">${escapeHtml(marketLabel(form.market))} · recent games</h3>
@@ -907,7 +907,7 @@ function onOffPanelHtml(
   const [totalMin, totalUsg] = onOff.overall;
   const intro = `<p class="section-copy">Usage is the share of his team's plays he finishes — a shot, a free-throw trip, or a turnover — counted over the reconstructed minutes he is on the court. Across these ${onOff.games} games (${totalMin} min) it is <strong>${totalUsg.toFixed(1)}%</strong>.</p>`;
   if (!activeSplit) {
-    return `<section class="projection-card onoff-panel" aria-label="On and off court usage">
+    return `<section class="projection-card onoff-panel" data-block="proj-onoff" aria-label="On and off court usage">
         <div class="section-head">
           <h3 class="section-kicker">Who he shares the floor with</h3>
           <span class="meta-pill">${onOff.games} games with rebuilt lineups · ${escapeHtml(onOff.season_label)}</span>
@@ -958,7 +958,7 @@ function onOffPanelHtml(
     })
     .join('');
 
-  return `<section class="projection-card onoff-panel" aria-label="On and off court usage">
+  return `<section class="projection-card onoff-panel" data-block="proj-onoff" aria-label="On and off court usage">
       <div class="section-head">
         <h3 class="section-kicker">Who he shares the floor with</h3>
         <span class="meta-pill">${onOff.games} games with rebuilt lineups · ${escapeHtml(onOff.season_label)}</span>
@@ -1051,7 +1051,7 @@ function gameLogPanelHtml(
   const allRows = unpackPlayerGames(context.players[player.athlete_id]?.games);
   const filtered = filterRowsByLocation(allRows, view.historySplit ?? 'all');
   if (!filtered.length) return '';
-  return `<section class="projection-card gamelog-panel" aria-label="Recent game log">
+  return `<section class="projection-card gamelog-panel" data-block="proj-log" aria-label="Recent game log">
       <div class="section-head">
         <h3 class="section-kicker">Game log</h3>
         <span class="meta-pill">last ${Math.min(20, filtered.length)} played</span>
@@ -1144,7 +1144,7 @@ function defenseAsideHtml(
     context.active_season,
   );
   const perMinCard = perMin
-    ? `<section class="aside-block" aria-label="Per minute rates">
+    ? `<section class="aside-block" data-block="proj-matchup" aria-label="Per minute rates">
         <div class="section-head">
           <h3 class="section-kicker">Per minute</h3>
           <span class="meta-pill">${escapeHtml(perMin.sampleLabel)}</span>
@@ -1160,7 +1160,7 @@ function defenseAsideHtml(
       </section>`
     : '';
 
-  return `<section class="aside-block" aria-label="Opponent defense">
+  return `<section class="aside-block" data-block="proj-matchup" aria-label="Opponent defense">
       <div class="section-head">
         <h3 class="section-kicker">Key ${escapeHtml(sideAbbr(oppSide))} ${escapeHtml(defShort)} defense</h3>
         <span class="meta-pill">${escapeHtml(context.defense_season_label)} · ${oppDef.games}g</span>
@@ -1196,7 +1196,7 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
   const rows = context ? unpackPlayerGames(context.players[player.athlete_id]?.games) : [];
   const team = player.team_id === game.away.team_id ? game.away : game.home;
   const opponent = player.team_id === game.away.team_id ? game.home : game.away;
-  const place = player.team_id === game.away.team_id ? 'at' : 'vs';
+  const side = player.team_id === game.away.team_id ? 'away' : 'home';
   const url = playerHeadshotUrl({ athlete_id: player.athlete_id, headshot_url: player.headshot_url ?? null });
   const position = player.position.trim();
   const injury = player.injury_status.trim() || 'not in the data';
@@ -1212,12 +1212,12 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
   const onOffHtml = context ? onOffPanelHtml(rate, player, view.overrides, context, view.selectedTeammateId) : '';
   const logHtml = context ? gameLogPanelHtml(view, player, form, context) : '';
 
-  return `<article class="projection-card projection-detail">
+  return `<article class="projection-card projection-detail" data-block="proj-player">
       <div class="who">
         ${photoHtml(player.name, url)}
         <div class="who-copy">
           <h2 class="who-name">${escapeHtml(player.name)}</h2>
-          <p class="who-team">${escapeHtml(sideName(team))} ${place} ${escapeHtml(sideName(opponent))}</p>
+          <p class="who-team">${escapeHtml(playerSideLine(game, side, sideName(team), sideName(opponent)))}</p>
           <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
           <p class="who-pos">${position ? `<span class="chip">${escapeHtml(position)}</span>` : ''}<span class="chip">${escapeHtml(injury)}</span>${call ? `<span class="chip">${escapeHtml(call)}</span>` : ''}</p>
           ${url ? '' : '<p class="photo-note">Photo is not in the data.</p>'}
@@ -1257,11 +1257,8 @@ export function searchHitsHtml(slate: Slate, card: RateCard, query: string): str
     if (!game) continue;
     for (const player of rate.players) {
       if (!player.name.toLowerCase().includes(needle)) continue;
-      const team = player.team_id === game.away.team_id ? game.away : game.home;
-      const opponent = player.team_id === game.away.team_id ? game.home : game.away;
-      const place = player.team_id === game.away.team_id ? 'at' : 'vs';
       hits.push(
-        `<button type="button" class="ghost projection-hit" data-projection-player="${escapeHtml(player.athlete_id)}" data-projection-event="${escapeHtml(game.event_id)}"><span>${escapeHtml(player.name)}</span><span class="tip">${escapeHtml(sideAbbr(team))} ${place} ${escapeHtml(sideAbbr(opponent))} · ${escapeHtml(formatTip(game.start_time))}</span></button>`,
+        `<button type="button" class="ghost projection-hit" data-projection-player="${escapeHtml(player.athlete_id)}" data-projection-event="${escapeHtml(game.event_id)}"><span>${escapeHtml(player.name)}</span><span class="tip">${escapeHtml(`Away ${sideAbbr(game.away)} @ Home ${sideAbbr(game.home)} · ${placeLine(game)} · ${formatTip(game.start_time)}`)}</span></button>`,
       );
     }
   }
@@ -1283,7 +1280,8 @@ function gamesHtml(view: ProjectionView, game: SlateGame | null, rate: RateGame 
       const ready = view.readyEventIds?.has(item.event_id) ?? false;
       const status = statusLabel(item, view.now, view.slate.generated_at);
       return `<button type="button" class="projection-game" data-projection-game="${escapeHtml(item.event_id)}" aria-pressed="${selected ? 'true' : 'false'}">
-          <span class="game-row-head"><span class="abbr">${escapeHtml(sideAbbr(item.away))} @ ${escapeHtml(sideAbbr(item.home))}</span>${ready ? '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>' : ''}</span>
+          <span class="game-row-head"><span class="abbr">${escapeHtml(`Away ${sideAbbr(item.away)} @ Home ${sideAbbr(item.home)}`)}</span>${ready ? '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>' : ''}</span>
+          <span class="where">${escapeHtml(placeLine(item))}</span>
           <span class="tip">${escapeHtml(formatTip(item.start_time))}</span>
           <span class="status">${escapeHtml(status)}</span>
           ${spread}
@@ -1533,22 +1531,37 @@ export function renderProjections(view: ProjectionView): string {
   const boardMeter = view.drawing && !view.athleteId ? inlineDrawingHtml(view.drawProgress) : '';
   const board =
     game && rate
-      ? `${boardMeter}<section class="team-box projection-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2>${injuryReportHtml(rate, game)}<div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines)}</div></section>`
+      ? `${boardMeter}<section class="team-box projection-board" data-block="proj-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2>${injuryReportHtml(rate, game)}<div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines)}</div></section>`
       : '<p class="state">Search a player, or pick a game. Historical trends load right away, and 10,000 simulations warm in the background.</p>';
+  const aside = gamesHtml(view, game, rate);
+  const present = `${detail}${board}${aside}`;
+  const toggles = (
+    [
+      ['proj-leans', 'Leans'],
+      ['proj-player', 'Player'],
+      ['proj-history', 'History'],
+      ['proj-onoff', 'Floor share'],
+      ['proj-log', 'Game log'],
+      ['proj-board', 'Board'],
+      ['proj-matchup', 'Matchup'],
+    ] as const
+  ).filter((row) => row[0] === 'proj-leans' || present.includes(`data-block="${row[0]}"`))
+    .map(([id, label]) => ({ id, label }));
   return `<div class="projection-page">
       <header class="projection-intro">
         <h2>Projections</h2>
         <p class="projection-note">A simulator, not a betting ticket. 10,000 simulated games paired with ESPN box-score history and reconstructed lineup stints. Posted lines and prices are compared after the games are drawn; the simulator does not read them, or the spread under a game.</p>
       </header>
+      ${viewToggles(toggles)}
       <div class="projection-layout">
         <div class="projection-main">
           <label class="field projection-search"><span class="field-label">Player</span><input data-projection-search type="search" value="${escapeHtml(view.query)}" placeholder="Search a player on the slate" autocomplete="off"></label>
           <div data-projection-hits class="projection-hits">${searchHitsHtml(view.slate, view.card, view.query)}</div>
-          <section class="model-sides" data-model-sides aria-label="Leans against the posted lines">${leanPanelHtml(view)}</section>
+          <section class="model-sides" data-model-sides data-block="proj-leans" aria-label="Leans against the posted lines">${leanPanelHtml(view)}</section>
           ${detail}
           ${board}
         </div>
-        ${gamesHtml(view, game, rate)}
+        ${aside}
       </div>
     </div>`;
 }

@@ -275,6 +275,18 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   assert.match(html, /Home Name/);
   assert.match(html, /<p class="score away">26<\/p>/);
   assert.match(html, /<p class="score home">11<\/p>/);
+  assert.match(html, /<p class="where">At Home Name<\/p>/);
+  assert.match(html, /class="side-role">Away</);
+  assert.match(html, /class="side-role">Home</);
+  assert.match(html, /Away · Away Name/);
+  assert.match(html, /Home · Home Name/);
+  assert.match(html, /Away Away Name · Home Home Name · At Home Name/);
+  assert.equal((html.match(/<svg class="hist"/g) ?? []).length, 2);
+  assert.match(html, /Home margin/);
+  assert.equal(html.includes('preserveAspectRatio="none"'), false);
+  assert.match(html, /preserveAspectRatio="xMidYMid meet"/);
+  assert.match(html, /data-block-toggle="box-charts"/);
+  assert.equal(html.includes('data-block-toggle="box-lines"'), false);
   assert.match(html, /Nearest the median combined score/);
   assert.equal(html.includes('Explore simulations'), false);
   assert.equal(html.includes('95th percentile of 10,000 games'), false);
@@ -389,6 +401,9 @@ test('the panel opens, swaps, and closes from the player button', () => {
   assert.match(open, /Regular Player/);
   assert.match(open, /<dt>PTS<\/dt><dd>17<\/dd>/);
   assert.match(open, /Away Name/);
+  assert.match(open, /Away · Away Name at Home Name/);
+  assert.match(open, /data-block-toggle="panel-line"/);
+  assert.match(open, /Conditional minute target:/);
   assert.match(open, /PG/);
   assert.match(open, /Guard/);
   assert.match(open, /The table shows this player's average across all 10,000 games\./);

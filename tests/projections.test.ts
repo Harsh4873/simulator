@@ -134,6 +134,14 @@ test('played means, model chances, and priced copy stay on the prop grader', () 
   const share = `${((simulated?.expectation?.playRate ?? Number.NaN) * 100).toFixed(1)}%`;
   assert.match(html, new RegExp(`play-meter-value">${share.replace('.', '\\.')}`));
   assert.equal(html.includes('data-event='), false);
+  assert.ok(slateGame);
+  const homeName = slateGame.home.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const awayAbbr = slateGame.away.abbreviation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const homeAbbr = slateGame.home.abbreviation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  assert.match(html, new RegExp(`Away ${awayAbbr} @ Home ${homeAbbr}`));
+  assert.match(html, new RegExp(`At ${homeName}`));
+  assert.match(html, /data-block-toggle="proj-leans"/);
+  assert.equal(html.includes('data-block-toggle="proj-leans" data-event'), false);
 
   const half = nearestHalfPoint(points);
   assert.ok(half >= 0);
@@ -145,6 +153,9 @@ test('played means, model chances, and priced copy stay on the prop grader', () 
   assert.equal(modelChanceHtml(sample, 'pts', '-3').includes('%'), false);
   const bars = propBarsSvg(points, line, 'Points');
   assert.match(bars, /class="bar (over|under|push|plain)"/);
+  assert.match(bars, /preserveAspectRatio="xMidYMid meet"/);
+  assert.equal(bars.includes('preserveAspectRatio="none"'), false);
+  assert.match(bars, /viewBox="0 0 320 132"/);
   assert.equal(bars.includes('bar high'), false);
   assert.equal(bars.includes('bar low'), false);
   assert.equal(bars.includes('class="split"'), false);

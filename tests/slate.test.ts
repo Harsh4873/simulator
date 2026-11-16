@@ -3,7 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { gamesFromScoreboard, mergeSlateGames, parseOutcomeLines, parseRoster, spreadCaption } from '../scripts/build-rate-card.ts';
 import { shiftChicagoDate } from '../src/date.ts';
-import { renderSlate, statusLabel } from '../src/slate.ts';
+import { placeLine, playerSideLine, renderSlate, statusLabel } from '../src/slate.ts';
 import type { RateCard, Slate, SlateGame } from '../src/types.ts';
 
 function game(overrides: Partial<SlateGame> = {}): SlateGame {
@@ -243,6 +243,35 @@ test('slate copy covers the placeholder, an off day, and a card without rates', 
   const enabled = renderSlate(ready, withRates, new Date('2026-10-27T18:00:00Z'));
   assert.match(enabled,/fewer than five eligible/);
   assert.equal(enabled.includes('data-event='),false);
+});
+
+test('the place line names the home team, and a neutral site stays neutral', () => {
+  const sample = game();
+  assert.equal(placeLine(sample), 'At Boston Celtics');
+  assert.equal(placeLine(game({ neutral_site: false })), 'At Boston Celtics');
+  assert.equal(placeLine(game({ neutral_site: true })), 'Neutral site');
+  assert.equal(placeLine(game({ home: { team_id: '2', name: '', abbreviation: 'BOS' } })), 'At BOS');
+  assert.equal(placeLine(game({ home: { team_id: '2', name: ' ', abbreviation: ' ' } })), 'At Home team');
+  assert.equal(playerSideLine(sample, 'away', 'Brooklyn Nets', 'Boston Celtics'), 'Away · Brooklyn Nets at Boston Celtics');
+  assert.equal(playerSideLine(sample, 'home', 'Boston Celtics', 'Brooklyn Nets'), 'Home · Boston Celtics vs Brooklyn Nets');
+  const neutralLine = playerSideLine(game({ neutral_site: true }), 'away', 'Brooklyn Nets', 'Boston Celtics');
+  assert.equal(neutralLine, 'Away · Brooklyn Nets · Neutral site vs Boston Celtics');
+  assert.equal(neutralLine.includes(' at '), false);
+
+  const card = JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json', 'utf8')) as RateCard;
+  const ready = JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/slate.json', 'utf8')) as Slate;
+  const now = new Date(card.generated_at!);
+  const html = renderSlate(ready, card, now);
+  const home = ready.games[0].home.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  assert.match(html, /class="side-role">Away</);
+  assert.match(html, /class="side-role">Home</);
+  assert.match(html, new RegExp(`class="where">At ${home}<`));
+  const neutral = structuredClone(ready);
+  neutral.games[0].neutral_site = true;
+  neutral.games[0].venue = { id: 'secret-venue', latitude: 1, longitude: 2, timezone: 'America/Chicago' };
+  const neutralHtml = renderSlate(neutral, card, now);
+  assert.match(neutralHtml, /class="where">Neutral site</);
+  assert.equal(neutralHtml.includes('secret-venue'), false);
 });
 
 test('a fresh slate puts today ahead of yesterday', () => {

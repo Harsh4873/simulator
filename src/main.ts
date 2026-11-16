@@ -60,6 +60,7 @@ import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
 
 const DATA_BASE = '/simulator/data/';
 const THEME_KEY = 'simulator.theme';
+const SECTION_KEY = 'simulator.sections';
 const MEMORY_CACHE_LIMIT = 24;
 
 const desk = document.querySelector<HTMLElement>('#desk');
@@ -431,6 +432,7 @@ function paintProjection(): void {
   for (const details of projectionsRoot.querySelectorAll<HTMLDetailsElement>('[data-model-sides] details')) if (keep.has(details.className)) details.open = true;
   lockMilestoneLine();
   restoreProjectionCaret(caret);
+  applyHiddenSections(projectionsRoot);
 }
 
 function paintProjectionFigures(): void {
@@ -635,6 +637,7 @@ function paintScore(): void {
   const base = rateGame(view.game.event_id);
   const note = base ? summarizeOverrides(base, editsFor(view.game.event_id)) : undefined;
   boxRoot.innerHTML = renderBoxScore(view.game, view.rates, view.result, new Date(), sideSorts, note);
+  applyHiddenSections(boxRoot);
   window.scrollTo(0, scrollY);
 }
 
@@ -669,6 +672,7 @@ function syncPanel(): void {
     propForm,
     picks?.record ?? null,
   );
+  applyHiddenSections(panelBody);
 }
 
 const CLOCK_RADIUS = 64;
@@ -703,12 +707,13 @@ function paintSimClock(screen: HTMLElement, progress: number): void {
 function openSimClock(game: SlateGame): HTMLElement {
   const away = game.away.abbreviation.trim() || game.away.name.trim();
   const home = game.home.abbreviation.trim() || game.home.name.trim();
+  const title = `Away ${away} at Home ${home}`;
   const screen = document.createElement('div');
   screen.className = 'sim-screen';
   screen.setAttribute('role', 'dialog');
   screen.setAttribute('aria-modal', 'true');
   screen.setAttribute('aria-labelledby', 'sim-clock-title');
-  screen.innerHTML = `<div class="sim-clock" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="${escapeHtml(`Simulating ${away} at ${home}`)}"><svg viewBox="0 0 200 200" aria-hidden="true"><circle class="sim-face" cx="100" cy="100" r="96"></circle><g class="sim-ticks">${clockTicks()}</g><circle class="sim-track" cx="100" cy="100" r="${CLOCK_RADIUS}"></circle><circle class="sim-arc" cx="100" cy="100" r="${CLOCK_RADIUS}" transform="rotate(-90 100 100)"></circle><g class="sim-hand" transform="rotate(0 100 100)"><line class="sim-hand-tail" x1="100" y1="100" x2="100" y2="118"></line><line class="sim-hand-arm" x1="100" y1="100" x2="100" y2="40"></line><circle class="sim-hub" cx="100" cy="100" r="5"></circle></g></svg></div><p id="sim-clock-title" class="sim-clock-title">${escapeHtml(away)} <span class="at">@</span> ${escapeHtml(home)}</p><p class="sim-clock-note">Simulating</p><button type="button" class="ghost" data-cancel>Cancel</button>`;
+  screen.innerHTML = `<div class="sim-clock" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="${escapeHtml(title)}"><svg viewBox="0 0 200 200" aria-hidden="true"><circle class="sim-face" cx="100" cy="100" r="96"></circle><g class="sim-ticks">${clockTicks()}</g><circle class="sim-track" cx="100" cy="100" r="${CLOCK_RADIUS}"></circle><circle class="sim-arc" cx="100" cy="100" r="${CLOCK_RADIUS}" transform="rotate(-90 100 100)"></circle><g class="sim-hand" transform="rotate(0 100 100)"><line class="sim-hand-tail" x1="100" y1="100" x2="100" y2="118"></line><line class="sim-hand-arm" x1="100" y1="100" x2="100" y2="40"></line><circle class="sim-hub" cx="100" cy="100" r="5"></circle></g></svg></div><p id="sim-clock-title" class="sim-clock-title">${escapeHtml(title)}</p><p class="sim-clock-note">Simulating</p><button type="button" class="ghost" data-cancel>Cancel</button>`;
   screen.addEventListener('click', (event) => {
     const target = event.target;
     if (target instanceof Element && target.closest('[data-cancel]')) cancelRun?.();
@@ -962,9 +967,63 @@ function onLineupChoice(input: HTMLInputElement): void {
   showLineups(eventId, `input[data-lineup-choice="${CSS.escape(athlete)}"][value="${input.value}"]`);
 }
 
+function readHiddenSections(): Set<string> {
+  try {
+    const raw = localStorage.getItem(SECTION_KEY);
+    if (!raw) return new Set();
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((id): id is string => typeof id === 'string' && id.length > 0));
+  } catch {
+    return new Set();
+  }
+}
+
+function writeHiddenSections(hidden: ReadonlySet<string>): void {
+  try {
+    localStorage.setItem(SECTION_KEY, JSON.stringify([...hidden]));
+  } catch {
+    // The section still follows the click when storage is blocked.
+  }
+}
+
+function applyHiddenSections(root: ParentNode): void {
+  const hidden = readHiddenSections();
+  for (const block of root.querySelectorAll<HTMLElement>('[data-block]')) {
+    const id = block.getAttribute('data-block') ?? '';
+    if (id && hidden.has(id)) block.setAttribute('hidden', '');
+    else block.removeAttribute('hidden');
+  }
+  for (const button of root.querySelectorAll<HTMLButtonElement>('button[data-block-toggle]')) {
+    const id = button.dataset.blockToggle ?? '';
+    button.setAttribute('aria-pressed', id && hidden.has(id) ? 'false' : 'true');
+  }
+}
+
+function onSectionToggle(button: HTMLButtonElement): void {
+  const root = button.closest('.box-view, .projection-page, .panel-sheet');
+  const id = button.dataset.blockToggle ?? '';
+  if (!root || !id) return;
+  const hidden = readHiddenSections();
+  const show = button.getAttribute('aria-pressed') === 'false';
+  if (show) hidden.delete(id);
+  else hidden.add(id);
+  writeHiddenSections(hidden);
+  button.setAttribute('aria-pressed', show ? 'true' : 'false');
+  for (const block of root.querySelectorAll<HTMLElement>(`[data-block="${CSS.escape(id)}"]`)) {
+    if (show) block.removeAttribute('hidden');
+    else block.setAttribute('hidden', '');
+  }
+}
+
 function onDeskClick(event: Event): void {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  const sectionToggle = target.closest('button[data-block-toggle]');
+  if (sectionToggle instanceof HTMLButtonElement) {
+    onSectionToggle(sectionToggle);
+    return;
+  }
   if(target.closest('[data-retry]')){void load();return;}
   const lineupButton = target.closest('button[data-lineup]');
   if (lineupButton instanceof HTMLButtonElement) {

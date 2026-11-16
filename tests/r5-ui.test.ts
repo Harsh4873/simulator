@@ -93,6 +93,18 @@ test('the score view shows the call banner, key numbers and both distributions',
 
 test('histograms bin every draw and colors stay visible and distinct',()=>{
  const svg=histogramSvg([-10,-3,1,1,4,9,12],{label:'Margin',binWidth:2,split:0});
+ const ticks=[...svg.matchAll(/<text class="tick(?: mid)?"[^>]*>([^<]*)<\/text>/g)].map(match=>match[1]);
+ assert.equal((svg.match(/<rect class="bar /g)??[]).length,12);
+ assert.match(svg,/aria-label="Margin: median 1; 80% of simulations between -3 and 9\."/);
+ assert.match(svg,/preserveAspectRatio="xMidYMid meet"/);
+ assert.equal(svg.includes('preserveAspectRatio="none"'),false);
+ assert.match(svg,/viewBox="0 0 320 132"/);
+ assert.deepEqual(ticks,['-10','1','14']);
+ const skewed=histogramSvg([-5,10,10,10,10,10,10,10,10,10],{label:'Margin',binWidth:2,split:0});
+ const skewedTicks=[...skewed.matchAll(/<text class="tick(?: mid)?"[^>]*>([^<]*)<\/text>/g)].map(match=>match[1]);
+ assert.match(skewed,/aria-label="Margin: median 10; 80% of simulations between 10 and 10\."/);
+ assert.deepEqual(skewedTicks,['-6','10']);
+ assert.match(skewed,/class="tick mid" x="318" y="124" text-anchor="end">10</);
  assert.match(svg,/class="bar low"/);assert.match(svg,/class="bar high"/);assert.match(svg,/role="img"/);
  assert.equal(histogramSvg([],{label:'x',binWidth:2}),'');
  assert.notEqual(displayColor('#000000'),'#000000');

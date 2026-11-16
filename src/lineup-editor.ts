@@ -1,6 +1,6 @@
 import { paletteStyle } from './display.ts';
 import { formatTip } from './date.ts';
-import { avatarMarkup, escapeHtml, teamLogoMarkup } from './slate.ts';
+import { avatarMarkup, escapeHtml, placeLine, teamLogoMarkup } from './slate.ts';
 import { cleanOverrides, lineupIssue, type LineupChoice, type LineupOverrides } from './lineup-overrides.ts';
 import type { RateGame, RatePlayer, SlateGame, TeamSide } from './types.ts';
 
@@ -59,8 +59,9 @@ function teamColumn(side: TeamSide, players: RatePlayer[], overrides: LineupOver
   const out = ordered.filter((p) => overrides[p.athlete_id] === 'out').length;
   const forcedIn = ordered.filter((p) => overrides[p.athlete_id] === 'in').length;
   const changes = out + forcedIn ? ` · ${out} out, ${forcedIn} in by you` : '';
+  const title = side.name.trim() || side.abbreviation.trim();
   return `<section class="lineup-team ${which}" aria-label="${escapeHtml(side.name || side.abbreviation)} lineup">
-    <header class="lineup-head">${teamLogoMarkup(side)}<div><h3>${escapeHtml(side.name || side.abbreviation)}</h3><p class="lineup-count">${expectedPlayers(ordered, overrides).toFixed(1)} expected to play${changes}</p></div></header>
+    <header class="lineup-head">${teamLogoMarkup(side)}<div><h3>${which === 'away' ? 'Away' : 'Home'} · ${escapeHtml(title)}</h3><p class="lineup-count">${expectedPlayers(ordered, overrides).toFixed(1)} expected to play${changes}</p></div></header>
     <ul class="lineup-list">${ordered.map((p) => row(p, overrides[p.athlete_id] ?? 'auto')).join('')}</ul>
   </section>`;
 }
@@ -74,7 +75,7 @@ export function renderLineupEditor(game: SlateGame, rate: RateGame, rawOverrides
   return `<div class="lineups" data-lineup-editor="${escapeHtml(game.event_id)}" style="${paletteStyle(game.away, game.home)}">
     <div class="toolbar">
       <button type="button" data-back>Back to slate</button>
-      <div class="toolbar-title"><h2 id="lineup-title" tabindex="-1">Lineups</h2><p class="toolbar-sub">${escapeHtml(game.away.abbreviation || game.away.name)} @ ${escapeHtml(game.home.abbreviation || game.home.name)} · ${escapeHtml(formatTip(game.start_time))}</p></div>
+      <div class="toolbar-title"><h2 id="lineup-title" tabindex="-1">Lineups</h2><p class="toolbar-sub">${escapeHtml(game.away.abbreviation || game.away.name)} @ ${escapeHtml(game.home.abbreviation || game.home.name)} · ${escapeHtml(placeLine(game))} · ${escapeHtml(formatTip(game.start_time))}</p></div>
     </div>
     <p class="lede">Auto follows tonight's injury report and each player's recent games. Set a player to In to play him every simulation, or Out to sit him. Your calls stay in this browser and never change the published card.</p>
     <div class="lineup-grid">

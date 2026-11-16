@@ -1,6 +1,6 @@
 import { formatTip } from './date.ts';
 import { paletteStyle, playerHeadshotUrl } from './display.ts';
-import { avatarMarkup, escapeHtml, statusLabel, teamLogoMarkup } from './slate.ts';
+import { avatarMarkup, escapeHtml, placeLine, playerSideLine, statusLabel, teamLogoMarkup, viewToggles } from './slate.ts';
 import { histogramSvg } from './charts.ts';
 import {
   decideVerdict,
@@ -311,7 +311,7 @@ function scoreboard(game: SlateGame, score: Simulation, forecast?: MarginForecas
     ? `<p class="margin-caption">Mean margin ${forecast.marginMean >= 0 ? '+' : ''}${forecast.marginMean.toFixed(1)} home. Median margin ${forecast.marginMedian >= 0 ? '+' : ''}${forecast.marginMedian.toFixed(1)}. Home by 10+ ${(forecast.homeBy10 * 100).toFixed(1)}%. Home by 20+ ${(forecast.homeBy20 * 100).toFixed(1)}%. Away by 10+ ${(forecast.awayBy10 * 100).toFixed(1)}%. Away by 20+ ${(forecast.awayBy20 * 100).toFixed(1)}%.</p>`
     : '';
   return `<div class="scoreboard">
-    <div class="team-head away">${teamLogoMarkup(game.away)}<p class="abbr away">${escapeHtml(teamAbbr(game.away))}</p></div>
+    <div class="team-head away">${teamLogoMarkup(game.away)}<div class="head-id"><span class="side-role">Away</span><p class="abbr away">${escapeHtml(teamAbbr(game.away))}</p></div></div>
     <div class="bar-slot">
       <div class="winbar" role="img" aria-label="${label}">
         <span class="seg seg-away" style="flex-grow: ${wins.away}"></span>
@@ -319,7 +319,7 @@ function scoreboard(game: SlateGame, score: Simulation, forecast?: MarginForecas
         <span class="seg seg-home" style="flex-grow: ${wins.home}"></span>
       </div>
     </div>
-    <div class="team-head home">${teamLogoMarkup(game.home)}<p class="abbr home">${escapeHtml(teamAbbr(game.home))}</p></div>
+    <div class="team-head home">${teamLogoMarkup(game.home)}<div class="head-id"><span class="side-role">Home</span><p class="abbr home">${escapeHtml(teamAbbr(game.home))}</p></div></div>
     <p class="club-name away">${escapeHtml(teamTitle(game.away))}</p>
     <p class="club-name home">${escapeHtml(teamTitle(game.home))}</p>
     <p class="score away">${awayScore}</p>
@@ -338,7 +338,7 @@ function scoreboard(game: SlateGame, score: Simulation, forecast?: MarginForecas
 
 function distributionPanel(score:Simulation):string{
   if(!score.distributions)return '';
-  return `<section class="dist-panel" aria-label="Game distributions"><h3>Check a line</h3><p>Includes overtime. Margin = home points minus away points; a positive margin favors home. Enter a margin threshold (the negative of a home spread).</p>${(['total','margin'] as const).map(kind=>{
+  return `<section class="dist-panel" data-block="box-lines" aria-label="Game distributions"><h3>Check a line</h3><p>Includes overtime. Margin = home points minus away points; a positive margin favors home. Enter a margin threshold (the negative of a home spread).</p>${(['total','margin'] as const).map(kind=>{
     const d=score.distributions![kind];return `<p>${kind==='total'?'Total':'Home margin'}: mean ${d.mean.toFixed(1)}; median ${d.median.toFixed(1)}; 10–90% ${d.p10.toFixed(1)} to ${d.p90.toFixed(1)}; 5–95% ${d.p05.toFixed(1)} to ${d.p95.toFixed(1)}. Monte Carlo SE of mean ${d.standardError.toFixed(2)} (sampling noise only).</p><label>${kind} line <input type="number" step="0.5" data-game-line="${kind}"></label><p data-line-result="${kind}" role="status">Enter a line.</p>`;
   }).join('')}</section>`;
 }
@@ -350,7 +350,7 @@ function boxTable(side: 'away' | 'home', slateSide: TeamSide, team: SimulatedTea
   }).join('');
   const name = teamTitle(slateSide);
   return `<section class="team-box" data-side="${side}">
-    <h2>${escapeHtml(name)}</h2>
+    <h2>${side === 'away' ? 'Away' : 'Home'} · ${escapeHtml(name)}</h2>
     ${sortBar(side, name, sort)}
     <div class="table-scroll"><table>
       <thead><tr><th>Player</th>${head}</tr></thead>
@@ -414,7 +414,7 @@ function chartsPanel(game: SlateGame, score: Simulation): string {
   if (!margins.length || !score.combinedTotals?.length) return '';
   const away = escapeHtml(teamAbbr(game.away));
   const home = escapeHtml(teamAbbr(game.home));
-  return `<div class="charts">
+  return `<div class="charts" data-block="box-charts">
     <figure class="chart"><figcaption><span>Home margin</span><span class="legend-pair"><i class="key away"></i>${away} wins<i class="key home"></i>${home} wins</span></figcaption>${histogramSvg(margins, { label: `${home} margin (home minus away)`, binWidth: 2, split: 0, format: (v) => (v > 0 ? `+${v.toFixed(0)}` : v.toFixed(0)) })}</figure>
     <figure class="chart"><figcaption><span>Total points</span><span class="legend-pair">shaded: middle 80%</span></figcaption>${histogramSvg(score.combinedTotals, { label: 'Total points', binWidth: 4 })}</figure>
   </div>`;
@@ -435,27 +435,48 @@ export function renderBoxScore(
     expected
         ? 'Each row is that player\'s average across all 10,000 games, including games they sit, so minutes still sum to the team budget. The player panel expected line uses only draws with minutes. The range under each stat is that player\'s own 10th to 90th percentile. It is not one box score.'
         : 'This box score is the simulated game nearest the median combined score. The range under each score is the 5th to 95th percentile.';
+  const charts = chartsPanel(game, score);
+  const lines = distributionPanel(score);
+  const toggles = [
+    { id: 'box-score', label: 'Score' },
+    ...(charts ? [{ id: 'box-charts', label: 'Charts' }] : []),
+    ...(lines ? [{ id: 'box-lines', label: 'Line check' }] : []),
+    { id: 'box-players', label: 'Box scores' },
+    { id: 'box-notes', label: 'Notes' },
+  ];
+  const awayName = teamTitle(game.away) || 'Away';
+  const homeName = teamTitle(game.home) || 'Home';
+  const thin = score.thin_rotation
+    ? '<p class="note" role="status">Thin rotation: labelled replacement-level minutes fill remaining spots from league-average rates. Those lines are not invented player stats.</p>'
+    : '';
   return `<div class="box-view" data-event="${escapeHtml(eventId)}" style="${paletteStyle(game.away, game.home)}">
       <div class="toolbar">
         <button type="button" data-back>Back to slate</button>
-        <div class="toolbar-title"><h2>${escapeHtml(teamAbbr(game.away))} @ ${escapeHtml(teamAbbr(game.home))}</h2><p class="toolbar-sub">${escapeHtml(formatTip(game.start_time))}</p></div>
+        <div class="toolbar-title"><h2>${escapeHtml(teamAbbr(game.away))} @ ${escapeHtml(teamAbbr(game.home))}</h2><p class="toolbar-sub">${escapeHtml(`Away ${awayName} · Home ${homeName} · ${placeLine(game)} · ${formatTip(game.start_time)}`)}</p></div>
         <button type="button" class="ghost" data-lineup="${escapeHtml(game.event_id)}">Edit lineups</button>
       </div>
+      ${viewToggles(toggles)}
       ${lineupBanner(edits)}
-      <section class="hero">${scoreboard(game, shown, score.forecast)}</section>
+      <div data-block="box-score">
+      <section class="hero"><p class="where">${escapeHtml(placeLine(game))}</p>${scoreboard(game, shown, score.forecast)}</section>
       <p class="status-row">
         <span class="tip">${escapeHtml(formatTip(game.start_time))}</span>
         <span class="status">${escapeHtml(statusLabel(game, now))}</span>
         ${minutesMarkup(shown)}
       </p>
       ${keyTiles(game, score)}
-      ${chartsPanel(game, score)}
-      ${distributionPanel(score)}
+      </div>
+      ${charts}
+      ${lines}
+      <div data-block="box-players">
       ${boxTable('away', game.away, shown.away, sort.away, expected)}
       ${boxTable('home', game.home, shown.home, sort.home, expected)}
-      ${score.thin_rotation ? '<p class="note" role="status">Thin rotation: labelled replacement-level minutes fill remaining spots from league-average rates. Those lines are not invented player stats.</p>' : ''}
+      </div>
+      <div data-block="box-notes">
+      ${thin}
       <p class="note">${note}</p>
       <p class="note">The minutes column totals team-minutes: five players on the floor at once. Regulation is 240 (5 × 48). Overtime is 265 (5 × 53). It is not the length of the game.</p>
+      </div>
     </div>`;
 }
 
@@ -680,8 +701,16 @@ function photoMarkup(name: string, url: string | null): string {
   return `<div class="photo"><img referrerpolicy="no-referrer" class="headshot" alt="${escapeHtml(name)}" src="${escapeHtml(url)}" width="64" height="64"><span class="mono" hidden>${letter}</span></div>`;
 }
 
+function whoTeamLine(game: SlateGame, teamId: string): string {
+  const team = teamName(game, teamId);
+  if (!team) return 'not in the data';
+  if (teamId === game.away.team_id) return playerSideLine(game, 'away', team, teamTitle(game.home));
+  if (teamId === game.home.team_id) return playerSideLine(game, 'home', team, teamTitle(game.away));
+  return team;
+}
+
 function whoBlock(game: SlateGame, line: SimulatedPlayer, row: CardRow | null): string {
-  const team = teamName(game, line.team_id);
+  const team = whoTeamLine(game, line.team_id);
   const position = readString(row, 'position');
   const group = readString(row, 'position_group');
   const positionHtml = position
@@ -696,7 +725,7 @@ function whoBlock(game: SlateGame, line: SimulatedPlayer, row: CardRow | null): 
     ${photoMarkup(line.name, url)}
     <div class="who-copy">
       <h2 class="who-name">${escapeHtml(line.name)}</h2>
-      <p class="who-team">${escapeHtml(team ?? 'not in the data')}</p>
+      <p class="who-team">${escapeHtml(team)}</p>
       <p class="who-pos">${positionHtml}</p>
       ${note}
     </div>
@@ -892,17 +921,22 @@ export function renderPlayerPanel(
     </div>
     <div class="panel-scroll">
       <div role="tabpanel" id="forecast-panel" aria-labelledby="forecast-tab" data-panel-view="forecast"${forecastHidden}>
-        <section class="panel-section">
+        ${viewToggles([
+          { id: 'panel-line', label: 'Line' },
+          { id: 'panel-why', label: 'Why' },
+          { id: 'panel-rates', label: 'Rates' },
+        ])}
+        <section class="panel-section" data-block="panel-line">
           <h3>${line.expectation ? 'Expected line' : 'One simulated draw'}</h3>
           <p class="panel-lede">${lineLede}</p>
           ${line.expectation ? expectedLine(line) : drawnLine(line)}
         </section>
-        <section class="panel-section">
+        <section class="panel-section" data-block="panel-why">
           <h3>Why</h3>
           <p class="panel-lede">Games in the sample, how hard the prior still pulls, and the chance of playing.</p>
           ${whyMarkup(whyNotes(row))}
         </section>
-        <section class="panel-section">
+        <section class="panel-section" data-block="panel-rates">
           <h3>Shrunk rates on the card</h3>
           <p class="panel-lede">Per-minute rates after the prior is blended in. The simulator then gives this player a share of the team minute budget.</p>
           ${samplingList(row, shown, shockFor(shown, line.team_id))}
