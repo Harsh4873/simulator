@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-17T01:39:17Z",
+  "generated_at": "2026-11-17T04:32:10Z",
   "date": "2026-11-16",
   "timezone": "America/Chicago",
   "games": [
@@ -307,8 +307,8 @@
       "start_time": "2026-11-17T00:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "19",
         "name": "Orlando Magic",
@@ -340,8 +340,8 @@
       "start_time": "2026-11-17T00:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "4",
         "name": "Chicago Bulls",
@@ -373,8 +373,8 @@
       "start_time": "2026-11-17T00:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "29",
         "name": "Memphis Grizzlies",
@@ -406,8 +406,8 @@
       "start_time": "2026-11-17T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "20",
         "name": "Philadelphia 76ers",
@@ -439,8 +439,8 @@
       "start_time": "2026-11-17T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "10",
         "name": "Houston Rockets",
@@ -472,8 +472,8 @@
       "start_time": "2026-11-17T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "22",
         "name": "Portland Trail Blazers",
@@ -505,8 +505,8 @@
       "start_time": "2026-11-17T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "9",
         "name": "Golden State Warriors",
@@ -538,8 +538,8 @@
       "start_time": "2026-11-17T02:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "21",
         "name": "Phoenix Suns",
