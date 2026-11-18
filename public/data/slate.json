@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-18T03:00:40Z",
+  "generated_at": "2026-11-18T03:30:38Z",
   "date": "2026-11-17",
   "timezone": "America/Chicago",
   "games": [
@@ -274,8 +274,8 @@
       "start_time": "2026-11-18T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "18",
         "name": "New York Knicks",
