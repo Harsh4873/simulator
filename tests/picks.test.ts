@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { buildPicks, serializePicks, type Draws } from '../scripts/build-picks.ts';
 import { validateArtifact } from '../scripts/validate-artifact.mjs';
@@ -14,6 +14,7 @@ import {
   linesByKey,
   listed,
   measuredEdges,
+  MIN_TIER_LEANS,
   overShare,
   parsePicksFile,
   rankLeans,
@@ -422,4 +423,39 @@ test('a large model gap is not a lean when graded gaps of that side and size hav
   const under = renderPropResults(low, 'p', { market: 'pts', side: 'under', line: '17.5', style: 'american', odds: '-110', opposite: '' }, player, record);
   assert.match(under, /data-verdict="lean"/);
   assert.match(renderPropResults(score, 'p', { market: 'pts', side: 'over', line: '17.5', style: 'american', odds: '-110', opposite: '' }, player), /data-verdict="lean"/);
+});
+
+test('buildRecord without a map keeps pooled tier edges and counts every settled lean as uncalibrated', () => {
+  const files = readdirSync('data/pick-ledger')
+    .filter((name) => name.endsWith('.json'))
+    .sort()
+    .map((name) => parseLedger(readFileSync(`data/pick-ledger/${name}`, 'utf8')));
+  const record = buildRecord(files);
+  assert.equal(record.gradedUncalibrated, record.settled);
+  assert.ok(record.tiersLive.length > 0);
+  assert.ok(record.tiersLive.some((tier) => tier.pooled >= MIN_TIER_LEANS));
+  const under = tierFor(record, 'under', 0.16)!;
+  assert.equal(under.edge, 0.044);
+  assert.equal(under.pooled, 373);
+  const lean: Lean = {
+    event_id: 'e',
+    athlete_id: 'a',
+    name: 'Under',
+    matchup: 'A @ B',
+    tip: '2026-11-18T00:00:00Z',
+    market: 'pts',
+    line: 10.5,
+    over_odds: -110,
+    under_odds: -110,
+    book: 'DraftKings',
+    priced_at: '2026-11-18T00:00:00Z',
+    side: 'under',
+    model: 0.4,
+    need: 0.52,
+    claimed: 0.16,
+    projection: 12,
+    minutes: 30,
+    play: 0.95,
+  };
+  assert.equal(listed(lean, record), true);
 });

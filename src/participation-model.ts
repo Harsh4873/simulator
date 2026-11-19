@@ -7,7 +7,7 @@ export interface ParticipationFit {coefficients:number[]|null;samples:number;bri
 export const PARTICIPATION_FEATURES=['intercept','role_minutes','played_last5','played_last','start_share','absent_last5','missed_streak'] as const;
 const HISTORY_LIMIT=15;
 const PRUNE_ABSENCES=15;
-const PENALTIES=[0.1,1,10,100];
+export const LOGISTIC_PENALTIES=[0.1,1,10,100];
 
 const sigmoid=(x:number)=>1/(1+Math.exp(-Math.max(-30,Math.min(30,x))));
 const logLoss=(p:number,y:number)=>{const q=Math.min(1-1e-9,Math.max(1e-9,p));return -(y*Math.log(q)+(1-y)*Math.log(1-q));};
@@ -115,7 +115,7 @@ export function fitParticipation(events:CompletedEvent[]):ParticipationFit{
  if(!train.length||!selection.length||!hold.length)return {...empty,reason:'Insufficient independent event blocks'};
  const predict=(b:number[],r:Row)=>sigmoid(b.reduce((s,v,i)=>s+v*r.x[i],0));
  const mean=(xs:number[])=>xs.reduce((a,b)=>a+b,0)/xs.length;
- const best=PENALTIES.map(penalty=>{const b=fitLogistic(train,penalty);return {penalty,loss:mean(selection.map(r=>logLoss(predict(b,r),r.y)))};}).sort((a,b)=>a.loss-b.loss||a.penalty-b.penalty)[0];
+ const best=LOGISTIC_PENALTIES.map(penalty=>{const b=fitLogistic(train,penalty);return {penalty,loss:mean(selection.map(r=>logLoss(predict(b,r),r.y)))};}).sort((a,b)=>a.loss-b.loss||a.penalty-b.penalty)[0];
  const coefficients=fitLogistic([...train,...selection],best.penalty);
  const base=mean([...train,...selection].map(r=>r.y));
  const brier=mean(hold.map(r=>(predict(coefficients,r)-r.y)**2)),baseline=mean(hold.map(r=>(base-r.y)**2));
@@ -164,13 +164,14 @@ export const MIN_ISOTONIC_BLOCK=60;
  * it left healthy regulars near 95% when they play about 99% of the time and fringe players too low. Each knot is a
  * block's mean probability and its smoothed play rate.
  */
-export function isotonicKnots(pairs:{p:number;y:number}[]):IsotonicMap|null{
+export function isotonicKnots(pairs:{p:number;y:number}[], blockSize: number = MIN_ISOTONIC_BLOCK):IsotonicMap|null{
+ const size=Math.max(1,Math.floor(blockSize));
  const sorted=pairs.filter(r=>Number.isFinite(r.p)&&(r.y===0||r.y===1)).sort((a,b)=>a.p-b.p);
- if(sorted.length<MIN_ISOTONIC_BLOCK*3)return null;
+ if(sorted.length<size*3)return null;
  const blocks:{n:number;wins:number;sum:number}[]=[];
- for(let i=0;i<sorted.length;i+=MIN_ISOTONIC_BLOCK){
-  const chunk=sorted.slice(i,i+MIN_ISOTONIC_BLOCK),block={n:chunk.length,wins:chunk.reduce((s,r)=>s+r.y,0),sum:chunk.reduce((s,r)=>s+r.p,0)};
-  if(chunk.length<MIN_ISOTONIC_BLOCK&&blocks.length){const last=blocks[blocks.length-1];last.n+=block.n;last.wins+=block.wins;last.sum+=block.sum;}
+ for(let i=0;i<sorted.length;i+=size){
+  const chunk=sorted.slice(i,i+size),block={n:chunk.length,wins:chunk.reduce((s,r)=>s+r.y,0),sum:chunk.reduce((s,r)=>s+r.p,0)};
+  if(chunk.length<size&&blocks.length){const last=blocks[blocks.length-1];last.n+=block.n;last.wins+=block.wins;last.sum+=block.sum;}
   else blocks.push(block);
  }
  for(let i=0;i<blocks.length-1;){

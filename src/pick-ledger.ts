@@ -26,6 +26,7 @@ export function openRows(
   draws: ReadonlyMap<string, PlayerSample>,
   lines: ReadonlyMap<string, BookLine>,
   cardAt: string,
+  modelHash?: string,
 ): LedgerRow[] {
   const tip = Date.parse(game.start_time);
   if (!Number.isFinite(tip) || !(Date.parse(cardAt) < tip)) return [];
@@ -39,7 +40,7 @@ export function openRows(
     const share = overShare(sample, line.market, line.line);
     const summary = playedSummary(sample, line.market);
     if (!share || !summary) continue;
-    rows.push({
+    const row: LedgerRow = {
       e: game.event_id,
       a: player.athlete_id,
       m: line.market,
@@ -57,7 +58,9 @@ export function openRows(
         play: round(summary.play, 3),
         min: round(summary.minutes, 1),
       },
-    });
+    };
+    if (modelHash) row.model_hash = modelHash;
+    rows.push(row);
   }
   return rows;
 }

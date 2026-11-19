@@ -1,3 +1,4 @@
+import type { PropCalibrationArtifact } from './prop-calibration.ts';
 import type { CompletedEvent } from './parse-summary.ts';
 import type { RatePlayer } from './types.ts';
 export type EvidenceState = 'observed' | 'thin' | 'stale' | 'missing';
@@ -16,6 +17,16 @@ export function calibrationIssue(a: CalibrationArtifact | null | undefined, vers
   if([a.games,a.settled_markets,a.margin_bias,a.total_bias,a.coverage80,a.coverage90,a.ece].some(x=>!Number.isFinite(x)))return 'Invalid calibration metrics';
   if(a.ece<0||a.coverage80<0||a.coverage80>1||a.coverage90<0||a.coverage90>1||!Number.isInteger(a.games)||!Number.isInteger(a.settled_markets))return 'Invalid calibration metric bounds';
   if(a.status!=='passed'||a.games<500||a.settled_markets<2000||Math.abs(a.margin_bias)>1||Math.abs(a.total_bias)>2||Math.abs(a.coverage80-.8)>.03||Math.abs(a.coverage90-.9)>.03||a.ece>.03||!a.baseline_improvement||a.market_noninferiority!==true||!a.markets.includes(market))return 'Calibration release gates not passed';
+  return null;
+}
+/** Provenance for a prop map. Separate from the team-total artifact: a prop file cannot satisfy calibrationIssue. */
+export function propCalibrationIssue(a: PropCalibrationArtifact | null | undefined, version: string, cutoff: string): string | null {
+  if(!a)return 'Prop calibration artifact unavailable';
+  if(a.model_version!==version || !/^[a-f0-9]{64}$/.test(a.input_hash||''))return 'Prop calibration provenance mismatch';
+  const fitAt=Date.parse(a.fitted_through), valAt=Date.parse(a.validated_through), cut=Date.parse(cutoff);
+  if(!Number.isFinite(cut)||!Number.isFinite(fitAt)||!Number.isFinite(valAt)||fitAt>=valAt||valAt>=cut)return 'Invalid prop calibration cutoff';
+  const width=a.metrics_validated?.eceWidth10, freq=a.metrics_validated?.eceFreq10;
+  if(a.status!=='fitted'||!Number.isFinite(width)||!Number.isFinite(freq)||width>0.03||freq>0.03||!Number.isInteger(a.rows_fit)||!Number.isInteger(a.rows_validated)||a.rows_fit+a.rows_validated<2000)return 'Prop calibration release gates not passed';
   return null;
 }
 export function addEvidence(players: RatePlayer[], history: CompletedEvent[], cutoff: string): void {

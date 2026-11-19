@@ -1,4 +1,5 @@
-import { calibrationIssue, type PlayerEvidence, type CalibrationArtifact } from './model-evidence.ts';
+import { calibrationIssue, propCalibrationIssue, type PlayerEvidence, type CalibrationArtifact } from './model-evidence.ts';
+import { blendWithMarket, type PropCalibrationArtifact, type PropQuoteCalibration } from './prop-calibration.ts';
 export type PropMarket = 'pts' | 'reb' | 'ast' | 'pra' | 'tpm' | 'stl' | 'blk' | 'tov' | 'pa' | 'pr' | 'ra' | 'dd' | 'td';
 export type PropSide = 'over' | 'under';
 
@@ -220,6 +221,9 @@ export function gradeProp(sample: PlayerSample, market: PropMarket, side: PropSi
  * A gap of `extremeEdge` or more is a reliability problem, not a recommendation,
  * even after calibration is turned on.
  */
+/** Flat addition to the sampling standard error once a prop map is applied. */
+const CALIBRATION_SE = 0.02;
+
 export const PROP_POLICY = {
   calibrated: false,
   leanEdge: 0.03,
@@ -257,6 +261,7 @@ export interface PropContext {
   cutoff?: string;
   /** How graded leans of this side and claimed edge have settled against the posted price, when enough exist. */
   measured?: { edge: number; graded: number };
+  propCalibration?: PropQuoteCalibration;
 }
 
 export interface VerdictResult {
@@ -273,15 +278,27 @@ export function propContextFromPlayer(player: {
   calibration?: CalibrationArtifact | null;
   model_version?: string;
   as_of?: string;
+  propCalibration?: PropQuoteCalibration;
 } | null): PropContext {
   if (!player) return { available: false, missingShooting: true, thinSample: true, onCard: false };
   return {
     evidence:player.evidence, calibration:player.calibration,modelVersion:player.model_version,cutoff:player.as_of,
+    ...(player.propCalibration ? { propCalibration: player.propCalibration } : {}),
     available: player.minutes_weight !== 0,
     missingShooting: player.missing_shooting === true || player.shooting_games === 0,
     thinSample: player.thin_sample === true,
     onCard: true,
   };
+}
+
+/** A copy of the shipped policy. `calibrated` flips only when a fitted artifact passes the prop release check. */
+export function propPolicyFromArtifacts(
+  artifacts: readonly PropCalibrationArtifact[] | null | undefined,
+  version?: string | null,
+  cutoff?: string | null,
+): PropPolicy {
+  const passing = Boolean(version && cutoff && artifacts?.some((artifact) => artifact.status === 'fitted' && propCalibrationIssue(artifact, version, cutoff) === null));
+  return passing ? { ...PROP_POLICY, calibrated: true } : { ...PROP_POLICY };
 }
 
 function usesShooting(market: PropMarket): boolean {
@@ -345,6 +362,7 @@ export function decideVerdict(
     );
   }
   const strong =
+    policy.calibrated &&
     context.calibration !== undefined && context.calibration !== null && calibrationIssue(context.calibration,context.modelVersion??'',market,context.cutoff??'')===null &&
     !context.thinSample &&
     quote.edge >= policy.betEdge &&
@@ -380,24 +398,31 @@ export function quoteProp(
   line: number,
   odds: number | BookPrice,
   oppositeOdds?: number | BookPrice | null,
+  calibration?: PropQuoteCalibration,
 ): PropQuote | null {
   if (!sample || sample.min.length === 0 || !Number.isFinite(line) || line < 0 || !Number.isInteger(line*2)) return null;
   if((market==='dd'||market==='td')&&(line!==.5||!sample.stl||!sample.blk))return null;
   if ((market === 'stl' || market === 'blk' || market === 'tov') && !sample[market]) return null;
   const grade = gradeProp(sample, market, side, line);
   const decided = grade.wins + grade.losses;
-  const modelProbability = decided === 0 ? null : grade.wins / decided;
+  let modelProbability = decided === 0 ? null : grade.wins / decided;
   const price = asPrice(odds);
   const breakEven = price?.breakEven ?? null;
   const profit = price?.profit ?? null;
   const total = grade.wins + grade.losses + grade.pushes + grade.voids;
-  const expectedReturn = profit === null || total === 0 ? null : (grade.wins * profit - grade.losses) / total;
-  const edge = modelProbability === null || breakEven === null ? null : modelProbability - breakEven;
-  const standardError =
+  let expectedReturn = profit === null || total === 0 ? null : (grade.wins * profit - grade.losses) / total;
+  let standardError =
     modelProbability === null || decided === 0 ? null : Math.sqrt((modelProbability * (1 - modelProbability)) / decided);
   const opposite = oppositeOdds === undefined || oppositeOdds === null ? null : asPrice(oppositeOdds);
   const noVig =
     price === null || opposite === null ? null : noVigFromBreakEven(price.breakEven, opposite.breakEven);
+  const vig = calibration?.noVig ?? noVig;
+  if (calibration && modelProbability !== null && decided > 0 && vig !== null) {
+    modelProbability = blendWithMarket(calibration.apply(grade.wins / decided), vig, calibration.w);
+    expectedReturn = profit === null || total === 0 ? null : (decided * (modelProbability * profit - (1 - modelProbability))) / total;
+    standardError = Math.sqrt((modelProbability * (1 - modelProbability)) / decided) + CALIBRATION_SE;
+  }
+  const edge = modelProbability === null || breakEven === null ? null : modelProbability - breakEven;
   return {
     grade,
     modelProbability,

@@ -23,6 +23,7 @@ import { healthyCheck } from './generation.ts';
 import { fnv1a } from './rng.ts';
 import type { BookLine } from './book-lines.ts';
 import { gameLeans, LEAN_BUCKETS, linesByKey, MIN_PLAY_SHARE, parsePicksFile, type Lean, type PicksFile } from './picks.ts';
+import { parsePublishedPropCalibration, type PropCalibrationArtifact, type PropCalibrationCard, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
 import {
   bookLineFor,
   defaultMarketLine,
@@ -107,6 +108,7 @@ let projectionAutoPrice = false;
 /** Published lines, leans and record. Optional: the page works without it. */
 let picks: PicksFile | null = null;
 let bookLines: Map<string, BookLine> = new Map();
+let propCalibration: { table: Map<PropCalibrationGroup, PropCalibrationCard>; artifacts: PropCalibrationArtifact[] } | null = null;
 /** Leans compared in this browser, per cached simulation. Reset whenever the posted lines are reloaded. */
 let localLeans = new WeakMap<Simulation, Lean[]>();
 /** Games whose 10,000 draws were published with this card, so they are fetched instead of simulated. */
@@ -321,7 +323,13 @@ function projectionView(): ProjectionView | null {
     ...slateLeans(),
     record: picks?.record ?? null,
     book: picks?.book ?? null,
+    propCalibration: panelCalibration(projectionEvent ? slate.games.find((item) => item.event_id === projectionEvent)?.date ?? null : null),
   };
+}
+
+function panelCalibration(tipDate: string | null | undefined): PropPanelCalibration | null {
+  if (!propCalibration || !tipDate) return null;
+  return { table: propCalibration.table, modelVersion: card?.model_hash ?? null, tipDate, artifacts: propCalibration.artifacts, cutoff: tipDate };
 }
 
 function postedLine(eventId: string | null, athleteId: string | null, market: PropFormState['market']): BookLine | null {
@@ -346,7 +354,7 @@ function slateLeans(): { leans: Lean[]; leansWaiting: number } {
     if (simulation) {
       let mine = localLeans.get(simulation);
       if (!mine) {
-        mine = gameLeans(game, applyLineupOverrides(base, overrides), simulation.playerDraws, bookLines).filter(
+        mine = gameLeans(game, applyLineupOverrides(base, overrides), simulation.playerDraws, bookLines, propCalibration?.table, card.model_hash).filter(
           (lean) => lean.claimed >= LEAN_BUCKETS[1] && lean.play >= MIN_PLAY_SHARE,
         );
         localLeans.set(simulation, mine);
@@ -447,17 +455,17 @@ function paintProjectionFigures(): void {
   const chart = projectionsRoot.querySelector<HTMLElement>('[data-projection-chart]');
   if (chart) chart.innerHTML = projectionChartHtml(sample, form.market, form.line);
   const board = projectionsRoot.querySelector<HTMLElement>('[data-projection-board]');
-  if (board && rate) board.innerHTML = projectionBoardHtml(rate, simulation, form, projectionEvent, projectionAthlete, card.projection_context, projectionBoardSort, bookLines);
+  if (board && rate) board.innerHTML = projectionBoardHtml(rate, simulation, form, projectionEvent, projectionAthlete, card.projection_context, projectionBoardSort, bookLines, panelCalibration(game?.date));
   const postedEl = projectionsRoot.querySelector<HTMLElement>('[data-posted]');
   if (postedEl) postedEl.innerHTML = postedLineHtml(postedLine(projectionEvent, projectionAthlete, form.market), form);
   const measuredEl = projectionsRoot.querySelector<HTMLElement>('[data-measured]');
-  if (measuredEl) measuredEl.innerHTML = measuredNoteHtml(sample, form, picks?.record ?? null);
+  if (measuredEl) measuredEl.innerHTML = measuredNoteHtml(sample, form, picks?.record ?? null, panelCalibration(game?.date));
   const player = projectionAthlete ? rate?.players.find((item) => item.athlete_id === projectionAthlete) ?? null : null;
   const results = projectionsRoot.querySelector<HTMLElement>('[data-prop-results]');
   if (results && simulation && projectionAthlete) {
     const open = results.querySelector('details.prop-advanced');
     const keepOpen = open instanceof HTMLDetailsElement && open.open;
-    results.innerHTML = renderPropResults(simulation, projectionAthlete, form, player, picks?.record ?? null);
+    results.innerHTML = renderPropResults(simulation, projectionAthlete, form, player, picks?.record ?? null, panelCalibration(game?.date));
     const details = results.querySelector('details.prop-advanced');
     if (keepOpen && details instanceof HTMLDetailsElement) details.open = true;
   }
@@ -671,6 +679,7 @@ function syncPanel(): void {
     panelTab,
     propForm,
     picks?.record ?? null,
+    panelCalibration(view.game.date),
   );
   applyHiddenSections(panelBody);
 }
@@ -1314,7 +1323,7 @@ function paintPropResults(): void {
   const open = results.querySelector('details.prop-advanced');
   const keepOpen = open instanceof HTMLDetailsElement && open.open;
   const player = view.rates.players.find((item) => item.athlete_id === panelAthlete) ?? null;
-  results.innerHTML = renderPropResults(view.result, panelAthlete, propForm, player, picks?.record ?? null);
+  results.innerHTML = renderPropResults(view.result, panelAthlete, propForm, player, picks?.record ?? null, panelCalibration(view.game.date));
   const details = results.querySelector('details.prop-advanced');
   if (keepOpen && details instanceof HTMLDetailsElement) details.open = true;
 }
@@ -1435,6 +1444,17 @@ function bind(): void {
 }
 
 /** Posted lines, published leans and the graded record. The page still simulates and projects when this is missing. */
+async function loadPropCalibration(): Promise<void> {
+  propCalibration = null;
+  try {
+    const response = await fetch(`${DATA_BASE}prop-calibration.json`, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+    if (!response.ok) return;
+    propCalibration = parsePublishedPropCalibration(await response.text());
+  } catch {
+    propCalibration = null;
+  }
+}
+
 async function loadPicks(): Promise<void> {
   picks = null;
   bookLines = new Map();
@@ -1463,6 +1483,7 @@ async function load(): Promise<void> {
     },async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join(''));
     slate=loaded.slate;card=loaded.card;health=loaded.health;
     await loadPicks();
+    await loadPropCalibration();
     await loadPublishedIndex();
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();

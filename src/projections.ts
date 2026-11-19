@@ -27,6 +27,7 @@ import {
 } from './projection-context.ts';
 import { bookKey, type BookLine } from './book-lines.ts';
 import { EXTREME_CLAIM, leanSide, rankLeans, tierFor, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
+import { quoteCalibrationFor, type PropPanelCalibration } from './prop-calibration.ts';
 import { gradeProp, parseBookPrice, quoteProp, valueAt, type PlayerSample, type PropMarket } from './props.ts';
 import type { Simulation } from './simulate.ts';
 import { escapeHtml, placeLine, playerSideLine, statusLabel, viewToggles } from './slate.ts';
@@ -82,6 +83,7 @@ export interface ProjectionView {
   leansWaiting?: number;
   record?: PickRecord | null;
   book?: string | null;
+  propCalibration?: PropPanelCalibration | null;
 }
 
 export function isPropMarket(value: string): value is PropMarket {
@@ -269,13 +271,14 @@ function signedEdge(edge: number): string {
   return `${points >= 0 ? '+' : ''}${points.toFixed(1)} pp`;
 }
 
-function edgeText(sample: PlayerSample, market: PropMarket, form: PropFormState, line: number): string {
+function edgeText(sample: PlayerSample, market: PropMarket, form: PropFormState, line: number, calibration?: PropPanelCalibration | null): string {
   const price = parseBookPrice(form.odds, form.style);
   if (!price) return '';
   // The prop analyzer withholds the whole quote when the opposite price is filled in but illegal.
   // An empty opposite still has an edge. A valid opposite still has an edge.
-  if (form.opposite.trim() !== '' && !parseBookPrice(form.opposite, form.style)) return '';
-  const quote = quoteProp(sample, market, form.side, line, price, null);
+  const opposite = form.opposite.trim() === '' ? null : parseBookPrice(form.opposite, form.style);
+  if (form.opposite.trim() !== '' && !opposite) return '';
+  const quote = quoteProp(sample, market, form.side, line, price, opposite, quoteCalibrationFor(calibration, market, form.side));
   if (!quote || quote.edge === null || quote.breakEven === null || quote.expectedReturn === null) return '';
   return signedEdge(quote.edge);
 }
@@ -341,6 +344,7 @@ function boardRows(
   context: ProjectionContext | undefined,
   sort: BoardSort,
   lines: ReadonlyMap<string, BookLine> | undefined,
+  calibration?: PropPanelCalibration | null,
 ): BoardRow[] {
   const viewerGraded = validPropLine(form.line);
   const validViewer = viewerGraded !== null && !((form.market === 'dd' || form.market === 'td') && viewerGraded !== 0.5) ? viewerGraded : null;
@@ -370,7 +374,7 @@ function boardRows(
       underRate = pair?.under ?? null;
       over = overRate === null ? '' : percent(overRate);
       under = underRate === null ? '' : percent(underRate);
-      if (selected && form.odds.trim() !== '') edge = edgeText(sample, form.market, form, rowLine);
+      if (selected && form.odds.trim() !== '') edge = edgeText(sample, form.market, form, rowLine, calibration);
       else if (book && overRate !== null) {
         const lean = leanSide(overRate, book);
         edge = `${lean.side === 'over' ? 'Over' : 'Under'} ${signedEdge(lean.claimed)}`;
@@ -423,8 +427,9 @@ export function projectionBoardHtml(
   context?: ProjectionContext,
   sort: BoardSort = 'projection',
   lines?: ReadonlyMap<string, BookLine>,
+  calibration?: PropPanelCalibration | null,
 ): string {
-  const rows = boardRows(game, simulation, form, athleteId, context, sort, lines);
+  const rows = boardRows(game, simulation, form, athleteId, context, sort, lines, calibration);
   const hasHistory = Boolean(context);
   const line = validPropLine(form.line);
   const gradedLine = line !== null && !((form.market === 'dd' || form.market === 'td') && line !== 0.5) ? line : null;
@@ -1204,7 +1209,7 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
   const sample = view.simulation?.playerDraws.get(player.athlete_id) ?? null;
   const form = view.form.market === 'dd' || view.form.market === 'td' ? { ...view.form, line: '0.5' } : view.form;
   const results = view.simulation
-    ? renderPropResults(view.simulation, player.athlete_id, form, player, view.record ?? null)
+    ? renderPropResults(view.simulation, player.athlete_id, form, player, view.record ?? null, view.propCalibration ?? null)
     : '<div class="prop-prompt"><p class="prop-prompt-title">Add a line and a price</p><p class="prop-note">The price comparison appears after this game is simulated.</p></div>';
   const l10Ready = l10HistoricalValues(context, player.athlete_id, form.market).length > 0;
   const posted = bookLineFor(view.lines, game.event_id, player.athlete_id, form.market);
@@ -1239,7 +1244,7 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
         ${propFormMarkup(form)}
         <div data-model-chances>${modelChanceHtml(sample, form.market, form.line)}</div>
         <div data-prop-results aria-live="polite">${results}</div>
-        <div data-measured>${measuredNoteHtml(sample, form, view.record)}</div>
+        <div data-measured>${measuredNoteHtml(sample, form, view.record, view.propCalibration)}</div>
         <div data-projection-chart>${projectionChartHtml(sample, form.market, form.line)}</div>
       </div>
     </article>
@@ -1449,12 +1454,19 @@ export function leanPanelInner(input: LeanPanelInput): string {
 }
 
 /** How claims like the one in the form have settled, shown under the verdict. */
-export function measuredNoteHtml(sample: PlayerSample | null, form: PropFormState, record: PickRecord | null | undefined): string {
+export function measuredNoteHtml(
+  sample: PlayerSample | null,
+  form: PropFormState,
+  record: PickRecord | null | undefined,
+  calibration?: PropPanelCalibration | null,
+): string {
   if (!sample || !record || form.odds.trim() === '') return '';
   const line = validPropLine(form.line);
   const price = parseBookPrice(form.odds, form.style);
   if (line === null || !price) return '';
-  const quote = quoteProp(sample, form.market, form.side, line, price, null);
+  const opposite = form.opposite.trim() === '' ? null : parseBookPrice(form.opposite, form.style);
+  if (form.opposite.trim() !== '' && !opposite) return '';
+  const quote = quoteProp(sample, form.market, form.side, line, price, opposite, quoteCalibrationFor(calibration, form.market, form.side));
   if (!quote || quote.edge === null) return '';
   const tier = tierFor(record, form.side, quote.edge);
   if (!tier || tier.pooled <= 0 || quote.edge >= EXTREME_CLAIM) return '';
@@ -1531,7 +1543,7 @@ export function renderProjections(view: ProjectionView): string {
   const boardMeter = view.drawing && !view.athleteId ? inlineDrawingHtml(view.drawProgress) : '';
   const board =
     game && rate
-      ? `${boardMeter}<section class="team-box projection-board" data-block="proj-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2>${injuryReportHtml(rate, game)}<div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines)}</div></section>`
+      ? `${boardMeter}<section class="team-box projection-board" data-block="proj-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2>${injuryReportHtml(rate, game)}<div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines, view.propCalibration)}</div></section>`
       : '<p class="state">Search a player, or pick a game. Historical trends load right away, and 10,000 simulations warm in the background.</p>';
   const aside = gamesHtml(view, game, rate);
   const present = `${detail}${board}${aside}`;

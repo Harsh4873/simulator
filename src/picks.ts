@@ -1,5 +1,7 @@
 import { bookKey, breakEven, fairOver, type BookLine } from './book-lines.ts';
-import { americanBreakEven, profitPerStake, PROP_POLICY, valueAt, type PlayerSample, type PropMarket } from './props.ts';
+import { chicagoDate } from './date.ts';
+import { applyCalibration, blendWithMarket, groupOf, type PropCalibrationGroup, type PropCalibrationTable } from './prop-calibration.ts';
+import { americanBreakEven, noVigFromBreakEven, profitPerStake, PROP_POLICY, valueAt, type PlayerSample, type PropMarket } from './props.ts';
 import type { RateGame, SlateGame } from './types.ts';
 
 /**
@@ -47,6 +49,10 @@ export interface Lean {
   need: number;
   /** model - need. */
   claimed: number;
+  /** Uncalibrated over share. `model` and `claimed` use the final probability. */
+  modelRaw?: number;
+  /** Null when no fitted map applies. */
+  calibrationMethod?: string | null;
   projection: number;
   minutes: number;
   play: number;
@@ -84,6 +90,10 @@ export interface PickRecord {
   live: SideTotals;
   replayed: SideTotals;
   tiers: TierRecord[];
+  /** Same buckets as `tiers`, measured on live leans only. Listing still reads `tiers`. */
+  tiersLive: TierRecord[];
+  /** Graded leans scored from the raw ledger probability. */
+  gradedUncalibrated: number;
   /** Line moves between the lean and the last posted price before the tip. Not a confirmed closing line. */
   moves: { tracked: number; toward: number; away: number; same_line: number; price_toward: number };
   days: { date: string; n: number; wins: number; units: number }[];
@@ -126,6 +136,8 @@ export interface LedgerRow {
   last?: LedgerSnapshot;
   close?: { priced_at: string; line: number; over: number; under: number };
   result?: { actual: number; min: number } | { void: 'dnp' };
+  /** Card hash the row was logged under. Absent rows grade uncalibrated. */
+  model_hash?: string;
 }
 
 export interface LedgerFile {
@@ -148,6 +160,8 @@ export interface PicksFile {
   lines: Record<string, [string, PropMarket, number, number, number, string][]>;
   leans: Lean[];
   record: PickRecord;
+  /** Map that was live for this card, when one applied. Old files omit it. */
+  calibration?: Partial<Record<PropCalibrationGroup, { method: string; fitted_through: string; ece: number; status: 'fitted' | 'rejected' }>>;
 }
 
 /** Over share among the draws the player played, pushes excluded. Null when nothing is decided. */
@@ -197,12 +211,34 @@ function sideAbbr(side: SlateGame['away']): string {
   return side.abbreviation.trim() || side.name.trim() || 'Team';
 }
 
+function finalOver(
+  p: number,
+  market: PropMarket,
+  overOdds: number,
+  underOdds: number,
+  tip: string,
+  modelVersion: string | null | undefined,
+  calibration?: PropCalibrationTable,
+): { p: number; method: string | null } {
+  if (!calibration || !modelVersion) return { p, method: null };
+  const group = groupOf(market);
+  const card = group ? calibration.get(group) : undefined;
+  if (!card || card.status !== 'fitted' || card.model_version !== modelVersion || !(card.fitted_through < tip)) return { p, method: null };
+  const over = americanBreakEven(overOdds);
+  const under = americanBreakEven(underOdds);
+  const noVig = over !== null && under !== null ? noVigFromBreakEven(over, under) : null;
+  if (noVig === null) return { p, method: null };
+  return { p: blendWithMarket(applyCalibration(card.params, p), noVig, card.w), method: card.method };
+}
+
 /** Every posted line in one game that the simulation can be compared with. Ruled-out and placeholder players are skipped. */
 export function gameLeans(
   game: SlateGame,
   rate: RateGame,
   draws: ReadonlyMap<string, PlayerSample>,
   lines: ReadonlyMap<string, BookLine>,
+  calibration?: PropCalibrationTable,
+  modelVersion?: string | null,
 ): Lean[] {
   const leans: Lean[] = [];
   const matchup = `${sideAbbr(game.away)} @ ${sideAbbr(game.home)}`;
@@ -215,7 +251,8 @@ export function gameLeans(
     const share = overShare(sample, line.market, line.line);
     const summary = playedSummary(sample, line.market);
     if (!share || !summary) continue;
-    const lean = leanSide(share.over, line);
+    const adjusted = finalOver(share.over, line.market, line.over_odds, line.under_odds, game.date, modelVersion, calibration);
+    const lean = leanSide(adjusted.p, line);
     leans.push({
       event_id: game.event_id,
       athlete_id: player.athlete_id,
@@ -232,6 +269,8 @@ export function gameLeans(
       model: lean.model,
       need: lean.need,
       claimed: lean.claimed,
+      modelRaw: share.over,
+      calibrationMethod: adjusted.method,
       projection: summary.projection,
       minutes: summary.minutes,
       play: summary.play,
@@ -254,15 +293,19 @@ export interface GradedLean {
   odds: number;
   win: boolean;
   live: boolean;
+  calibrated: boolean;
 }
 
 /** A ledger row as a graded lean at the line and price of its latest pre-tip comparison. Null while unsettled, void or pushed. */
-export function gradeRow(row: LedgerRow, date: string, live: boolean): GradedLean | null {
+export function gradeRow(row: LedgerRow, date: string, live: boolean, calibration?: PropCalibrationTable): GradedLean | null {
   if (!row.result || 'void' in row.result) return null;
   const actual = row.result.actual;
   const snap = row.last ?? row.open;
   if (!Number.isFinite(actual) || actual === snap.line) return null;
-  const lean = leanSide(snap.p, { over_odds: snap.over, under_odds: snap.under });
+  const parsed = Date.parse(row.tip);
+  const tip = Number.isFinite(parsed) ? chicagoDate(new Date(parsed)) : date;
+  const adjusted = finalOver(snap.p, row.m, snap.over, snap.under, tip, row.model_hash, calibration);
+  const lean = leanSide(adjusted.p, { over_odds: snap.over, under_odds: snap.under });
   const odds = lean.side === 'over' ? snap.over : snap.under;
   return {
     date,
@@ -272,6 +315,7 @@ export function gradeRow(row: LedgerRow, date: string, live: boolean): GradedLea
     odds,
     win: lean.side === 'over' ? actual > snap.line : actual < snap.line,
     live,
+    calibrated: adjusted.method !== null,
   };
 }
 
@@ -336,36 +380,10 @@ function sideTotals(leans: readonly GradedLean[]): SideTotals {
   return { over: finish(over), under: finish(under), from, through };
 }
 
-export function buildRecord(files: readonly LedgerFile[]): PickRecord {
-  const graded: GradedLean[] = [];
-  let voids = 0;
-  const moves = { tracked: 0, toward: 0, away: 0, same_line: 0, price_toward: 0 };
-  for (const file of files) {
-    for (const row of file.rows) {
-      if (row.result && 'void' in row.result) voids += 1;
-      const lean = gradeRow(row, file.date, file.source === 'live');
-      if (lean) graded.push(lean);
-      if (row.close && Date.parse(row.close.priced_at) > Date.parse(row.open.priced_at)) {
-        const side = leanSide(row.open.p, { over_odds: row.open.over, under_odds: row.open.under }).side;
-        moves.tracked += 1;
-        if (row.close.line !== row.open.line) {
-          // A line that moves up after an over lean has moved toward it: the same over is now harder to get.
-          if ((row.close.line > row.open.line) === (side === 'over')) moves.toward += 1;
-          else moves.away += 1;
-        } else {
-          const before = fairOver({ over_odds: row.open.over, under_odds: row.open.under });
-          const after = fairOver({ over_odds: row.close.over, under_odds: row.close.under });
-          if (before !== null && after !== null) {
-            moves.same_line += 1;
-            moves.price_toward += side === 'over' ? after - before : before - after;
-          }
-        }
-      }
-    }
-  }
+function tiersFor(leans: readonly GradedLean[]): TierRecord[] {
   const tiers: TierRecord[] = [];
   for (const side of ['under', 'over'] as const) {
-    const mine = graded.filter((lean) => lean.side === side);
+    const mine = leans.filter((lean) => lean.side === side);
     const buckets = LEAN_BUCKETS.map(() => emptySide());
     const below = emptySide();
     // The last bucket holds the gaps too large to trust. It is graded but neither pooled nor part of the side's prior.
@@ -388,6 +406,42 @@ export function buildRecord(files: readonly LedgerFile[]): PickRecord {
       tiers.push({ side, lo, hi: LEAN_BUCKETS[index + 1] ?? null, ...finish(buckets[index]), edge: round(measured[index].edge, 4), pooled: measured[index].pooled });
     });
   }
+  return tiers;
+}
+
+export function buildRecord(files: readonly LedgerFile[], calibration?: PropCalibrationTable): PickRecord {
+  const graded: GradedLean[] = [];
+  let voids = 0;
+  let gradedUncalibrated = 0;
+  const moves = { tracked: 0, toward: 0, away: 0, same_line: 0, price_toward: 0 };
+  for (const file of files) {
+    for (const row of file.rows) {
+      if (row.result && 'void' in row.result) voids += 1;
+      const lean = gradeRow(row, file.date, file.source === 'live', calibration);
+      if (lean) {
+        graded.push(lean);
+        if (!lean.calibrated) gradedUncalibrated += 1;
+      }
+      if (row.close && Date.parse(row.close.priced_at) > Date.parse(row.open.priced_at)) {
+        const side = leanSide(row.open.p, { over_odds: row.open.over, under_odds: row.open.under }).side;
+        moves.tracked += 1;
+        if (row.close.line !== row.open.line) {
+          // A line that moves up after an over lean has moved toward it: the same over is now harder to get.
+          if ((row.close.line > row.open.line) === (side === 'over')) moves.toward += 1;
+          else moves.away += 1;
+        } else {
+          const before = fairOver({ over_odds: row.open.over, under_odds: row.open.under });
+          const after = fairOver({ over_odds: row.close.over, under_odds: row.close.under });
+          if (before !== null && after !== null) {
+            moves.same_line += 1;
+            moves.price_toward += side === 'over' ? after - before : before - after;
+          }
+        }
+      }
+    }
+  }
+  const tiers = tiersFor(graded);
+  const tiersLive = tiersFor(graded.filter((lean) => lean.live));
   const byDate = new Map<string, SideRecord>();
   for (const lean of graded) {
     if (bucketOf(lean.claimed) < 0) continue;
@@ -404,6 +458,8 @@ export function buildRecord(files: readonly LedgerFile[]): PickRecord {
     live: sideTotals(graded.filter((lean) => lean.live)),
     replayed: sideTotals(graded.filter((lean) => !lean.live)),
     tiers,
+    tiersLive,
+    gradedUncalibrated,
     moves: { ...moves, price_toward: round(moves.price_toward, 4) },
     days: [...byDate.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
