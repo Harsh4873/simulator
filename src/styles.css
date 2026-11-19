@@ -1742,8 +1742,9 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
 
 .desk-tabs.panel-tabs {
   margin: 0;
-  width: min(16.5rem, 100%);
+  width: min(22rem, 100%);
   flex: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .projection-page { display: grid; gap: 18px; min-width: 0; }
