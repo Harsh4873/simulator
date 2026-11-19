@@ -16,7 +16,7 @@ import {
   type PropFormState,
   type SideSorts,
 } from './boxscore.ts';
-import { nextPanelAthlete, themeFromStorage } from './display.ts';
+import { nextPanelAthlete, sportFromStorage, themeFromStorage, type Sport } from './display.ts';
 import { renderLineupEditor } from './lineup-editor.ts';
 import { applyLineupOverrides, cleanOverrides, isLineupChoice, LINEUP_STORAGE_KEY, overridesKey, readStoredLineups, summarizeOverrides, type LineupOverrides } from './lineup-overrides.ts';
 import { healthyCheck } from './generation.ts';
@@ -61,6 +61,7 @@ import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
 
 const DATA_BASE = '/simulator/data/';
 const THEME_KEY = 'simulator.theme';
+const SPORT_KEY = 'simulator.sport';
 const SECTION_KEY = 'simulator.sections';
 const MEMORY_CACHE_LIMIT = 24;
 
@@ -118,6 +119,7 @@ let prefetchingPublished = false;
 /** Set only while this game's worker is drawing. A cache hit never sets it. */
 let drawingEvent: string | null = null;
 let drawingProgress = 0;
+let sport: Sport = 'nba';
 
 function storedLineups(): string | null {
   try {
@@ -165,7 +167,12 @@ function relativeAge(iso: string | null | undefined, now: Date): string | null {
 
 function paintFreshness(): void {
   const pill = document.querySelector<HTMLElement>('[data-fresh]');
-  if (!pill || !slate || !card) return;
+  if (!pill) return;
+  if (currentSport() !== 'nba') {
+    pill.hidden = true;
+    return;
+  }
+  if (!slate || !card) return;
   const now = new Date();
   const checked = healthyCheck(health, card, now.getTime()) ?? card.generated_at;
   const age = relativeAge(checked, now);
@@ -586,6 +593,7 @@ function scheduleNextPrefetch(): void {
 }
 
 function showProjections(): void {
+  if (currentSport() !== 'nba') return;
   if (!slate || !card || !desk || !projectionsRoot) return;
   const entering = desk.dataset.mode !== 'projections';
   if (entering) {
@@ -609,6 +617,7 @@ function showProjections(): void {
 }
 
 function showSlate(): void {
+  if (currentSport() !== 'nba') return;
   if (!slateRoot || !slate || !card) return;
   stopPrefetch();
   cancelRun?.();
@@ -1409,6 +1418,24 @@ function onKey(event: KeyboardEvent): void {
     cancelRun?.();
     return;
   }
+  if (event.target instanceof Element && event.target.matches('[data-sport]') && (event.key === 'ArrowLeft' || event.key === 'ArrowRight' || event.key === 'Home' || event.key === 'End')) {
+    event.preventDefault();
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('[data-sport]')];
+    const current = buttons.findIndex((button) => button === event.target);
+    if (current < 0) return;
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? buttons.length - 1
+        : event.key === 'ArrowRight'
+          ? (current + 1) % buttons.length
+          : (current - 1 + buttons.length) % buttons.length;
+    const next = buttons[nextIndex];
+    const value = next?.dataset.sport;
+    if (value === 'nba' || value === 'nfl' || value === 'esports') applySport(value);
+    next?.focus();
+    return;
+  }
   if(event.target instanceof Element && event.target.matches('[data-panel-tab]') && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){
     event.preventDefault();panelTab=event.key==='Home'?'forecast':event.key==='End'?'props':panelTab==='forecast'?'props':'forecast';syncPanel();document.getElementById(`${panelTab}-tab`)?.focus();return;
   }
@@ -1488,10 +1515,15 @@ async function load(): Promise<void> {
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
     await hydrateSimulationCache(generationKey(), simulationCache);
-    if (readHash() === '#projections') showProjections();
+    if (currentSport() !== 'nba') showPendingSport();
+    else if (readHash() === '#projections') showProjections();
     else showSlate();
   } catch {
     bind();
+    if (currentSport() !== 'nba') {
+      showPendingSport();
+      return;
+    }
     slateRoot.innerHTML = '<p class="state" role="alert">Slate could not be loaded or validated. <button data-retry>Retry</button></p>';
     if (desk) desk.dataset.mode = 'error';
   }
@@ -1528,6 +1560,88 @@ function bindTheme(): void {
   });
 }
 
+function storedSport(): Sport {
+  try {
+    return sportFromStorage(() => sessionStorage.getItem(SPORT_KEY));
+  } catch {
+    return 'nba';
+  }
+}
+
+function currentSport(): Sport {
+  return sport;
+}
+
+function applySport(next: Sport): void {
+  const changed = next !== sport;
+  sport = next;
+  try {
+    sessionStorage.setItem(SPORT_KEY, next);
+  } catch {
+    // The switch still follows the click when storage is blocked.
+  }
+  document.querySelectorAll<HTMLButtonElement>('[data-sport]').forEach((button) => {
+    const on = button.dataset.sport === next;
+    button.setAttribute('aria-checked', on ? 'true' : 'false');
+    button.setAttribute('tabindex', on ? '0' : '-1');
+  });
+  if (!changed) return;
+  const sub = document.querySelector<HTMLElement>('.brand .sub');
+  if (sub) sub.textContent = next === 'nba' ? 'Today and yesterday, Chicago time' : 'Not live yet.';
+  if (next === 'nba') {
+    const tabs = document.querySelector<HTMLElement>('.desk-tabs');
+    if (tabs) tabs.hidden = false;
+    if (slate && card) {
+      if (readHash() === '#projections') showProjections();
+      else showSlate();
+    }
+    paintFreshness();
+    return;
+  }
+  showPendingSport();
+}
+
+function showPendingSport(): void {
+  const pending = currentSport();
+  if (pending === 'nba' || !slateRoot) return;
+  stopPrefetch();
+  simulationEpoch += 1;
+  running = false;
+  drawingEvent = null;
+  drawingProgress = 0;
+  if (desk) desk.setAttribute('aria-busy', 'false');
+  cancelRun?.();
+  view = null;
+  panelAthlete = null;
+  lineupEvent = null;
+  panelBody?.replaceChildren();
+  desk?.classList.remove('panel-open');
+  const games = gamesFrame();
+  if (games) games.hidden = false;
+  if (stageFrame) stageFrame.hidden = true;
+  if (playerFrame) playerFrame.hidden = true;
+  unmountProjections();
+  boxRoot?.replaceChildren();
+  if (desk) desk.dataset.mode = 'sport';
+  const sub = document.querySelector<HTMLElement>('.brand .sub');
+  if (sub) sub.textContent = 'Not live yet.';
+  const tabs = document.querySelector<HTMLElement>('.desk-tabs');
+  if (tabs) tabs.hidden = true;
+  const pill = document.querySelector<HTMLElement>('[data-fresh]');
+  if (pill) pill.hidden = true;
+  const label = pending === 'nfl' ? 'NFL' : 'Esports';
+  queueMicrotask(() => {
+    if (currentSport() !== pending || !slateRoot) return;
+    // The cancelled draw attaches its alert while the button is still connected; this replaces it.
+    slateRoot.innerHTML = `<p class="state" role="status">${label} is not live yet.</p>`;
+    if (desk) desk.dataset.mode = 'sport';
+    const laterTabs = document.querySelector<HTMLElement>('.desk-tabs');
+    if (laterTabs) laterTabs.hidden = true;
+    const laterPill = document.querySelector<HTMLElement>('[data-fresh]');
+    if (laterPill) laterPill.hidden = true;
+  });
+}
+
 function readHash(): string {
   try {
     return location.hash;
@@ -1537,6 +1651,7 @@ function readHash(): string {
 }
 
 function navigateDesk(mode: 'games' | 'projections'): void {
+  if (currentSport() !== 'nba') return;
   const next = mode === 'projections' ? '#projections' : '';
   try {
     if (location.hash !== next) {
@@ -1557,6 +1672,7 @@ document.querySelectorAll<HTMLButtonElement>('[data-desk-tab]').forEach((button)
 });
 
 window.addEventListener('hashchange', () => {
+  if (currentSport() !== 'nba') return;
   if (!slate || !card) {
     markDeskTabs();
     return;
@@ -1565,12 +1681,21 @@ window.addEventListener('hashchange', () => {
   else showSlate();
 });
 
+document.querySelectorAll<HTMLButtonElement>('[data-sport]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const value = button.dataset.sport;
+    if (value === 'nba' || value === 'nfl' || value === 'esports') applySport(value);
+  });
+});
+
 applyTheme(themeFromStorage(storedTheme(), window.matchMedia('(prefers-color-scheme: light)').matches));
 bindTheme();
+applySport(storedSport());
 void load();
 
 function recheckFreshness(): void {
   paintFreshness();
+  if (currentSport() !== 'nba') return;
   if(slate && card && freshnessIssue(slate,card,new Date(),health)){stopPrefetch();activeWorker?.terminate();cancelRun?.();showSlate();}
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)recheckFreshness();});

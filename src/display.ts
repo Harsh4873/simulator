@@ -59,6 +59,19 @@ export function themeFromStorage(stored: string | null, prefersLight: boolean): 
   return prefersLight ? 'light' : 'dark';
 }
 
+export type Sport = 'nba' | 'nfl' | 'esports';
+
+/** Exact `nfl` and `esports` pass through. Anything else, including a throw from the reader, is `nba`. */
+export function sportFromStorage(source: string | null | (() => string | null)): Sport {
+  try {
+    const stored = typeof source === 'function' ? source() : source;
+    if (stored === 'nfl' || stored === 'esports') return stored;
+    return 'nba';
+  } catch {
+    return 'nba';
+  }
+}
+
 function espnCdnUrl(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
