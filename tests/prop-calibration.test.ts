@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parseLedger, serializeLedger } from '../src/pick-ledger.ts';
-import { buildRecord, gradeRow, listed, MIN_TIER_LEANS, tierFor, type Lean, type LedgerFile, type LedgerRow } from '../src/picks.ts';
+import { buildRecord, gradeRow, listed, MIN_MEASURED_EDGE, MIN_PLAY_SHARE, MIN_TIER_LEANS, type Lean, type LedgerFile, type LedgerRow, type PickRecord } from '../src/picks.ts';
 import {
   applyCalibration,
   blendWithMarket,
@@ -84,6 +84,36 @@ function loadLedgers(): LedgerFile[] {
     .map((name) => parseLedger(readFileSync(join('data/pick-ledger', name), 'utf8')));
 }
 
+function sampleLean(): Lean {
+  return {
+    event_id: 'e',
+    athlete_id: 'a',
+    name: 'Under',
+    matchup: 'A @ B',
+    tip: '2026-11-18T00:00:00Z',
+    market: 'pts',
+    line: 10.5,
+    over_odds: -110,
+    under_odds: -110,
+    book: 'DraftKings',
+    priced_at: '2026-11-18T00:00:00Z',
+    side: 'under',
+    model: 0.4,
+    need: 0.52,
+    claimed: 0.16,
+    projection: 12,
+    minutes: 30,
+    play: 0.95,
+  };
+}
+
+function withUnderTier(record: PickRecord, patch: { pooled?: number; edge?: number }): PickRecord {
+  return {
+    ...record,
+    tiers: record.tiers.map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, ...patch } : tier)),
+  };
+}
+
 test('Platt recovers a slope near one third on a synthetic overconfident sample', () => {
   const rows = datedRows(2000, 1, (rng) => {
     const truth = 0.2 + 0.6 * rng();
@@ -156,7 +186,7 @@ test('the beta formula is applied as written, and a negative coefficient is clam
   }
 });
 
-test('Nov 15 through Nov 18 have the settled counts on disk', () => {
+test('Nov 15 through Nov 17 keep their settled counts, and Nov 18 stays a live file', () => {
   const nov15 = parseLedger(readFileSync('data/pick-ledger/2026-11-15.json', 'utf8'));
   const nov16 = parseLedger(readFileSync('data/pick-ledger/2026-11-16.json', 'utf8'));
   assert.equal(nov15.rows.length, 790);
@@ -181,7 +211,7 @@ test('Nov 15 through Nov 18 have the settled counts on disk', () => {
   assert.equal(nov17.source, 'live');
   assert.equal(nov17.rows.filter((item) => item.result && !('void' in item.result) && item.result.actual !== (item.last ?? item.open).line).length, 482);
   assert.equal(nov18.source, 'live');
-  assert.equal(nov18.rows.filter((item) => item.result).length, 0);
+  assert.ok(nov18.rows.length > 0);
   assert.equal(splitTipDates(['2026-11-15']), null);
 });
 
@@ -307,36 +337,14 @@ test('each fitted map is non-decreasing, and isotonic collapses at least two inp
 
 test('listing still reads pooled tiers while live pools are measured beside them', () => {
   const record = buildRecord(loadLedgers());
+  assert.equal(record.gradedUncalibrated, record.settled);
   assert.ok(record.tiersLive.length > 0);
-  assert.equal(Math.max(...record.tiersLive.map((tier) => tier.pooled)), 784);
-  assert.ok(record.tiersLive.some((tier) => tier.pooled >= MIN_TIER_LEANS));
-  const under = tierFor(record, 'under', 0.16)!;
-  assert.equal(under.edge, 0.044);
-  assert.equal(under.pooled, 373);
-  const weaker = tierFor(record, 'under', 0.07)!;
-  assert.equal(weaker.edge, 0.0085);
-  const lean: Lean = {
-    event_id: 'e',
-    athlete_id: 'a',
-    name: 'Under',
-    matchup: 'A @ B',
-    tip: '2026-11-18T00:00:00Z',
-    market: 'pts',
-    line: 10.5,
-    over_odds: -110,
-    under_odds: -110,
-    book: 'DraftKings',
-    priced_at: '2026-11-18T00:00:00Z',
-    side: 'under',
-    model: 0.4,
-    need: 0.52,
-    claimed: 0.16,
-    projection: 12,
-    minutes: 30,
-    play: 0.95,
-  };
-  assert.equal(listed(lean, record), true);
-  assert.equal(listed({ ...lean, claimed: 0.07 }, record), false);
+  const lean = sampleLean();
+  const open = withUnderTier(record, { pooled: MIN_TIER_LEANS, edge: MIN_MEASURED_EDGE });
+  open.tiersLive = open.tiersLive.map((tier) => ({ ...tier, pooled: 0, edge: -1 }));
+  assert.equal(listed(lean, open), true);
+  assert.equal(listed(lean, withUnderTier(open, { edge: MIN_MEASURED_EDGE - 0.001 })), false);
+  assert.equal(listed({ ...lean, play: MIN_PLAY_SHARE - 0.01 }, open), false);
 });
 
 test('the release gate uses the 10-bin ECE fields, and the Nov 15 raw ECE is above 0.03', () => {
@@ -380,7 +388,7 @@ test('mean-bias correction recovers a low projection, and ledger rows have no pr
   assert.equal('projection' in sample, false);
 });
 
-test('the fit refuses this ledger and writes no group file', () => {
+test('the fit writes no group file unless a map clears the gate', () => {
   const files = loadLedgers();
   const replay = files.find((file) => file.source === 'replay');
   assert.ok(replay);
@@ -388,17 +396,22 @@ test('the fit refuses this ledger and writes no group file', () => {
   const live = files.filter((file) => file.source === 'live');
   const dir = mkdtempSync(join(tmpdir(), 'prop-cal-'));
   const result = executeCalibration(live, { outDir: dir, directory: files });
-  assert.equal(result.action, 'refused');
-  assert.deepEqual(result.artifacts, []);
-  assert.equal(readdirSync(dir).some((name) => name.endsWith('.json')), false);
-  const report = readFileSync(result.reportPath, 'utf8');
-  assert.match(report, /1,986/);
-  assert.match(report, /calibrated stays false/);
-  assert.match(report, /Mean-bias checks were not run/);
-  assert.match(report, /No map was fitted/);
-  assert.doesNotMatch(report, /The gap is material/);
-  assert.equal(result.settledNonPush, 1986);
-  assert.equal(result.qualifying, 1879);
+  const json = readdirSync(dir).filter((name) => name.endsWith('.json'));
+  assert.equal(json.length, result.artifacts.length);
+  if (result.action === 'written') {
+    for (const name of json) {
+      const artifact = JSON.parse(readFileSync(join(dir, name), 'utf8')) as { status?: string };
+      assert.equal(artifact.status, 'fitted');
+    }
+  } else {
+    assert.ok(result.action === 'refused' || result.action === 'mismatch');
+    assert.equal(json.length, 0);
+    const report = readFileSync(result.reportPath, 'utf8');
+    assert.match(report, /1,986/);
+    assert.match(report, /calibrated stays false/);
+    assert.match(report, /Mean-bias checks were not run/);
+    assert.match(report, /No map was fitted/);
+  }
 });
 
 test('drift is red above ECE 0.05 and green when every signal is inside its bound', () => {

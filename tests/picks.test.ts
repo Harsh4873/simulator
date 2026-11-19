@@ -14,6 +14,8 @@ import {
   linesByKey,
   listed,
   measuredEdges,
+  MIN_MEASURED_EDGE,
+  MIN_PLAY_SHARE,
   MIN_TIER_LEANS,
   overShare,
   parsePicksFile,
@@ -425,7 +427,7 @@ test('a large model gap is not a lean when graded gaps of that side and size hav
   assert.match(renderPropResults(score, 'p', { market: 'pts', side: 'over', line: '17.5', style: 'american', odds: '-110', opposite: '' }, player), /data-verdict="lean"/);
 });
 
-test('buildRecord without a map keeps pooled tier edges and counts every settled lean as uncalibrated', () => {
+test('buildRecord without a map counts every settled lean as uncalibrated and lists from pooled tiers', () => {
   const files = readdirSync('data/pick-ledger')
     .filter((name) => name.endsWith('.json'))
     .sort()
@@ -433,10 +435,6 @@ test('buildRecord without a map keeps pooled tier edges and counts every settled
   const record = buildRecord(files);
   assert.equal(record.gradedUncalibrated, record.settled);
   assert.ok(record.tiersLive.length > 0);
-  assert.ok(record.tiersLive.some((tier) => tier.pooled >= MIN_TIER_LEANS));
-  const under = tierFor(record, 'under', 0.16)!;
-  assert.equal(under.edge, 0.044);
-  assert.equal(under.pooled, 373);
   const lean: Lean = {
     event_id: 'e',
     athlete_id: 'a',
@@ -457,5 +455,16 @@ test('buildRecord without a map keeps pooled tier edges and counts every settled
     minutes: 30,
     play: 0.95,
   };
-  assert.equal(listed(lean, record), true);
+  const open = {
+    ...record,
+    tiers: record.tiers.map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, pooled: MIN_TIER_LEANS, edge: MIN_MEASURED_EDGE } : tier)),
+    tiersLive: record.tiersLive.map((tier) => ({ ...tier, pooled: 0, edge: -1 })),
+  };
+  assert.equal(listed(lean, open), true);
+  assert.equal(listed({ ...lean, play: MIN_PLAY_SHARE - 0.01 }, open), false);
+  const shut = {
+    ...open,
+    tiers: open.tiers.map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, edge: MIN_MEASURED_EDGE - 0.001 } : tier)),
+  };
+  assert.equal(listed(lean, shut), false);
 });

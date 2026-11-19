@@ -1,7 +1,7 @@
 // Compares the published card with posted sportsbook lines, logs each comparison before its game tips, grades
 // earlier ones from final box scores, and writes what the page shows. Prices are read after the draws exist and
 // never enter fitting or sampling. A failure here leaves the rate card untouched.
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
@@ -250,7 +250,10 @@ async function main(): Promise<void> {
   let written = 0;
   for (const ledger of ledgers.values()) if (writeIfChanged(join(ledgerDir, `${ledger.date}.json`), serializeLedger(ledger))) written += 1;
   writeIfChanged(picksPath, serializePicks(result.picks));
-  writeIfChanged(join(root, 'public/data/prop-calibration.json'), publishedCalibration(calibration));
+  const calibrationPath = join(root, 'public/data/prop-calibration.json');
+  // An empty file is not a map. Leaving it in public/ fails the publication check and blocks the rate card.
+  if (calibration.size) writeIfChanged(calibrationPath, publishedCalibration(calibration));
+  else if (existsSync(calibrationPath)) unlinkSync(calibrationPath);
   console.log(JSON.stringify({ price_rows: feed.reduce((sum, day) => sum + day.length, 0), priced_games: Object.keys(result.picks.lines).length, simulated: result.simulated, opened: result.opened, refreshed: result.refreshed, settled: result.settled, leans: result.picks.leans.length, graded: result.picks.record.settled, ledger_files_written: written }));
 }
 
