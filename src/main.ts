@@ -22,6 +22,7 @@ import { applyLineupOverrides, cleanOverrides, isLineupChoice, LINEUP_STORAGE_KE
 import { healthyCheck } from './generation.ts';
 import { fnv1a } from './rng.ts';
 import type { BookLine } from './book-lines.ts';
+import { buildOddsScreen, renderOddsBoard, type OddsQuote } from './odds-board.ts';
 import { gameLeans, LEAN_BUCKETS, linesByKey, MIN_PLAY_SHARE, parsePicksFile, type Lean, type PicksFile } from './picks.ts';
 import { parsePublishedPropCalibration, type PropCalibrationArtifact, type PropCalibrationCard, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
 import {
@@ -72,6 +73,8 @@ const playerFrame = document.querySelector<HTMLElement>('[data-region="player"]'
 const panelBody = document.querySelector<HTMLElement>('[data-panel-body]');
 const projectionsRoot = document.querySelector<HTMLElement>('#projections');
 const projectionsFrame = document.querySelector<HTMLElement>('[data-region="projections"]');
+const boardRoot = document.querySelector<HTMLElement>('#board');
+const boardFrame = document.querySelector<HTMLElement>('[data-region="board"]');
 
 let slate: Slate | null = null;
 let card: RateCard | null = null;
@@ -282,6 +285,11 @@ function unmountProjections(): void {
   projectionsRoot?.replaceChildren();
 }
 
+function unmountBoard(): void {
+  if (boardFrame) boardFrame.hidden = true;
+  boardRoot?.replaceChildren();
+}
+
 function unmountSheet(): void {
   panelAthlete = null;
   panelBody?.replaceChildren();
@@ -289,11 +297,18 @@ function unmountSheet(): void {
   if (playerFrame) playerFrame.hidden = true;
 }
 
+/** Score, empty, error, loading, and lineups stay on the Games tab. */
+function deskTabName(): 'games' | 'projections' | 'board' {
+  const mode = desk?.dataset.mode;
+  if (mode === 'projections') return 'projections';
+  if (mode === 'board') return 'board';
+  return 'games';
+}
+
 function markDeskTabs(): void {
-  const projections = desk?.dataset.mode === 'projections';
+  const selected = deskTabName();
   document.querySelectorAll<HTMLButtonElement>('[data-desk-tab]').forEach((button) => {
-    const on = (button.dataset.deskTab === 'projections') === projections;
-    button.setAttribute('aria-selected', on ? 'true' : 'false');
+    button.setAttribute('aria-selected', button.dataset.deskTab === selected ? 'true' : 'false');
   });
 }
 
@@ -594,6 +609,7 @@ function showProjections(): void {
     drawingProgress = 0;
   }
   unmountSheet();
+  unmountBoard();
   const games = gamesFrame();
   if (games) games.hidden = true;
   if (stageFrame) stageFrame.hidden = true;
@@ -629,8 +645,9 @@ function showSlate(): void {
   }
   lineupEvent = null;
   unmountProjections();
+  unmountBoard();
   try {
-    if (location.hash === '#projections') location.hash = '';
+    if (location.hash === '#projections' || location.hash === '#board') location.hash = '';
   } catch {
     // Hosts without a location object keep the surface change.
   }
@@ -656,12 +673,13 @@ function showScore(): void {
   if (playerFrame) playerFrame.hidden = true;
   desk?.classList.remove('panel-open');
   unmountProjections();
+  unmountBoard();
   if (desk) desk.dataset.mode = 'score';
   markDeskTabs();
 }
 
 function syncPanel(): void {
-  if (desk?.dataset.mode === 'projections') return;
+  if (desk?.dataset.mode === 'projections' || desk?.dataset.mode === 'board') return;
   if (!desk || !panelBody || !view) return;
   if (panelAthlete === null) {
     desk.classList.remove('panel-open');
@@ -959,6 +977,7 @@ function showLineups(eventId: string, focusSelector?: string): void {
   if (stageFrame) stageFrame.hidden = false;
   if (playerFrame) playerFrame.hidden = true;
   unmountProjections();
+  unmountBoard();
   if (desk) desk.dataset.mode = 'lineups';
   markDeskTabs();
   const focus = focusSelector ? boxRoot.querySelector<HTMLElement>(focusSelector) : null;
@@ -1488,12 +1507,16 @@ async function load(): Promise<void> {
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
     await hydrateSimulationCache(generationKey(), simulationCache);
-    if (readHash() === '#projections') showProjections();
+    const hash = readHash();
+    if (hash === '#projections') showProjections();
+    else if (hash === '#board') showBoard();
     else showSlate();
   } catch {
     bind();
+    unmountBoard();
     slateRoot.innerHTML = '<p class="state" role="alert">Slate could not be loaded or validated. <button data-retry>Retry</button></p>';
     if (desk) desk.dataset.mode = 'error';
+    markDeskTabs();
   }
 }
 
@@ -1536,8 +1559,64 @@ function readHash(): string {
   }
 }
 
-function navigateDesk(mode: 'games' | 'projections'): void {
-  const next = mode === 'projections' ? '#projections' : '';
+function boardQuotes(): OddsQuote[] {
+  const names = new Map<string, string>();
+  for (const game of card?.games ?? []) {
+    for (const player of game.players) {
+      if (player.name && !names.has(player.athlete_id)) names.set(player.athlete_id, player.name);
+    }
+  }
+  const labels = new Map<string, string>();
+  for (const game of slate?.games ?? []) {
+    const away = game.away.abbreviation.trim() || game.away.name.trim();
+    const home = game.home.abbreviation.trim() || game.home.name.trim();
+    if (away && home) labels.set(game.event_id, `${away} at ${home}`);
+  }
+  return [...bookLines.values()].map((line) => ({
+    event: labels.get(line.event_id) ?? line.event_id,
+    player: names.get(line.athlete_id) ?? line.athlete_id,
+    stat: line.market,
+    line: line.line,
+    period: 'full',
+    book: line.book,
+    over: line.over_odds,
+    under: line.under_odds,
+    capturedAt: line.priced_at,
+    status: 'active',
+  }));
+}
+
+function paintBoard(): void {
+  if (!boardRoot) return;
+  boardRoot.innerHTML = renderOddsBoard(buildOddsScreen(boardQuotes(), new Date()));
+}
+
+function showBoard(): void {
+  if (!slate || !card || !desk || !boardRoot) return;
+  const entering = desk.dataset.mode !== 'board';
+  if (entering) {
+    cancelRun?.();
+    drawingEvent = null;
+    drawingProgress = 0;
+  }
+  stopPrefetch();
+  unmountSheet();
+  const games = gamesFrame();
+  if (games) games.hidden = true;
+  if (stageFrame) stageFrame.hidden = true;
+  if (entering) {
+    lineupEvent = null;
+    boxRoot?.replaceChildren();
+  }
+  unmountProjections();
+  if (boardFrame) boardFrame.hidden = false;
+  desk.dataset.mode = 'board';
+  paintBoard();
+  markDeskTabs();
+}
+
+function navigateDesk(mode: 'games' | 'projections' | 'board'): void {
+  const next = mode === 'projections' ? '#projections' : mode === 'board' ? '#board' : '';
   try {
     if (location.hash !== next) {
       location.hash = next;
@@ -1547,12 +1626,14 @@ function navigateDesk(mode: 'games' | 'projections'): void {
     // Some hosts have no location object. The click still changes the surface.
   }
   if (mode === 'projections') showProjections();
+  else if (mode === 'board') showBoard();
   else showSlate();
 }
 
 document.querySelectorAll<HTMLButtonElement>('[data-desk-tab]').forEach((button) => {
   button.addEventListener('click', () => {
-    navigateDesk(button.dataset.deskTab === 'projections' ? 'projections' : 'games');
+    const tab = button.dataset.deskTab;
+    navigateDesk(tab === 'projections' ? 'projections' : tab === 'board' ? 'board' : 'games');
   });
 });
 
@@ -1561,7 +1642,9 @@ window.addEventListener('hashchange', () => {
     markDeskTabs();
     return;
   }
-  if (readHash() === '#projections') showProjections();
+  const hash = readHash();
+  if (hash === '#projections') showProjections();
+  else if (hash === '#board') showBoard();
   else showSlate();
 });
 
