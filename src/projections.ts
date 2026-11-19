@@ -26,7 +26,7 @@ import {
   type TeammateSplit,
 } from './projection-context.ts';
 import { bookKey, type BookLine } from './book-lines.ts';
-import { EXTREME_CLAIM, leanSide, rankLeans, tierFor, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
+import { EXTREME_CLAIM, leanSide, liveTierFor, rankLeans, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
 import { quoteCalibrationFor, type PropPanelCalibration } from './prop-calibration.ts';
 import { gradeProp, parseBookPrice, quoteProp, valueAt, type PlayerSample, type PropMarket } from './props.ts';
 import type { Simulation } from './simulate.ts';
@@ -1316,7 +1316,7 @@ function tierLabel(tier: Pick<TierRecord, 'lo' | 'hi'>): string {
 function leanRowHtml(lean: RankedLean, record: PickRecord | null | undefined): string {
   const side = lean.side === 'over' ? 'Over' : 'Under';
   const odds = lean.side === 'over' ? lean.over_odds : lean.under_odds;
-  const tier = tierFor(record, lean.side, lean.claimed);
+  const tier = liveTierFor(record, lean.side, lean.claimed);
   const measured = lean.claimed >= EXTREME_CLAIM
     ? `<span class="lean-measured edge-down">A gap of ${Math.round(EXTREME_CLAIM * 100)} points or more is too large to trust. It usually means the price or the card is missing news${tier && tier.n > 0 ? `: ${tier.n.toLocaleString('en-US')} graded gaps this size hit ${escapeHtml(percent(tier.wins / tier.n))}` : ''}</span>`
     : tier && tier.pooled > 0
@@ -1332,10 +1332,10 @@ function leanRowHtml(lean: RankedLean, record: PickRecord | null | undefined): s
 }
 
 function sideSummary(record: PickRecord | null | undefined, side: 'over' | 'under'): { n: number; edge: number } | null {
-  if (!record) return null;
+  if (!record?.tiersLive?.length) return null;
   let n = 0;
   let sum = 0;
-  for (const tier of record.tiers) {
+  for (const tier of record.tiersLive) {
     if (tier.side !== side || tier.lo === null) continue;
     n += tier.n;
     sum += tier.wins - tier.need * tier.n;
@@ -1367,12 +1367,14 @@ export function recordHtml(record: PickRecord | null | undefined): string {
   if (!record || !record.settled) {
     return '<details class="lean-record"><summary>Record</summary><p class="prop-note">No lean has been graded yet. Each one is logged before its game tips and graded from the final box score.</p></details>';
   }
-  const rows = record.tiers
-    .filter((tier) => tier.n > 0)
-    .map((tier) => {
-      const hit = tier.wins / tier.n;
-      const raw = hit - tier.need;
-      return `<tr>
+  const liveTiers = record.tiersLive;
+  const rows = liveTiers?.length
+    ? liveTiers
+      .filter((tier) => tier.n > 0)
+      .map((tier) => {
+        const hit = tier.wins / tier.n;
+        const raw = hit - tier.need;
+        return `<tr>
           <th scope="row">${tier.side === 'over' ? 'Over' : 'Under'}</th>
           <td>${escapeHtml(tierLabel(tier))}</td>
           <td>${tier.n.toLocaleString('en-US')}</td>
@@ -1382,8 +1384,15 @@ export function recordHtml(record: PickRecord | null | undefined): string {
           <td class="${tier.units > 0 ? 'edge-up' : tier.units < 0 ? 'edge-down' : ''}">${tier.units >= 0 ? '+' : ''}${tier.units.toFixed(1)}</td>
           <td class="${tier.lo !== null && tier.lo >= EXTREME_CLAIM ? '' : tier.edge > 0 ? 'edge-up' : 'edge-down'}">${tier.lo !== null && tier.lo >= EXTREME_CLAIM ? 'never listed' : escapeHtml(points(tier.edge))}</td>
         </tr>`;
-    })
-    .join('');
+      })
+      .join('')
+    : '';
+  const table = liveTiers?.length
+    ? `<div class="table-scroll"><table class="record-table">
+        <thead><tr><th>Side</th><th title="Model chance of the side minus the break-even of its price, in probability points">Claimed edge</th><th>Graded</th><th>Hit</th><th title="Average break-even of the posted prices">Needed</th><th title="Hit rate minus the break-even needed">Against price</th><th title="Profit at the posted prices, one unit a lean">Units</th><th title="Pooled so it never falls as the claim grows, then pulled toward the side's overall result">Measured</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>`
+    : '<p class="prop-note">Nothing is listed.</p>';
   const liveCount = record.live.over.n + record.live.under.n;
   const replayCount = record.replayed.over.n + record.replayed.under.n;
   const span = (totals: PickRecord['live']) => (totals.from && totals.through ? ` (${shortDate(totals.from)} to ${shortDate(totals.through)})` : '');
@@ -1403,11 +1412,8 @@ export function recordHtml(record: PickRecord | null | undefined): string {
     : '';
   return `<details class="lean-record">
       <summary>Record: ${record.settled.toLocaleString('en-US')} graded leans</summary>
-      <p class="prop-note">Every posted over/under line is logged with the model's side before the game tips, then graded from the final box score at the price it was logged with. ${escapeHtml(sources)}. A player who sits voids the line (${record.voids.toLocaleString('en-US')} so far).</p>
-      <div class="table-scroll"><table class="record-table">
-        <thead><tr><th>Side</th><th title="Model chance of the side minus the break-even of its price, in probability points">Claimed edge</th><th>Graded</th><th>Hit</th><th title="Average break-even of the posted prices">Needed</th><th title="Hit rate minus the break-even needed">Against price</th><th title="Profit at the posted prices, one unit a lean">Units</th><th title="Pooled so it never falls as the claim grows, then pulled toward the side's overall result">Measured</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>
+      <p class="prop-note">Every posted over/under line is logged with the model's side before the game tips, then graded from the final box score at the price it was logged with. ${escapeHtml(sources)}. The table is the live record the list uses, and replayed days stay in the totals above it. A player who sits voids the line (${record.voids.toLocaleString('en-US')} so far).</p>
+      ${table}
       ${moves}
       ${days}
     </details>`;
@@ -1468,7 +1474,7 @@ export function measuredNoteHtml(
   if (form.opposite.trim() !== '' && !opposite) return '';
   const quote = quoteProp(sample, form.market, form.side, line, price, opposite, quoteCalibrationFor(calibration, form.market, form.side));
   if (!quote || quote.edge === null) return '';
-  const tier = tierFor(record, form.side, quote.edge);
+  const tier = liveTierFor(record, form.side, quote.edge);
   if (!tier || tier.pooled <= 0 || quote.edge >= EXTREME_CLAIM) return '';
   const side = form.side === 'over' ? 'Over' : 'Under';
   const claim = tier.lo === null ? `${side} sides the posted price already beats` : `${side} claims of ${escapeHtml(tierLabel(tier))} points against the price`;

@@ -224,7 +224,7 @@ function file(date: string, source: LedgerFile['source'], rows: LedgerRow[]): Le
   return { schema_version: 1, date, source, rows };
 }
 
-test('the record grades each lean at its opening price and never lets a stronger claim score worse than a weaker one', () => {
+test('the latest comparison is what grades a lean, and a stronger claim never scores worse than a weaker one', () => {
   // An under lean (model 30% over) at -110 that stayed under wins; a push and a sit-out are not graded.
   const win = gradeRow(row('1', { p: 0.3, actual: 8 }), '2026-11-02', true)!;
   assert.deepEqual({ side: win.side, win: win.win, odds: win.odds }, { side: 'under', win: true, odds: -110 });
@@ -278,13 +278,18 @@ test('the record grades each lean at its opening price and never lets a stronger
   assert.ok(under.edge > 0.05 && over.edge < -0.05);
   assert.equal(under.units, Number((152 * (100 / 110) - 100).toFixed(2)));
   const lean = (side: 'over' | 'under', claimed: number, play = 0.95): Lean => ({ event_id: 'e', athlete_id: `${side}${claimed}`, name: `${side} ${claimed}`, matchup: 'A @ B', tip: '2026-11-03T00:00:00Z', market: 'pts', line: 10.5, over_odds: -110, under_odds: -110, book: 'DraftKings', priced_at: '2026-11-02T20:00:00Z', side, model: 0.7, need: 0.524, claimed, projection: 12, minutes: 30, play });
-  assert.equal(listed(lean('under', 0.17), record), true);
+  // Two live unders sit in this bucket. The pooled 252 is not what the list reads.
+  assert.equal(listed(lean('under', 0.17), record), false);
   assert.equal(listed(lean('over', 0.17), record), false);
   // A player who probably sits is not listed even on a side that has been winning.
   assert.equal(listed(lean('under', 0.17, 0.3), record), false);
   // With no record nothing is listed: a model percentage alone is not a reason.
   assert.equal(listed(lean('under', 0.17), null), false);
-  const board = rankLeans([lean('under', 0.17), lean('under', 0.19), lean('over', 0.3), lean('under', 0.01), lean('under', 0.4)], record);
+  const enough = many('live', 220, { p: 0.3, actual: 8 });
+  const liveRecord = buildRecord([file('2026-11-03', 'live', enough)]);
+  assert.equal(listed(lean('under', 0.17), liveRecord), true);
+  assert.equal(listed(lean('under', 0.17), buildRecord([file('2026-11-03', 'replay', enough)])), false);
+  const board = rankLeans([lean('under', 0.17), lean('under', 0.19), lean('over', 0.3), lean('under', 0.01), lean('under', 0.4)], liveRecord);
   assert.deepEqual(board.listed.under.map((item) => item.claimed), [0.19, 0.17]);
   assert.deepEqual(board.listed.over, []);
   assert.deepEqual(board.unlisted.over.map((item) => item.claimed), [0.3]);
@@ -294,7 +299,7 @@ test('the record grades each lean at its opening price and never lets a stronger
   assert.deepEqual(board.players, { over: 0, under: 2 });
   // One row a player: his strongest lean, with a count of his other lines that lean the same way.
   const samePlayer = (claimed: number, market: Lean['market']): Lean => ({ ...lean('under', claimed), athlete_id: 'one', name: 'One Player', market });
-  const grouped = rankLeans([samePlayer(0.12, 'pts'), samePlayer(0.18, 'pra'), samePlayer(0.07, 'reb'), lean('under', 0.1)], record);
+  const grouped = rankLeans([samePlayer(0.12, 'pts'), samePlayer(0.18, 'pra'), samePlayer(0.07, 'reb'), lean('under', 0.1)], liveRecord);
   assert.deepEqual(grouped.listed.under.map((item) => [item.name, item.market, item.also]), [['One Player', 'pra', 2], ['under 0.1', 'pts', 0]]);
   assert.deepEqual([grouped.counts.under, grouped.players.under], [4, 2]);
 
@@ -414,20 +419,26 @@ test('a large model gap is not a lean when graded gaps of that side and size hav
   assert.match(decideVerdict(thin, { ...context, measured: { edge: 0.03, graded: 900 } }, 'pts')!.text, /do not clear this line often enough/);
 
   const many = (prefix: string, count: number, spec: Parameters<typeof row>[1]) => Array.from({ length: count }, (_, i) => row(`${prefix}${i}`, spec));
-  const record = buildRecord([file('2026-10-30', 'replay', [...many('o-w', 100, { p: 0.7, actual: 14 }), ...many('o-l', 150, { p: 0.7, actual: 8 }), ...many('u-w', 150, { p: 0.3, actual: 8 }), ...many('u-l', 100, { p: 0.3, actual: 14 })])]);
+  const settled = [...many('o-w', 100, { p: 0.7, actual: 14 }), ...many('o-l', 150, { p: 0.7, actual: 8 }), ...many('u-w', 150, { p: 0.3, actual: 8 }), ...many('u-l', 100, { p: 0.3, actual: 14 })];
+  const record = buildRecord([file('2026-10-30', 'live', settled)]);
   const score = { playerDraws: new Map([['p', draws]]) } as unknown as Simulation;
   const player = { minutes_weight: 1, shooting_games: 20, thin_sample: false };
-  const over = renderPropResults(score, 'p', { market: 'pts', side: 'over', line: '17.5', style: 'american', odds: '-110', opposite: '' }, player, record);
+  const form = { market: 'pts' as const, side: 'over' as const, line: '17.5', style: 'american' as const, odds: '-110', opposite: '' };
+  const over = renderPropResults(score, 'p', form, player, record);
   assert.match(over, /data-verdict="pass"/);
   assert.match(over, /points short of the posted price across 250 graded leans/);
+  // The same rows rebuilt as replay do not attach a measured veto.
+  const replayOver = renderPropResults(score, 'p', form, player, buildRecord([file('2026-10-30', 'replay', settled)]));
+  assert.match(replayOver, /data-verdict="lean"/);
+  assert.doesNotMatch(replayOver, /points short of the posted price/);
   // The same simulation on the side that has been winning keeps its lean, and no record means no veto.
   const low = { playerDraws: new Map([['p', sample(Array.from({ length: 2000 }, (_, i) => (i % 10 < 7 ? 10 : 20)))]]) } as unknown as Simulation;
   const under = renderPropResults(low, 'p', { market: 'pts', side: 'under', line: '17.5', style: 'american', odds: '-110', opposite: '' }, player, record);
   assert.match(under, /data-verdict="lean"/);
-  assert.match(renderPropResults(score, 'p', { market: 'pts', side: 'over', line: '17.5', style: 'american', odds: '-110', opposite: '' }, player), /data-verdict="lean"/);
+  assert.match(renderPropResults(score, 'p', form, player), /data-verdict="lean"/);
 });
 
-test('buildRecord without a map counts every settled lean as uncalibrated and lists from pooled tiers', () => {
+test('buildRecord without a map counts every settled lean as uncalibrated and lists from the live tier', () => {
   const files = readdirSync('data/pick-ledger')
     .filter((name) => name.endsWith('.json'))
     .sort()
@@ -455,16 +466,22 @@ test('buildRecord without a map counts every settled lean as uncalibrated and li
     minutes: 30,
     play: 0.95,
   };
-  const open = {
+  const pooledOnly = {
     ...record,
     tiers: record.tiers.map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, pooled: MIN_TIER_LEANS, edge: MIN_MEASURED_EDGE } : tier)),
     tiersLive: record.tiersLive.map((tier) => ({ ...tier, pooled: 0, edge: -1 })),
   };
-  assert.equal(listed(lean, open), true);
-  assert.equal(listed({ ...lean, play: MIN_PLAY_SHARE - 0.01 }, open), false);
+  assert.equal(listed(lean, pooledOnly), false);
+  const liveOnly = {
+    ...record,
+    tiers: record.tiers.map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, pooled: 0, edge: -1 } : tier)),
+    tiersLive: record.tiersLive.map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, pooled: MIN_TIER_LEANS, edge: MIN_MEASURED_EDGE } : tier)),
+  };
+  assert.equal(listed(lean, liveOnly), true);
+  assert.equal(listed({ ...lean, play: MIN_PLAY_SHARE - 0.01 }, liveOnly), false);
   const shut = {
-    ...open,
-    tiers: open.tiers.map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, edge: MIN_MEASURED_EDGE - 0.001 } : tier)),
+    ...liveOnly,
+    tiersLive: liveOnly.tiersLive.map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, edge: MIN_MEASURED_EDGE - 0.001 } : tier)),
   };
   assert.equal(listed(lean, shut), false);
 });

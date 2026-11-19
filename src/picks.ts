@@ -90,7 +90,7 @@ export interface PickRecord {
   live: SideTotals;
   replayed: SideTotals;
   tiers: TierRecord[];
-  /** Same buckets as `tiers`, measured on live leans only. Listing still reads `tiers`. */
+  /** Same buckets as `tiers`, measured on live leans only. Listing reads this table. */
   tiersLive: TierRecord[];
   /** Graded leans scored from the raw ledger probability. */
   gradedUncalibrated: number;
@@ -475,9 +475,17 @@ export function tierFor(record: PickRecord | null | undefined, side: LeanSide, c
   return record.tiers.find((tier) => tier.side === side && tier.lo === lo) ?? null;
 }
 
-/** A lean is listed only while graded leans of its side and strength have been beating the posted price. */
+/** The same bucket as `tierFor`, read from `tiersLive`. A missing or empty live table is no record. */
+export function liveTierFor(record: PickRecord | null | undefined, side: LeanSide, claimed: number): TierRecord | null {
+  if (!record?.tiersLive?.length) return null;
+  const index = bucketOf(claimed);
+  const lo = index < 0 ? null : LEAN_BUCKETS[index];
+  return record.tiersLive.find((tier) => tier.side === side && tier.lo === lo) ?? null;
+}
+
+/** A lean is listed only while live graded leans of its side and strength have been beating the posted price. */
 export function listed(lean: Lean, record: PickRecord | null | undefined): boolean {
-  const tier = tierFor(record, lean.side, lean.claimed);
+  const tier = liveTierFor(record, lean.side, lean.claimed);
   return Boolean(tier && lean.claimed >= 0 && lean.claimed < EXTREME_CLAIM && lean.play >= MIN_PLAY_SHARE && tier.pooled >= MIN_TIER_LEANS && tier.edge >= MIN_MEASURED_EDGE);
 }
 
@@ -509,7 +517,7 @@ function strongestEach(sorted: readonly Lean[]): RankedLean[] {
 
 export function rankLeans(leans: readonly Lean[], record: PickRecord | null | undefined, limit = LISTED_PER_SIDE): LeanBoard {
   const board: LeanBoard = { listed: { over: [], under: [] }, unlisted: { over: [], under: [] }, counts: { over: 0, under: 0 }, players: { over: 0, under: 0 } };
-  const measured = (lean: Lean) => tierFor(record, lean.side, lean.claimed)?.edge ?? -1;
+  const measured = (lean: Lean) => liveTierFor(record, lean.side, lean.claimed)?.edge ?? -1;
   const order = (a: Lean, b: Lean) => measured(b) - measured(a) || b.claimed - a.claimed || a.name.localeCompare(b.name) || a.market.localeCompare(b.market);
   for (const side of ['over', 'under'] as const) {
     const mine = leans.filter((lean) => lean.side === side && lean.claimed >= LEAN_BUCKETS[1] && lean.play >= MIN_PLAY_SHARE);

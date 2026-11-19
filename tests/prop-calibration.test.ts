@@ -107,11 +107,9 @@ function sampleLean(): Lean {
   };
 }
 
-function withUnderTier(record: PickRecord, patch: { pooled?: number; edge?: number }): PickRecord {
-  return {
-    ...record,
-    tiers: record.tiers.map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, ...patch } : tier)),
-  };
+function withUnderTier(record: PickRecord, patch: { pooled?: number; edge?: number }, table: 'tiers' | 'tiersLive' = 'tiers'): PickRecord {
+  const next = record[table].map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, ...patch } : tier));
+  return table === 'tiersLive' ? { ...record, tiersLive: next } : { ...record, tiers: next };
 }
 
 test('Platt recovers a slope near one third on a synthetic overconfident sample', () => {
@@ -335,16 +333,24 @@ test('each fitted map is non-decreasing, and isotonic collapses at least two inp
   assert.ok(new Set(outputs.map((value) => value.toFixed(6))).size < outputs.length);
 });
 
-test('listing still reads pooled tiers while live pools are measured beside them', () => {
+test('listing reads the live tier, and a passing pooled tier does not list on its own', () => {
   const record = buildRecord(loadLedgers());
   assert.equal(record.gradedUncalibrated, record.settled);
   assert.ok(record.tiersLive.length > 0);
   const lean = sampleLean();
-  const open = withUnderTier(record, { pooled: MIN_TIER_LEANS, edge: MIN_MEASURED_EDGE });
-  open.tiersLive = open.tiersLive.map((tier) => ({ ...tier, pooled: 0, edge: -1 }));
-  assert.equal(listed(lean, open), true);
-  assert.equal(listed(lean, withUnderTier(open, { edge: MIN_MEASURED_EDGE - 0.001 })), false);
-  assert.equal(listed({ ...lean, play: MIN_PLAY_SHARE - 0.01 }, open), false);
+  const pooledOnly = {
+    ...withUnderTier(record, { pooled: MIN_TIER_LEANS, edge: MIN_MEASURED_EDGE }),
+    tiersLive: record.tiersLive.map((tier) => ({ ...tier, pooled: 0, edge: -1 })),
+  };
+  assert.equal(listed(lean, pooledOnly), false);
+  const liveOnly = withUnderTier(
+    { ...record, tiers: record.tiers.map((tier) => (tier.side === 'under' && tier.lo === 0.15 ? { ...tier, pooled: 0, edge: -1 } : tier)) },
+    { pooled: MIN_TIER_LEANS, edge: MIN_MEASURED_EDGE },
+    'tiersLive',
+  );
+  assert.equal(listed(lean, liveOnly), true);
+  assert.equal(listed(lean, withUnderTier(liveOnly, { edge: MIN_MEASURED_EDGE - 0.001 }, 'tiersLive')), false);
+  assert.equal(listed({ ...lean, play: MIN_PLAY_SHARE - 0.01 }, liveOnly), false);
 });
 
 test('the release gate uses the 10-bin ECE fields, and the Nov 15 raw ECE is above 0.03', () => {
