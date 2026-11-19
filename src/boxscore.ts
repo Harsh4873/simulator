@@ -16,7 +16,7 @@ import {
   type PropMarket,
   type PropSide,
 } from './props.ts';
-import { MIN_TIER_LEANS, tierFor, type PickRecord } from './picks.ts';
+import { liveTierFor, MIN_TIER_LEANS, type PickRecord } from './picks.ts';
 import type { MarginForecast, SimulatedPlayer, SimulatedTeam, Simulation } from './simulate.ts';
 import type { ColumnKey, RatePlayer, SlateGame, TeamSide } from './types.ts';
 
@@ -799,7 +799,7 @@ export function renderPropResults(
   if (!quote || quote.breakEven === null || quote.expectedReturn === null) {
     return propPrompt(priceError(form.odds, form.style));
   }
-  const tier = quote.edge === null ? null : tierFor(record, form.side, quote.edge);
+  const tier = quote.edge === null ? null : liveTierFor(record, form.side, quote.edge);
   const measured = tier && tier.pooled >= MIN_TIER_LEANS ? { measured: { edge: tier.edge, graded: tier.pooled } } : {};
   const policy = propPolicyFromArtifacts(calibration?.artifacts, calibration?.modelVersion, calibration?.cutoff ?? calibration?.tipDate);
   const verdict = decideVerdict(quote, { ...propContextFromPlayer(player), ...measured, ...(quoteCalibration ? { propCalibration: quoteCalibration } : {}) }, form.market, policy);

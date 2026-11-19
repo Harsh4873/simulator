@@ -737,7 +737,7 @@ test('DOM interactions on #projections drive search, markets, history splits, on
       },
     ],
     record: buildRecord([
-      recordFile('2026-10-30', [
+      recordFile('2026-10-30', 'live', [
         { p: 0.3, over: 100, under: -120, line: 10.5, actual: 8, count: 180 },
         { p: 0.3, over: 100, under: -120, line: 10.5, actual: 13, count: 120 },
       ]),
@@ -851,7 +851,7 @@ test('DOM interactions on #projections drive search, markets, history splits, on
 });
 
 /** Graded ledger rows that put one side's leans above or below the price. */
-function recordFile(date: string, rows: { p: number; over: number; under: number; line: number; actual: number; count: number }[]): LedgerFile {
+function recordFile(date: string, source: LedgerFile['source'], rows: { p: number; over: number; under: number; line: number; actual: number; count: number }[]): LedgerFile {
   const out: LedgerRow[] = [];
   let id = 0;
   for (const spec of rows) {
@@ -870,7 +870,7 @@ function recordFile(date: string, rows: { p: number; over: number; under: number
       });
     }
   }
-  return { schema_version: 1, date, source: 'replay', rows: out };
+  return { schema_version: 1, date, source, rows: out };
 }
 
 test('board and lean accuracy fixes: posted lines, no self-placed hooks, measured leans, cameo transfer cap, orb_share, and context healthy calibration', () => {
@@ -960,14 +960,13 @@ test('board and lean accuracy fixes: posted lines, no self-placed hooks, measure
   assert.equal(underLean.side, 'under');
   assert.ok(Math.abs(overLean.claimed - (overLean.model - 125 / 225)) < 1e-9);
   // Unders that claimed 15 points won 60% at -120. Overs that claimed 18 won 40% at -110.
-  const record = buildRecord([
-    recordFile('2026-10-30', [
-      { p: 0.3, over: 100, under: -120, line: 10.5, actual: 8, count: 180 },
-      { p: 0.3, over: 100, under: -120, line: 10.5, actual: 13, count: 120 },
-      { p: 0.7, over: -110, under: -110, line: 10.5, actual: 13, count: 120 },
-      { p: 0.7, over: -110, under: -110, line: 10.5, actual: 8, count: 180 },
-    ]),
-  ]);
+  const graded = [
+    { p: 0.3, over: 100, under: -120, line: 10.5, actual: 8, count: 180 },
+    { p: 0.3, over: 100, under: -120, line: 10.5, actual: 13, count: 120 },
+    { p: 0.7, over: -110, under: -110, line: 10.5, actual: 13, count: 120 },
+    { p: 0.7, over: -110, under: -110, line: 10.5, actual: 8, count: 180 },
+  ];
+  const record = buildRecord([recordFile('2026-10-30', 'live', graded)]);
   assert.equal(record.settled, 600);
   const panel = leanPanelInner({ leans, waiting: 0, record, book: 'DraftKings', open: true, posted: true });
   const [underCol, overCol] = panel.split('<h3>Over</h3>');
@@ -976,8 +975,12 @@ test('board and lean accuracy fixes: posted lines, no self-placed hooks, measure
   assert.equal(overCol.split('<details')[0].includes(overLean.name), false);
   assert.match(panel, /Strongest model claims that are not listed/);
   assert.match(panel, /Record: 600 graded leans/);
-  assert.match(panel, /rebuilt from archived pre-tip inputs with the current model/);
-  assert.match(panel, /0 were logged live before the tip/);
+  assert.match(panel, /600 were logged live before the tip/);
+  const replayed = buildRecord([recordFile('2026-10-30', 'replay', graded)]);
+  const replayPanel = leanPanelInner({ leans, waiting: 0, record: replayed, book: 'DraftKings', open: true, posted: true });
+  assert.equal(replayPanel.split('<h3>Over</h3>')[0]?.includes(underLean.name), false);
+  assert.match(replayPanel, /rebuilt from archived pre-tip inputs with the current model/);
+  assert.match(replayPanel, /0 were logged live before the tip/);
   if (underLean.claimed >= 0.03) {
     assert.match(underCol, new RegExp(`data-projection-player="${underLean.athlete_id}"[^>]*data-lean-market="pts" data-lean-side="under"`));
     assert.match(underCol, /Leans this strong: \+\d+\.\d pp against the price, 300 graded/);
