@@ -266,22 +266,56 @@ function requireRows(rows: readonly PropCalibrationRow[], label: string): void {
   if (rows.length < MIN_FIT_ROWS) throw new Error(`${label} needs at least two rows`);
 }
 
-export function fitPlatt(rows: readonly PropCalibrationRow[]): { a: number; b: number } {
-  requireRows(rows, 'Platt scaling');
-  const penalty = choosePenalty(rows, plattFeatures);
-  const [a, b] = fitLogistic(design(ordered(rows), plattFeatures), penalty);
-  return { a, b };
+const interceptOnly = () => [1];
+const lnP = (p: number) => Math.log(Math.max(LOGIT_EPS, p));
+const negLn1m = (p: number) => -Math.log(Math.max(LOGIT_EPS, 1 - p));
+
+function fitCoefficients(rows: readonly PropCalibrationRow[], features: (p: number) => number[], penalty: number): number[] {
+  return fitLogistic(design(ordered(rows), features), penalty);
 }
 
-function betaMember(rows: readonly PropCalibrationRow[]): { a: number; b: number; c: number; fallback: boolean } {
+/** A negative slope would reverse the ranking. Clamp it at 0 and keep the intercept. */
+function plattMember(rows: readonly PropCalibrationRow[]): { a: number; b: number; clamped: boolean } {
+  requireRows(rows, 'Platt scaling');
+  const penalty = choosePenalty(rows, plattFeatures);
+  const [a, b] = fitCoefficients(rows, plattFeatures, penalty);
+  if (b >= 0) return { a, b, clamped: false };
+  const [intercept] = fitCoefficients(rows, interceptOnly, penalty);
+  return { a: intercept, b: 0, clamped: true };
+}
+
+export function fitPlatt(rows: readonly PropCalibrationRow[]): { a: number; b: number } {
+  const member = plattMember(rows);
+  return { a: member.a, b: member.b };
+}
+
+/**
+ * Beta is monotone only for a, b >= 0. A negative coefficient is clamped at 0 and the rest are refit.
+ * The result is not a copy of a negative Platt slope.
+ */
+function betaMember(rows: readonly PropCalibrationRow[]): { a: number; b: number; c: number; clamped: boolean } {
   requireRows(rows, 'Beta calibration');
   const penalty = choosePenalty(rows, betaFeatures);
-  const [c, a, b] = fitLogistic(design(ordered(rows), betaFeatures), penalty);
-  if (a < 0 || b < 0) {
-    const platt = fitPlatt(rows);
-    return { a: platt.b, b: platt.b, c: platt.a, fallback: true };
+  const [c, a, b] = fitCoefficients(rows, betaFeatures, penalty);
+  if (a >= 0 && b >= 0) return { a, b, c, clamped: false };
+  if (a < 0 && b < 0) {
+    const [intercept] = fitCoefficients(rows, interceptOnly, penalty);
+    return { a: 0, b: 0, c: intercept, clamped: true };
   }
-  return { a, b, c, fallback: false };
+  if (a < 0) {
+    const [nextC, nextB] = fitCoefficients(rows, (p) => [1, negLn1m(p)], penalty);
+    if (nextB < 0) {
+      const [intercept] = fitCoefficients(rows, interceptOnly, penalty);
+      return { a: 0, b: 0, c: intercept, clamped: true };
+    }
+    return { a: 0, b: nextB, c: nextC, clamped: true };
+  }
+  const [nextC, nextA] = fitCoefficients(rows, (p) => [1, lnP(p)], penalty);
+  if (nextA < 0) {
+    const [intercept] = fitCoefficients(rows, interceptOnly, penalty);
+    return { a: 0, b: 0, c: intercept, clamped: true };
+  }
+  return { a: nextA, b: 0, c: nextC, clamped: true };
 }
 
 export function fitBeta(rows: readonly PropCalibrationRow[]): { a: number; b: number; c: number } {
@@ -600,6 +634,23 @@ interface ScoredMethod {
   loss: number;
 }
 
+function probabilityGrid(): number[] {
+  const values: number[] = [];
+  for (let p = 0.01; p <= 0.991; p += 0.04) values.push(Number(p.toFixed(2)));
+  return values;
+}
+
+/** True when the shipped map falls as p rises. A flat map is allowed. */
+function mapDecreases(params: PropCalibrationParams): boolean {
+  let previous = -1;
+  for (const p of probabilityGrid()) {
+    const value = applyCalibration(params, p);
+    if (value + 1e-9 < previous) return true;
+    previous = value;
+  }
+  return false;
+}
+
 export function selectMethod(
   fit: readonly PropCalibrationRow[],
   validation: readonly PropCalibrationRow[],
@@ -608,40 +659,40 @@ export function selectMethod(
   if (!fit.length || !validation.length) throw new Error('Method selection needs a fit block and a later validation block');
   const support = supportOf(fit);
   const beta = betaMember(fit);
-  const platt = fitPlatt(fit);
+  const platt = plattMember(fit);
   const temperature = fitTemperature(fit);
-  const scored: ScoredMethod[] = [
-    {
-      method: 'temperature',
-      params: { method: 'temperature', temperature, support },
-      loss: 0,
-    },
-    {
-      method: 'platt',
-      params: { method: 'platt', platt, support },
-      loss: 0,
-    },
-  ];
-  let reason: string | null = null;
-  if (beta.fallback) {
-    reason = 'Unconstrained beta had a negative coefficient and was replaced by the Platt member.';
-  } else {
-    scored.push({ method: 'beta', params: { method: 'beta', beta: { a: beta.a, b: beta.b, c: beta.c }, support }, loss: 0 });
-  }
+  const notes: string[] = [];
+  if (beta.clamped) notes.push('Unconstrained beta had a negative coefficient and was clamped at 0 before the remaining parameters were refit.');
+  if (platt.clamped) notes.push('Platt slope was negative and was clamped at 0.');
+  const scored: ScoredMethod[] = [];
+  if (temperature > 0) scored.push({ method: 'temperature', params: { method: 'temperature', temperature, support }, loss: 0 });
+  scored.push({ method: 'platt', params: { method: 'platt', platt: { a: platt.a, b: platt.b }, support }, loss: 0 });
+  scored.push({ method: 'beta', params: { method: 'beta', beta: { a: beta.a, b: beta.b, c: beta.c }, support }, loss: 0 });
   const knots = fit.length >= PROP_ISOTONIC_BLOCK * PROP_ISOTONIC_MIN_BLOCKS ? fitIsotonic(fit) : null;
   if (knots) scored.push({ method: 'isotonic', params: { method: 'isotonic', isotonic: knots, support }, loss: 0 });
   for (const candidate of scored) {
     candidate.loss = mean(validation.map((row) => logLoss(applyCalibration(candidate.params, row.p), row.y)));
   }
-  const isotonic = scored.find((candidate) => candidate.method === 'isotonic');
-  const rest = scored.filter((candidate) => candidate.method !== 'isotonic');
+  const monotone = scored.filter((candidate) => !mapDecreases(candidate.params));
+  const isotonic = monotone.find((candidate) => candidate.method === 'isotonic');
+  const rest = monotone.filter((candidate) => candidate.method !== 'isotonic');
+  if (!rest.length) {
+    const [intercept] = fitCoefficients(fit, interceptOnly, LOGISTIC_PENALTIES[0]);
+    const params: PropCalibrationParams = { method: 'platt', platt: { a: intercept, b: 0 }, support };
+    return {
+      method: 'platt',
+      params,
+      metrics: calibrationMetrics(validation, (row) => applyCalibration(params, row.p)),
+      reason: 'Slopes were clamped at 0.',
+    };
+  }
   const best = Math.min(...rest.map((candidate) => candidate.loss));
   const tied = rest.filter((candidate) => candidate.loss <= best + METHOD_TIE);
   tied.sort((a, b) => METHOD_PRIORITY.indexOf(a.method) - METHOD_PRIORITY.indexOf(b.method));
   let chosen = tied[0];
   if (isotonic && previousMethod === 'isotonic' && isotonic.loss < best - METHOD_TIE) chosen = isotonic;
   const metrics = calibrationMetrics(validation, (row) => applyCalibration(chosen.params, row.p));
-  return { method: chosen.method, params: chosen.params, metrics, reason };
+  return { method: chosen.method, params: chosen.params, metrics, reason: notes.length ? notes.join(' ') : null };
 }
 
 export function meanBiasCorrection(

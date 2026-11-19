@@ -118,7 +118,7 @@ test('temperature 3.9 moves 0.74 to about 0.567 and 0.64 to about 0.537', () => 
   assert.ok(Math.abs(applyCalibration(params, 0.64) - 0.537) < 0.001);
 });
 
-test('the beta formula is applied as written, and a negative coefficient falls back to Platt', () => {
+test('the beta formula is applied as written, and a negative coefficient is clamped above zero', () => {
   // Formula check of the unconstrained map. Not a fit of the live ledger.
   const formula: PropCalibrationParams = { method: 'beta', beta: { a: -0.106, b: 0.627, c: -0.476 } };
   const direct = (p: number) => {
@@ -136,11 +136,24 @@ test('the beta formula is applied as written, and a negative coefficient falls b
     return { p, y: rng() < truth ? 1 : 0 };
   });
   const beta = fitBeta(reversed);
-  const platt = fitPlatt(reversed);
-  assert.ok(Math.abs(beta.a - platt.b) < 1e-8 && Math.abs(beta.b - platt.b) < 1e-8 && Math.abs(beta.c - platt.a) < 1e-8);
+  assert.ok(beta.a >= 0 && beta.b >= 0, `a ${beta.a} b ${beta.b}`);
+  const fitted: PropCalibrationParams = { method: 'beta', beta };
+  assert.ok(applyCalibration(fitted, 0.2) <= applyCalibration(fitted, 0.8));
+  let previous = -1;
+  for (const p of grid()) {
+    const value = applyCalibration(fitted, p);
+    assert.ok(value + 1e-12 >= previous, `beta ${p} -> ${value} after ${previous}`);
+    previous = value;
+  }
   const selected = selectMethod(reversed.slice(0, 1000), reversed.slice(1000));
-  assert.equal(selected.method, 'platt');
-  assert.match(selected.reason ?? '', /Platt/);
+  assert.match(selected.reason ?? '', /clamp/i);
+  assert.ok(applyCalibration(selected.params, 0.2) <= applyCalibration(selected.params, 0.8));
+  previous = -1;
+  for (const p of grid()) {
+    const value = applyCalibration(selected.params, p);
+    assert.ok(value + 1e-12 >= previous, `${selected.method} ${p} -> ${value} after ${previous}`);
+    previous = value;
+  }
 });
 
 test('Nov 15 through Nov 18 have the settled counts on disk', () => {
