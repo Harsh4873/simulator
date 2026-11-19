@@ -1,0 +1,193 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { parseHTML } from 'linkedom';
+import { build } from 'esbuild';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
+import type { RateCard, Slate } from '../src/types.ts';
+
+const KNOWN_DATA = [
+  '/slate.json',
+  '/rate-card.json',
+  '/manifest.json',
+  '/health.json',
+  '/picks.json',
+  '/prop-calibration.json',
+  '/sims/index.json',
+];
+
+test('the sport switch keeps the NBA slate and parks the other two', async () => {
+  const timer = globalThis.setInterval;
+  const boots: string[] = [];
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 20));
+  async function boot(seed: string | null) {
+    const dir = mkdtempSync(join(tmpdir(), 'sim-sport-'));
+    boots.push(dir);
+    const { window, document } = parseHTML(readFileSync('index.html', 'utf8'));
+    const globals = globalThis as unknown as Record<string, unknown>;
+    for (const key of ['window', 'document', 'HTMLElement', 'HTMLButtonElement', 'HTMLInputElement', 'HTMLSelectElement', 'HTMLImageElement', 'HTMLDetailsElement', 'Element', 'Event']) {
+      globals[key] = (window as unknown as Record<string, unknown>)[key];
+    }
+    Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => ({ matches: false }) });
+    window.scrollTo = () => {};
+    globals.CSS = { escape: (value: string) => value };
+    const session = new Map<string, string>();
+    if (seed) session.set('simulator.sport', seed);
+    const localKeys: string[] = [];
+    globals.sessionStorage = {
+      getItem: (key: string) => session.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        session.set(key, value);
+      },
+    };
+    globals.localStorage = {
+      getItem: () => null,
+      setItem: (key: string) => {
+        localKeys.push(key);
+      },
+    };
+    const card = JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/rate-card.json', 'utf8')) as RateCard;
+    const slate = JSON.parse(readFileSync('tests/fixtures/generation-2026-11-02/slate.json', 'utf8')) as Slate;
+    const now = new Date();
+    card.generated_at = now.toISOString();
+    slate.generated_at = card.generated_at;
+    const chicago = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
+    card.date = chicago;
+    slate.date = chicago;
+    slate.games.forEach((game) => {
+      game.date = chicago;
+      game.status_state = 'pre';
+      game.completed = false;
+      game.start_time = new Date(now.getTime() + 3600000).toISOString();
+    });
+    delete card.model_hash;
+    const fetched: string[] = [];
+    globals.fetch = async (url: string) => {
+      fetched.push(String(url));
+      const ok = url.endsWith('/slate.json') || url.endsWith('/rate-card.json');
+      const body = url.endsWith('/slate.json') ? JSON.stringify(slate) : url.endsWith('/rate-card.json') ? JSON.stringify(card) : '';
+      return new Response(body, { status: ok ? 200 : 404 });
+    };
+    globals.setInterval = () => 0;
+    await build({ entryPoints: ['src/main.ts'], bundle: true, format: 'esm', outfile: join(dir, 'app.mjs'), loader: { '.css': 'empty' }, logLevel: 'silent' });
+    await import(pathToFileURL(join(dir, 'app.mjs')).href);
+    await flush();
+    return { document, window, session, localKeys, fetched };
+  }
+  const key = (document: ReturnType<typeof parseHTML>['document'], window: ReturnType<typeof parseHTML>['window'], selector: string, name: string) => {
+    const target = document.querySelector(selector);
+    assert.ok(target, selector);
+    const event = new window.Event('keydown', { bubbles: true });
+    Object.assign(event, { key: name });
+    target.dispatchEvent(event);
+  };
+  const checked = (document: ReturnType<typeof parseHTML>['document']) =>
+    document.querySelector('[data-sport][aria-checked="true"]')?.getAttribute('data-sport') ?? '';
+  const tab = (document: ReturnType<typeof parseHTML>['document'], sport: string) =>
+    document.querySelector(`[data-sport="${sport}"]`)?.getAttribute('tabindex');
+  try {
+    const page = await boot(null);
+    const { document } = page;
+    const group = document.querySelector('.sport-switch');
+    assert.equal(group?.getAttribute('role'), 'radiogroup');
+    assert.equal(group?.getAttribute('aria-label'), 'Sport');
+    assert.match(document.querySelector('meta[name="description"]')?.getAttribute('content') ?? '', /NBA simulator/);
+    const buttons = [...document.querySelectorAll('[data-sport]')];
+    assert.deepEqual(buttons.map((button) => button.getAttribute('data-sport')), ['nba', 'nfl', 'esports']);
+    assert.deepEqual(buttons.map((button) => button.getAttribute('aria-label')), ['NBA', 'NFL', 'Esports']);
+    for (const button of buttons) {
+      assert.equal(button.getAttribute('type'), 'button');
+      assert.equal(button.getAttribute('role'), 'radio');
+      const svg = button.querySelector('svg');
+      assert.ok(svg);
+      assert.equal(svg.getAttribute('viewBox'), '0 0 32 32');
+      assert.equal(svg.getAttribute('fill'), 'none');
+      assert.equal(svg.getAttribute('stroke'), 'currentColor');
+      assert.equal(svg.getAttribute('stroke-width'), '2');
+      assert.equal(svg.getAttribute('aria-hidden'), 'true');
+      assert.equal(button.querySelector('img'), null);
+    }
+    assert.equal(group?.querySelector('img'), null);
+    assert.equal(/https?:/i.test(group?.innerHTML ?? ''), false);
+    assert.ok(document.querySelector('button[data-event]'));
+    assert.equal(checked(document), 'nba');
+    assert.equal(tab(document, 'nba'), '0');
+    assert.equal(tab(document, 'nfl'), '-1');
+    assert.equal(tab(document, 'esports'), '-1');
+    key(document, page.window, '[data-desk-tab="projections"]', 'ArrowRight');
+    assert.equal(checked(document), 'nba');
+    assert.ok(document.querySelector('button[data-event]'));
+
+    document.querySelector<HTMLButtonElement>('[data-sport="nfl"]')?.click();
+    await flush();
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /NFL is not live yet\./);
+    assert.equal(document.querySelector('.brand .sub')?.textContent, 'Not live yet.');
+    assert.equal(document.querySelector('button[data-event]'), null);
+    assert.equal(document.querySelector('.game-card'), null);
+    assert.equal(document.querySelector('.projection-board, [data-model-sides], .lean-row'), null);
+    assert.equal(/lean/i.test(document.querySelector('#slate')?.textContent ?? ''), false);
+    assert.equal(document.querySelector('#projections')?.textContent, '');
+    assert.equal(document.querySelector('[data-region="projections"]')?.hasAttribute('hidden'), true);
+    assert.equal(document.querySelector('.desk-tabs')?.hasAttribute('hidden'), true);
+    assert.equal(document.querySelector('[data-fresh]')?.hasAttribute('hidden'), true);
+    assert.equal(document.querySelector('#desk')?.getAttribute('data-mode'), 'sport');
+    assert.equal(page.session.get('simulator.sport'), 'nfl');
+    assert.equal(page.localKeys.includes('simulator.sport'), false);
+    assert.equal(checked(document), 'nfl');
+    assert.equal(tab(document, 'nfl'), '0');
+
+    key(document, page.window, '[data-sport="nfl"]', 'ArrowRight');
+    await flush();
+    assert.equal(checked(document), 'esports');
+    assert.equal(tab(document, 'esports'), '0');
+    assert.equal(tab(document, 'nfl'), '-1');
+    assert.equal(tab(document, 'nba'), '-1');
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /Esports is not live yet\./);
+    assert.equal(document.querySelector('button[data-event]'), null);
+    key(document, page.window, '[data-sport="esports"]', 'ArrowLeft');
+    await flush();
+    assert.equal(checked(document), 'nfl');
+    assert.equal(tab(document, 'nfl'), '0');
+    assert.equal(tab(document, 'esports'), '-1');
+    key(document, page.window, '[data-sport="nfl"]', 'Home');
+    await flush();
+    assert.equal(checked(document), 'nba');
+    assert.equal(tab(document, 'nba'), '0');
+    assert.equal(tab(document, 'nfl'), '-1');
+    assert.equal(tab(document, 'esports'), '-1');
+    key(document, page.window, '[data-sport="nba"]', 'End');
+    await flush();
+    assert.equal(checked(document), 'esports');
+    assert.equal(tab(document, 'esports'), '0');
+    assert.equal(tab(document, 'nba'), '-1');
+    assert.equal(document.querySelector('button[data-event]'), null);
+
+    document.querySelector<HTMLButtonElement>('[data-sport="nba"]')?.click();
+    await flush();
+    assert.ok(document.querySelector('button[data-event]'));
+    assert.equal(document.querySelector('.brand .sub')?.textContent, 'Today and yesterday, Chicago time');
+    assert.equal(document.querySelector('.desk-tabs')?.hasAttribute('hidden'), false);
+    assert.equal(document.querySelector('[data-fresh]')?.hasAttribute('hidden'), false);
+    assert.equal(checked(document), 'nba');
+    assert.equal(page.localKeys.includes('simulator.sport'), false);
+
+    const parked = await boot('esports');
+    assert.match(parked.document.querySelector('#slate')?.textContent ?? '', /Esports is not live yet\./);
+    assert.equal(parked.document.querySelector('button[data-event]'), null);
+    assert.equal(parked.document.querySelector('[data-sport="esports"]')?.getAttribute('aria-checked'), 'true');
+    assert.equal(parked.document.querySelector('.desk-tabs')?.hasAttribute('hidden'), true);
+    assert.equal(parked.document.querySelector('[data-fresh]')?.hasAttribute('hidden'), true);
+    assert.equal(parked.session.get('simulator.sport'), 'esports');
+    assert.ok(parked.fetched.some((url) => url.endsWith('/slate.json')));
+    assert.ok(parked.fetched.some((url) => url.endsWith('/rate-card.json')));
+    for (const url of parked.fetched) {
+      assert.ok(KNOWN_DATA.some((name) => url.endsWith(name)), url);
+    }
+    assert.equal(parked.fetched.some((url) => /nfl|esports/i.test(url)), false);
+  } finally {
+    globalThis.setInterval = timer;
+    for (const dir of boots) rmSync(dir, { recursive: true, force: true });
+  }
+});

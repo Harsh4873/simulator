@@ -102,11 +102,48 @@ button, input, select { font: inherit; }
   min-width: 0;
 }
 
-.brand-mark {
-  width: 34px;
-  height: 34px;
+.sport-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
   flex: none;
-  color: var(--accent);
+}
+
+.sport-switch button {
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px;
+  line-height: 0;
+  box-shadow: none;
+}
+
+.sport-switch button:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+  color: var(--text);
+}
+
+.sport-switch button[aria-checked="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.sport-switch button[aria-checked="true"]:hover:not(:disabled) {
+  color: var(--on-accent);
+}
+
+.sport-switch svg {
+  display: block;
+  width: 22px;
+  height: 22px;
 }
 
 .brand-copy { min-width: 0; }
@@ -2908,7 +2945,7 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
 
   .brand { flex: none; }
 
-  .brand-mark { width: 28px; height: 28px; }
+  .sport-switch svg { width: 20px; height: 20px; }
 
   .sub { display: none; }
 
@@ -3175,6 +3212,11 @@ html {
   .record-table { min-width: 34rem; }
 }
 
+@media (max-width: 560px) {
+  /* The icon switch and the short freshness pill stay on one row. */
+  .brand-copy { display: none; }
+}
+
 @media (pointer: coarse) {
   .mini-tab,
   .slot-tab { min-height: 40px; padding: 8px 12px; }
@@ -3189,5 +3231,7 @@ html {
   [data-theme-toggle],
   [data-back],
   [data-close],
-  [data-block-toggle] { min-height: 40px; }
+  [data-block-toggle],
+  [data-sport] { min-height: 40px; }
+  [data-sport] { min-width: 40px; }
 }

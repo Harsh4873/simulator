@@ -7,6 +7,7 @@ import {
   playerHeadshotUrl,
   shownPercent,
   teamLogoUrl,
+  sportFromStorage,
   themeFromStorage,
   typicalityBucket,
   winCounts,
@@ -85,6 +86,22 @@ test('theme follows an exact stored value, then the light preference', () => {
   assert.ok(html.includes('simulator.theme'));
   assert.ok(html.includes('prefers-color-scheme'));
   assert.ok(html.includes('data-theme-toggle'));
+});
+
+test('sport follows an exact stored value and treats anything else as nba', () => {
+  assert.equal(sportFromStorage('nfl'), 'nfl');
+  assert.equal(sportFromStorage('esports'), 'esports');
+  assert.equal(sportFromStorage('junk'), 'nba');
+  assert.equal(sportFromStorage(null), 'nba');
+  assert.equal(sportFromStorage(''), 'nba');
+  assert.equal(sportFromStorage('NFL'), 'nba');
+  assert.equal(sportFromStorage('nba'), 'nba');
+  assert.equal(
+    sportFromStorage(() => {
+      throw new Error('storage blocked');
+    }),
+    'nba',
+  );
 });
 
 test('team logos prefer an ESPN url and otherwise derive a two- or three-letter mark', () => {
