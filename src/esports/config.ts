@@ -1,18 +1,13 @@
-/** Glickman's worked-example system constant. It is not fit on this slate. */
-export const GLICKO_TAU = 0.5;
+/** Earlier games required before a counting-stat mean is shown. */
+export const MIN_GAMES = 8;
 
-/**
- * Active Duty pool as of the July 8, 2026 Cache swap. Display order only.
- * A map result on any other map is still kept.
- */
-export const MAP_POOL = {
-  version: 'cs2-active-duty-2026-09-27',
-  effective: '2026-07-08',
-  maps: ['Ancient', 'Anubis', 'Cache', 'Dust II', 'Inferno', 'Mirage', 'Nuke'],
-} as const;
+export const OPENDOTA_API = 'https://api.opendota.com/api';
+export const LEAGUEPEDIA_API = 'https://lol.fandom.com/api.php';
+export const BO3_API = 'https://api.bo3.gg/api/v1';
 
-/** A prior-only rating is not a projection. Both teams need this many tier-1 maps. */
-export const MIN_TIER1_MAPS = 3;
+/** Identifying agent. Requests send no browser user agent, origin, or referer. */
+export const ESPORTS_USER_AGENT = 'harsh.bet-simulator/1.0 (github.com/Harsh4873/simulator; esports reader)';
 
-export const LIQUIPEDIA_GAP_MS = 2500;
-export const LIQUIPEDIA_USER_AGENT = 'harsh.bet-simulator/1.0 (github.com/Harsh4873/simulator; schedule reader)';
+export const DOTA_STATS = ['kills', 'deaths', 'assists'] as const;
+export const LOL_STATS = ['kills', 'deaths', 'assists', 'cs'] as const;
+export const CS2_STATS = ['kills', 'headshots', 'deaths', 'assists'] as const;

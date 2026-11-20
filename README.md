@@ -4,6 +4,8 @@ Today's NBA games in America/Chicago. Simulate draws 10,000 independent games in
 
 This is a simulator, not a betting ticket.
 
+The esports switch lists Dota 2, League of Legends, and CS2 players with the mean of each counting stat the feed returned from that player's earlier games.
+
 Lineups lets you rule any player in or out for one game before simulating. Your calls stay in your browser and never change the published card.
 
 The current model and its limits are described in [MODEL_SPEC.md](MODEL_SPEC.md). The `MODEL_AUDIT_*` reports are historical snapshots.

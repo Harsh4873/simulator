@@ -21,60 +21,66 @@ const KNOWN_DATA = [
   '/esports.json',
 ];
 
-function feedFile(sport: 'nfl' | 'esports', now: Date): string {
+function nflFile(now: Date): string {
   const today = chicagoDate(now);
   const yesterday = shiftChicagoDate(today, -1);
   const side = { score: null, logo_url: null, color: null, alternate_color: null };
-  const base = {
-    source: sport === 'nfl' ? 'ESPN NFL scoreboard' : 'Liquipedia',
+  return JSON.stringify({
+    sport: 'nfl',
+    source: 'ESPN NFL scoreboard',
     generated_at: now.toISOString(),
     timezone: 'America/Chicago',
     dates: [yesterday, today],
-    later: sport === 'esports'
-      ? [{
-          id: 'later',
-          start_time: new Date(now.getTime() + 5 * 86_400_000).toISOString(),
-          status: 'scheduled',
-          listed: true,
-          away: { ...side, name: 'FaZe Clan', abbreviation: 'FaZe' },
-          home: { ...side, name: 'Team Vitality', abbreviation: 'VIT' },
-          venue: null,
-          neutral_site: true,
-          competition: 'PGL Major Singapore 2026 · Bo3',
-          projection: { kind: 'series', away_win: 0.55, home_win: 0.45, summary: 'FaZe Clan 55.0% · Team Vitality 45.0%' },
-          projection_note: 'Series chance if every map is an independent draw at the global Glicko-2 map chance. Not calibrated.',
-        }]
-      : [],
-    model: { fitted: sport === 'esports', name: sport === 'esports' ? 'cs2-glicko2-v0.1' : 'none', note: 'Projection is not fitted.', holdout_games: null, holdout_brier: null },
-  };
-  const game = sport === 'nfl'
-    ? {
-        id: '401',
+    later: [],
+    model: { fitted: false, name: 'none', note: 'Projection is not fitted.', holdout_games: null, holdout_brier: null },
+    games: [{
+      id: '401',
+      start_time: new Date(now.getTime() + 3_600_000).toISOString(),
+      status: 'scheduled',
+      listed: false,
+      away: { ...side, name: 'Indianapolis Colts', abbreviation: 'IND' },
+      home: { ...side, name: 'Houston Texans', abbreviation: 'HOU' },
+      venue: 'NRG Stadium',
+      neutral_site: false,
+      competition: null,
+      projection: null,
+      projection_note: 'Projection is not fitted.',
+    }],
+  });
+}
+
+function esportsFile(now: Date): string {
+  const today = chicagoDate(now);
+  const yesterday = shiftChicagoDate(today, -1);
+  return JSON.stringify({
+    sport: 'esports',
+    generated_at: now.toISOString(),
+    timezone: 'America/Chicago',
+    dates: [yesterday, today],
+    model: {
+      name: 'esports-player-means-v1',
+      fitted: true,
+      note: 'Each number is the player mean on earlier games. Fewer than 8 earlier games is not fitted. No match winner and no posted line were used.',
+    },
+    titles: [{
+      title: 'CS2',
+      source: 'BO3.gg',
+      matches: [{
+        id: 'm1',
         start_time: new Date(now.getTime() + 3_600_000).toISOString(),
-        status: 'scheduled',
-        listed: false,
-        away: { ...side, name: 'Indianapolis Colts', abbreviation: 'IND' },
-        home: { ...side, name: 'Houston Texans', abbreviation: 'HOU' },
-        venue: 'NRG Stadium',
-        neutral_site: false,
-        competition: null,
-        projection: null,
-        projection_note: 'Projection is not fitted.',
-      }
-    : {
-        id: 'lp-1',
-        start_time: new Date(now.getTime() + 3_600_000).toISOString(),
-        status: 'scheduled',
-        listed: true,
-        away: { ...side, name: 'GamerLegion', abbreviation: 'GL' },
-        home: { ...side, name: 'BIG', abbreviation: 'BIG' },
-        venue: null,
-        neutral_site: true,
-        competition: 'Stake Ranked Episode 6 · Bo3',
-        projection: null,
-        projection_note: 'Projection is not fitted. This event is not tier-1.',
-      };
-  return JSON.stringify({ sport, ...base, games: [game] });
+        teams: ['GamerLegion', 'BIG'],
+        competition: 'Stake Ranked Episode 6',
+        players: [{
+          name: 'volt',
+          team: 'GamerLegion',
+          props: [
+            { stat: 'kills', mean: 18.2 },
+            { stat: 'deaths', mean: null },
+          ],
+        }],
+      }],
+    }],
+  });
 }
 
 test('the sport switch keeps the NBA slate and parks the other two', async () => {
@@ -131,9 +137,9 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
         : url.endsWith('/rate-card.json')
           ? JSON.stringify(card)
           : url.endsWith('/nfl.json')
-            ? feedFile('nfl', now)
+            ? nflFile(now)
             : url.endsWith('/esports.json')
-              ? feedFile('esports', now)
+              ? esportsFile(now)
               : '';
       return new Response(body, { status: ok ? 200 : 404 });
     };
@@ -217,9 +223,10 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
     assert.equal(tab(document, 'nfl'), '-1');
     assert.equal(tab(document, 'nba'), '-1');
     assert.match(document.querySelector('#slate')?.textContent ?? '', /GamerLegion/);
-    assert.match(document.querySelector('#slate')?.textContent ?? '', /This event is not tier-1/);
-    assert.match(document.querySelector('#slate')?.textContent ?? '', /FaZe Clan 55\.0%/);
-    assert.match(document.querySelector('#slate')?.textContent ?? '', /Not calibrated/);
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /volt/);
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /18\.2/);
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /not fitted/);
+    assert.equal(/55\.0%|tier-1|Not calibrated/.test(document.querySelector('#slate')?.textContent ?? ''), false);
     assert.equal(/not live yet/i.test(document.querySelector('#slate')?.textContent ?? ''), false);
     assert.equal(document.querySelector('button[data-event]'), null);
     assert.equal(document.querySelector('[data-desk-tab="board"]')?.closest('.desk-tabs')?.hasAttribute('hidden'), true);

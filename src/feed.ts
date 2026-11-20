@@ -2,7 +2,7 @@ import { chicagoDate, formatTip, shiftChicagoDate } from './date.ts';
 import { paletteStyle } from './display.ts';
 import { escapeHtml } from './slate.ts';
 
-export type FeedSport = 'nfl' | 'esports';
+export type FeedSport = 'nfl';
 export type FeedStatus = 'scheduled' | 'in_progress' | 'final';
 
 export interface FeedSide {
@@ -26,7 +26,7 @@ export interface FeedGame {
   id: string;
   start_time: string;
   status: FeedStatus;
-  /** Esports cards are the feed's listed order. NFL cards are away at home. */
+  /** NFL cards are away at home. */
   listed: boolean;
   away: FeedSide;
   home: FeedSide;
@@ -265,7 +265,7 @@ function section(title: string, games: readonly FeedGame[]): string {
 export function renderFeedSlate(slate: FeedSlate, now: Date): string {
   const today = chicagoDate(now);
   const yesterday = shiftChicagoDate(today, -1);
-  const sportName = slate.sport === 'nfl' ? 'NFL' : 'Esports';
+  const sportName = 'NFL';
   const current = slate.dates[0] === yesterday && slate.dates[1] === today;
   const stale = current
     ? ''
@@ -282,6 +282,6 @@ export function renderFeedSlate(slate: FeedSlate, now: Date): string {
   const days = [...byDate.keys()].sort((a, b) => b.localeCompare(a));
   const windowHtml = days.map((day) => section(dayTitle(day, today), byDate.get(day) ?? [])).join('');
   const empty = slate.games.length === 0 ? `<p class="state">No ${sportName} matches in this window.</p>` : windowHtml;
-  const later = slate.later.length ? section('Tier-1 outside this window', slate.later) : '';
+  const later = slate.later.length ? section('Outside this window', slate.later) : '';
   return `${stale}${head}${empty}${later}`;
 }

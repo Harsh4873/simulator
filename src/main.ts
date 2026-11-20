@@ -56,6 +56,7 @@ import {
 import { unpackPlayerGames, type DefenseSlot } from './projection-context.ts';
 import { fetchPublishedIndex, fetchPublishedSimulation, type PublishedExpectation } from './published-sim.ts';
 import { hydrateSimulationCache, persistSimulationEntry } from './simulation-cache.ts';
+import { parseEsportsDocument, renderEsports } from './esports/props.ts';
 import { parseFeedSlate, renderFeedSlate } from './feed.ts';
 import { escapeHtml, renderSlate } from './slate.ts';
 import { ITERATIONS, type Simulation } from './simulate.ts';
@@ -1072,7 +1073,8 @@ function onDeskClick(event: Event): void {
     if (selected === 'nba') {
       nbaFailed = false;
       void load();
-    } else void showFeed(selected);
+    } else if (selected === 'esports') void showEsports();
+    else void showNfl();
     return;
   }
   const lineupButton = target.closest('button[data-lineup]');
@@ -1643,7 +1645,7 @@ function parkNbaViews(): void {
   boxRoot?.replaceChildren();
 }
 
-async function showFeed(next: 'nfl' | 'esports'): Promise<void> {
+function openFeed(label: string): number | null {
   const token = ++feedToken;
   const sub = document.querySelector<HTMLElement>('.brand .sub');
   if (sub) sub.textContent = 'Today and yesterday, Chicago time';
@@ -1654,23 +1656,48 @@ async function showFeed(next: 'nfl' | 'esports'): Promise<void> {
   if (foot) foot.textContent = FEED_FOOT;
   if (desk) desk.dataset.mode = 'sport';
   parkNbaViews();
-  if (!slateRoot) return;
-  const label = next === 'nfl' ? 'NFL' : 'Esports';
+  if (!slateRoot) return null;
   slateRoot.innerHTML = `<p class="state" role="status">Loading ${label}…</p>`;
+  return token;
+}
+
+async function showNfl(): Promise<void> {
+  const token = openFeed('NFL');
+  if (token === null) return;
   let text: string | null = null;
   try {
-    text = await getData(`${next}.json`);
+    text = await getData('nfl.json');
   } catch {
     text = null;
   }
-  if (token !== feedToken || currentSport() !== next || !slateRoot) return;
-  const parsed = text ? parseFeedSlate(text, next) : null;
+  if (token !== feedToken || currentSport() !== 'nfl' || !slateRoot) return;
+  const parsed = text ? parseFeedSlate(text, 'nfl') : null;
   if (!parsed) {
-    slateRoot.innerHTML = `<p class="state" role="alert">${label} slate could not be loaded. <button data-retry>Retry</button></p>`;
+    slateRoot.innerHTML = '<p class="state" role="alert">NFL slate could not be loaded. <button data-retry>Retry</button></p>';
     if (desk) desk.dataset.mode = 'sport';
     return;
   }
   slateRoot.innerHTML = renderFeedSlate(parsed, new Date());
+  if (desk) desk.dataset.mode = 'sport';
+}
+
+async function showEsports(): Promise<void> {
+  const token = openFeed('Esports');
+  if (token === null) return;
+  let text: string | null = null;
+  try {
+    text = await getData('esports.json');
+  } catch {
+    text = null;
+  }
+  if (token !== feedToken || currentSport() !== 'esports' || !slateRoot) return;
+  const parsed = text ? parseEsportsDocument(text) : null;
+  if (!parsed) {
+    slateRoot.innerHTML = '<p class="state" role="alert">Esports slate could not be loaded. <button data-retry>Retry</button></p>';
+    if (desk) desk.dataset.mode = 'sport';
+    return;
+  }
+  slateRoot.innerHTML = renderEsports(parsed, new Date());
   if (desk) desk.dataset.mode = 'sport';
 }
 
@@ -1700,7 +1727,11 @@ function applySport(next: Sport): void {
     else if (slateRoot) slateRoot.innerHTML = '<p class="state" role="status">Loading slate…</p>';
     return;
   }
-  void showFeed(next);
+  if (next === 'esports') {
+    void showEsports();
+    return;
+  }
+  void showNfl();
 }
 
 function readHash(): string {

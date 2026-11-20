@@ -2,238 +2,691 @@ import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chicagoDate, shiftChicagoDate } from '../src/date.ts';
-import { parseFeedSlate, type FeedGame, type FeedSide, type FeedSlate } from '../src/feed.ts';
-import { LIQUIPEDIA_GAP_MS, LIQUIPEDIA_USER_AGENT } from '../src/esports/config.ts';
-import { isPlaceholderTeam, mapResultsFrom, parentTitle, parseTicker, parseTournamentPage, selectTournamentTitles, type MapResult, type TickerMatch } from '../src/esports/liquipedia.ts';
-import { mapBrier, projectionFor, projectionNote, ratingsBefore, type TeamState } from '../src/esports/ratings.ts';
+import { BO3_API, CS2_STATS, DOTA_STATS, ESPORTS_USER_AGENT, LEAGUEPEDIA_API, LOL_STATS, OPENDOTA_API } from '../src/esports/config.ts';
+import {
+  cargoCount,
+  cs2PerMapMean,
+  earlierMean,
+  esportsDocument,
+  parseEsportsDocument,
+  type EsportsMatch,
+  type EsportsPlayer,
+  type EsportsProp,
+  type EsportsTitle,
+  type SeriesRow,
+} from '../src/esports/props.ts';
 
 const OUT = 'public/data/esports.json';
-const API = 'https://liquipedia.net/counterstrike/api.php';
-const TITLE_LIMIT = 22;
-const LATER_MS = 14 * 86_400_000;
-const MIN_SCORED = 24;
+const PRO_MATCH_PAGES = 3;
+const SHOWN_MATCH_DETAILS = 6;
+const HISTORY_LIMIT = 100;
+const FALLBACK_MATCHES = 4;
+const CARGO_LIMIT = '500';
+const CS_PAGE_LIMIT = 20;
+const CS_DISCIPLINE = 1;
+const CARGO_FIELDS = [
+  'ScoreboardPlayers.Link',
+  'ScoreboardPlayers.Team',
+  'ScoreboardPlayers.Kills',
+  'ScoreboardPlayers.Deaths',
+  'ScoreboardPlayers.Assists',
+  'ScoreboardPlayers.CS',
+  'ScoreboardPlayers.GameId',
+  'ScoreboardGames.Team1',
+  'ScoreboardGames.Team2',
+  'ScoreboardGames.Tournament',
+  'ScoreboardGames.DateTime_UTC',
+].join(',');
+const STAMP = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
-let lastCall = 0;
-
-async function waitTurn(): Promise<void> {
-  const elapsed = Date.now() - lastCall;
-  if (elapsed < LIQUIPEDIA_GAP_MS) await new Promise((resolve) => setTimeout(resolve, LIQUIPEDIA_GAP_MS - elapsed));
-  lastCall = Date.now();
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function liquipedia(params: Record<string, string>): Promise<unknown> {
-  const url = `${API}?${new URLSearchParams({ format: 'json', ...params })}`;
+function record(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function text(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function realName(value: unknown): string | null {
+  const name = text(value);
+  if (!name || /^(tbd|tba|unknown)$/i.test(name)) return null;
+  return name;
+}
+
+function countOf(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+let dotaAt = 0;
+
+async function paceDota(): Promise<void> {
+  const wait = dotaAt - Date.now();
+  dotaAt = Math.max(Date.now(), dotaAt) + 1100;
+  if (wait > 0) await sleep(wait);
+}
+
+async function dotaGet(path: string): Promise<unknown> {
+  const url = `${OPENDOTA_API}${path}`;
   for (let attempt = 0; attempt < 4; attempt += 1) {
-    await waitTurn();
+    await paceDota();
     const response = await fetch(url, {
-      headers: { 'user-agent': LIQUIPEDIA_USER_AGENT, 'accept-encoding': 'gzip' },
+      headers: { 'user-agent': ESPORTS_USER_AGENT, accept: 'application/json' },
       signal: AbortSignal.timeout(30000),
     });
-    lastCall = Date.now();
     if (response.status === 429) {
-      if (attempt === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 20000));
-        continue;
-      }
-      throw new Error('Liquipedia rate limit');
+      await sleep(5000);
+      continue;
     }
-    if (!response.ok) throw new Error(`Liquipedia failed (${response.status})`);
+    if (!response.ok) throw new Error(`OpenDota failed (${response.status})`);
     return response.json();
   }
-  throw new Error('Liquipedia rate limit');
+  throw new Error('OpenDota rate limit');
 }
 
-const pages = new Map<string, string | null>();
-
-async function pageText(title: string): Promise<string | null> {
-  const key = title.trim().replaceAll(' ', '_');
-  if (pages.has(key)) return pages.get(key) ?? null;
-  const payload = await liquipedia({ action: 'parse', page: key.replaceAll('_', ' '), prop: 'text' });
-  const row = payload as { error?: { code?: string }; parse?: { text?: { '*'?: string } } };
-  if (row.error?.code === 'missingtitle') {
-    pages.set(key, null);
-    return null;
+async function bo3Get(path: string): Promise<unknown> {
+  const url = `${BO3_API}${path}`;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await fetch(url, {
+      headers: { 'user-agent': ESPORTS_USER_AGENT, accept: 'application/json' },
+      signal: AbortSignal.timeout(30000),
+    });
+    if (response.status === 429 || response.status === 503) {
+      await sleep(1500 * (attempt + 1));
+      continue;
+    }
+    if (!response.ok) throw new Error(`BO3.gg failed (${response.status})`);
+    return response.json();
   }
-  if (row.error) throw new Error(`Liquipedia ${title} failed`);
-  const html = row.parse?.text?.['*'];
-  const text = typeof html === 'string' ? html : null;
-  pages.set(key, text);
-  return text;
+  throw new Error('BO3.gg rate limit');
 }
 
-function publish(slate: FeedSlate): void {
-  const raw = `${JSON.stringify(slate)}\n`;
-  if (!parseFeedSlate(raw, 'esports')) throw new Error('Esports slate failed validation');
+async function mapPool<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const current = cursor;
+      cursor += 1;
+      if (current >= items.length) return;
+      results[current] = await fn(items[current] as T);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function selectForTitle<T extends { start_time: string }>(rows: readonly T[], now: Date, cap: number | null): T[] {
+  const ordered = [...rows].sort((left, right) => Date.parse(right.start_time) - Date.parse(left.start_time));
+  const today = chicagoDate(now);
+  const yesterday = shiftChicagoDate(today, -1);
+  const windowed = ordered.filter((row) => {
+    const day = chicagoDate(new Date(row.start_time));
+    return day === today || day === yesterday;
+  });
+  const chosen = windowed.length > 0 ? windowed : ordered.slice(0, FALLBACK_MATCHES);
+  return cap === null ? chosen : chosen.slice(0, cap);
+}
+
+function publish(doc: ReturnType<typeof esportsDocument>): void {
+  const raw = `${JSON.stringify(doc)}\n`;
+  if (!parseEsportsDocument(raw)) throw new Error('Esports slate failed validation');
   mkdirSync(dirname(OUT), { recursive: true });
   const tmp = `${OUT}.tmp`;
   writeFileSync(tmp, raw);
   renameSync(tmp, OUT);
 }
 
-function side(team: TickerMatch['away'], score: number | null): FeedSide {
-  return { name: team.name, abbreviation: team.abbreviation, score, logo_url: null, color: null, alternate_color: null };
+interface ProGame {
+  id: number;
+  startMs: number;
+  start_time: string;
+  radiant: string;
+  dire: string;
+  league: string;
 }
 
-function tierFor(title: string, tiers: ReadonlyMap<string, string>): string | null {
-  return tiers.get(title) ?? tiers.get(parentTitle(title) ?? '') ?? null;
+function realPro(row: Record<string, unknown>): ProGame | null {
+  const id = row.match_id;
+  const start = row.start_time;
+  const radiant = realName(row.radiant_name);
+  const dire = realName(row.dire_name);
+  const league = text(row.league_name);
+  if (typeof id !== 'number' || !Number.isFinite(id) || typeof start !== 'number' || !(start > 0)) return null;
+  if (!radiant || !dire || !league) return null;
+  const startMs = start * 1000;
+  return { id, startMs, start_time: new Date(startMs).toISOString(), radiant, dire, league };
 }
 
-function card(match: TickerMatch, projection: FeedGame['projection'], note: string, ratings: Map<string, TeamState> | null): FeedGame {
-  let fullNote = note;
-  if (projection && ratings) {
-    const left = ratings.get(match.away.name);
-    const right = ratings.get(match.home.name);
-    if (left && right) fullNote = `${match.status === 'final' ? 'Pre-match. ' : ''}${projectionNote(projection, match.away.name, left, match.home.name, right)}`;
+interface DotaHist {
+  matchId: number;
+  start: number;
+  kills: number | null;
+  deaths: number | null;
+  assists: number | null;
+}
+
+function readDotaHistory(payload: unknown): DotaHist[] {
+  if (!Array.isArray(payload)) return [];
+  const rows: DotaHist[] = [];
+  const seen = new Set<number>();
+  for (const item of payload) {
+    const row = record(item);
+    if (!row) continue;
+    const matchId = row.match_id;
+    const start = row.start_time;
+    if (typeof matchId !== 'number' || !Number.isFinite(matchId) || seen.has(matchId)) continue;
+    if (typeof start !== 'number' || !Number.isFinite(start)) continue;
+    seen.add(matchId);
+    rows.push({
+      matchId,
+      start: start * 1000,
+      kills: countOf(row.kills),
+      deaths: countOf(row.deaths),
+      assists: countOf(row.assists),
+    });
   }
+  return rows;
+}
+
+function dotaProps(history: readonly DotaHist[], listed: ReadonlySet<number>, matchId: number, startMs: number): EsportsProp[] {
+  const kept = history.filter((row) => listed.has(row.matchId));
+  return DOTA_STATS.map((stat) => ({
+    stat,
+    mean: earlierMean(kept.map((row) => ({ id: String(row.matchId), start: row.start, value: row[stat] })), String(matchId), startMs),
+  }));
+}
+
+async function buildDota(now: Date): Promise<EsportsTitle | null> {
+  const listed = new Set<number>();
+  const games: ProGame[] = [];
+  const seen = new Set<number>();
+  let before: number | null = null;
+  for (let page = 0; page < PRO_MATCH_PAGES; page += 1) {
+    const path = before === null ? '/proMatches' : `/proMatches?less_than_match_id=${before}`;
+    const payload = await dotaGet(path);
+    if (!Array.isArray(payload) || payload.length === 0) break;
+    let minId = Infinity;
+    for (const item of payload) {
+      const row = record(item);
+      if (!row || typeof row.match_id !== 'number' || !Number.isFinite(row.match_id)) continue;
+      listed.add(row.match_id);
+      if (row.match_id < minId) minId = row.match_id;
+      const game = realPro(row);
+      if (!game || seen.has(game.id)) continue;
+      seen.add(game.id);
+      games.push(game);
+    }
+    if (!Number.isFinite(minId) || (before !== null && minId >= before)) break;
+    before = minId;
+  }
+  const shown = selectForTitle(games, now, SHOWN_MATCH_DETAILS);
+  const historyCache = new Map<number, DotaHist[]>();
+  const matches: EsportsMatch[] = [];
+  for (const game of shown) {
+    let detail: unknown;
+    try {
+      detail = await dotaGet(`/matches/${game.id}`);
+    } catch (error) {
+      console.error(`esports Dota 2 match ${game.id} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
+      continue;
+    }
+    const body = record(detail);
+    const roster = body && Array.isArray(body.players) ? body.players : [];
+    const players: { accountId: number | null; name: string; team: string }[] = [];
+    for (const item of roster) {
+      const player = record(item);
+      if (!player || typeof player.player_slot !== 'number' || !Number.isFinite(player.player_slot)) continue;
+      const name = text(player.name) ?? text(player.personaname);
+      if (!name) continue;
+      const accountId = typeof player.account_id === 'number' && Number.isInteger(player.account_id) && player.account_id > 0 ? player.account_id : null;
+      players.push({ accountId, name, team: player.player_slot < 128 ? game.radiant : game.dire });
+    }
+    if (players.length === 0) continue;
+    const built: EsportsPlayer[] = [];
+    for (const player of players) {
+      let history: DotaHist[] = [];
+      if (player.accountId !== null) {
+        const cached = historyCache.get(player.accountId);
+        if (cached) history = cached;
+        else {
+          try {
+            history = readDotaHistory(await dotaGet(`/players/${player.accountId}/matches?limit=${HISTORY_LIMIT}`));
+          } catch (error) {
+            console.error(`esports Dota 2 player ${player.accountId} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
+            history = [];
+          }
+          historyCache.set(player.accountId, history);
+        }
+      }
+      built.push({ name: player.name, team: player.team, props: dotaProps(history, listed, game.id, game.startMs) });
+    }
+    matches.push({
+      id: String(game.id),
+      start_time: game.start_time,
+      teams: [game.radiant, game.dire],
+      competition: game.league,
+      players: built,
+    });
+  }
+  if (matches.length === 0) return null;
+  return { title: 'Dota 2', source: 'OpenDota', matches };
+}
+
+interface LolFlat {
+  gameId: string;
+  stamp: string;
+  startMs: number;
+  start_time: string;
+  team1: string;
+  team2: string;
+  tournament: string | null;
+  player: string;
+  team: string;
+  kills: number | null;
+  deaths: number | null;
+  assists: number | null;
+  cs: number | null;
+}
+
+function cargoFailed(body: unknown): boolean {
+  const row = record(body);
+  if (!row || !Array.isArray(row.cargoquery)) return true;
+  return Boolean(row.error);
+}
+
+async function cargoFetch(where: string, order: boolean): Promise<unknown | null> {
+  const params = new URLSearchParams({
+    action: 'cargoquery',
+    format: 'json',
+    tables: 'ScoreboardPlayers,ScoreboardGames',
+    join_on: 'ScoreboardPlayers.GameId=ScoreboardGames.GameId',
+    fields: CARGO_FIELDS,
+    where,
+    limit: CARGO_LIMIT,
+  });
+  if (order) params.set('order_by', 'ScoreboardGames.DateTime_UTC DESC');
+  try {
+    const response = await fetch(`${LEAGUEPEDIA_API}?${params}`, {
+      headers: { 'user-agent': ESPORTS_USER_AGENT, accept: 'application/json' },
+      signal: AbortSignal.timeout(30000),
+    });
+    const body: unknown = await response.json().catch(() => null);
+    if (!response.ok || cargoFailed(body)) return null;
+    return body;
+  } catch {
+    return null;
+  }
+}
+
+async function cargoRows(where: string): Promise<LolFlat[] | null> {
+  let body = await cargoFetch(where, true);
+  if (body === null) body = await cargoFetch(where, false);
+  if (body === null) return null;
+  const row = record(body);
+  const list = row && Array.isArray(row.cargoquery) ? row.cargoquery : [];
+  const parsed: LolFlat[] = [];
+  for (const item of list) {
+    const wrapped = record(item);
+    const fields = wrapped ? record(wrapped.title) : null;
+    if (!fields) continue;
+    const gameId = text(fields.GameId);
+    const stamp = text(fields['DateTime UTC']);
+    const team1 = realName(fields.Team1);
+    const team2 = realName(fields.Team2);
+    const player = text(fields.Link);
+    const team = realName(fields.Team);
+    if (!gameId || !stamp || !STAMP.test(stamp) || !team1 || !team2 || !player || !team) continue;
+    const startMs = Date.parse(`${stamp.replace(' ', 'T')}Z`);
+    if (!Number.isFinite(startMs)) continue;
+    parsed.push({
+      gameId,
+      stamp,
+      startMs,
+      start_time: new Date(startMs).toISOString(),
+      team1,
+      team2,
+      tournament: text(fields.Tournament),
+      player,
+      team,
+      kills: cargoCount(fields.Kills),
+      deaths: cargoCount(fields.Deaths),
+      assists: cargoCount(fields.Assists),
+      cs: cargoCount(fields.CS),
+    });
+  }
+  return parsed;
+}
+
+function dedupeLol(rows: readonly LolFlat[]): LolFlat[] {
+  const seen = new Set<string>();
+  const kept: LolFlat[] = [];
+  for (const row of rows) {
+    const key = `${row.gameId}\n${row.player}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    kept.push(row);
+  }
+  return kept;
+}
+
+interface LolGame {
+  id: string;
+  start_time: string;
+  startMs: number;
+  teams: [string, string];
+  competition: string | null;
+  players: { name: string; team: string }[];
+}
+
+function groupLol(rows: readonly LolFlat[]): LolGame[] {
+  const games = new Map<string, LolGame>();
+  for (const row of rows) {
+    let game = games.get(row.gameId);
+    if (!game) {
+      game = { id: row.gameId, start_time: row.start_time, startMs: row.startMs, teams: [row.team1, row.team2], competition: row.tournament, players: [] };
+      games.set(row.gameId, game);
+    }
+    if (game.players.some((player) => player.name === row.player)) continue;
+    game.players.push({ name: row.player, team: row.team });
+  }
+  return [...games.values()];
+}
+
+function lolProps(player: string, game: LolGame, rows: readonly LolFlat[]): EsportsProp[] {
+  const history = rows.filter((row) => row.player === player);
+  return LOL_STATS.map((stat) => ({
+    stat,
+    mean: earlierMean(history.map((row) => ({
+      id: row.gameId,
+      start: row.startMs,
+      value: stat === 'kills' ? row.kills : stat === 'deaths' ? row.deaths : stat === 'assists' ? row.assists : row.cs,
+    })), game.id, game.startMs),
+  }));
+}
+
+function chicagoNextStart(now: Date): string {
+  const tomorrow = shiftChicagoDate(chicagoDate(now), 1);
+  for (const hour of [5, 6, 4, 7]) {
+    const instant = Date.parse(`${tomorrow}T${String(hour).padStart(2, '0')}:00:00Z`);
+    if (chicagoDate(new Date(instant)) === tomorrow && chicagoDate(new Date(instant - 60_000)) !== tomorrow) {
+      return `${tomorrow} ${String(hour).padStart(2, '0')}:00:00`;
+    }
+  }
+  return `${tomorrow} 06:00:00`;
+}
+
+async function buildLol(now: Date): Promise<EsportsTitle | null> {
+  const upper = chicagoNextStart(now);
+  const first = await cargoRows(`ScoreboardGames.DateTime_UTC >= '2025-01-01 00:00:00' AND ScoreboardGames.DateTime_UTC < '${upper}'`);
+  if (first === null) throw new Error('Leaguepedia request failed');
+  let rows = first;
+  if (first.length > 0) {
+    const oldest = first.reduce((min, row) => (row.stamp < min ? row.stamp : min), first[0]!.stamp);
+    if (!STAMP.test(oldest)) throw new Error('Leaguepedia request failed');
+    const second = await cargoRows(`ScoreboardGames.DateTime_UTC >= '2025-01-01 00:00:00' AND ScoreboardGames.DateTime_UTC < '${oldest}'`);
+    if (second === null) throw new Error('Leaguepedia request failed');
+    rows = dedupeLol([...first, ...second]);
+  }
+  const shown = selectForTitle(groupLol(rows), now, null);
+  const matches: EsportsMatch[] = [];
+  for (const game of shown) {
+    const players = game.players.map((player) => ({ name: player.name, team: player.team, props: lolProps(player.name, game, rows) }));
+    if (players.length === 0) continue;
+    matches.push({ id: game.id, start_time: game.start_time, teams: game.teams, competition: game.competition, players });
+  }
+  if (matches.length === 0) return null;
+  return { title: 'League of Legends', source: 'Leaguepedia', matches };
+}
+
+interface CsMatch {
+  id: string;
+  start_time: string;
+  startMs: number;
+  status: 'finished' | 'upcoming' | 'current';
+  teams: [{ name: string; slug: string }, { name: string; slug: string }];
+  competition: string | null;
+}
+
+function csTeam(value: unknown): { name: string; slug: string } | null {
+  const row = record(value);
+  if (!row) return null;
+  const name = realName(row.name);
+  const slug = text(row.slug);
+  if (!name || !slug) return null;
+  return { name, slug };
+}
+
+function readCsMatch(value: unknown): CsMatch | null {
+  const row = record(value);
+  if (!row || row.discipline_id !== CS_DISCIPLINE) return null;
+  const status = row.status;
+  if (status !== 'finished' && status !== 'upcoming' && status !== 'current') return null;
+  const start = text(row.start_date);
+  const startMs = start ? Date.parse(start) : NaN;
+  if (!start || !Number.isFinite(startMs)) return null;
+  const id = row.id;
+  if (typeof id !== 'number' && typeof id !== 'string') return null;
+  const left = csTeam(row.team1);
+  const right = csTeam(row.team2);
+  if (!left || !right) return null;
+  const tournament = record(row.tournament);
   return {
-    id: match.id,
-    start_time: match.start_time,
-    status: match.status,
-    listed: true,
-    away: side(match.away, match.away_score),
-    home: side(match.home, match.home_score),
-    venue: null,
-    neutral_site: true,
-    competition: [match.tournament, match.format_label].filter(Boolean).join(' · ') || null,
-    projection,
-    projection_note: fullNote,
+    id: String(id),
+    start_time: new Date(startMs).toISOString(),
+    startMs,
+    status,
+    teams: [left, right],
+    competition: tournament ? text(tournament.name) : null,
   };
+}
+
+function csQuery(offset: number, limit: number): string {
+  const params = new URLSearchParams({
+    discipline_id: String(CS_DISCIPLINE),
+    sort: '-start_date',
+    with: 'teams,tournament',
+  });
+  params.set('page[offset]', String(offset));
+  params.set('page[limit]', String(limit));
+  return `/matches?${params}`;
+}
+
+async function csSlice(offset: number, limit: number): Promise<{ total: number; rows: unknown[] }> {
+  const payload = await bo3Get(csQuery(offset, limit));
+  const row = record(payload);
+  const total = row ? record(row.total) : null;
+  const count = total && typeof total.count === 'number' && Number.isFinite(total.count) ? total.count : 0;
+  return { total: count, rows: row && Array.isArray(row.results) ? row.results : [] };
+}
+
+function rowStart(value: unknown): number {
+  const row = record(value);
+  return row && typeof row.start_date === 'string' ? Date.parse(row.start_date) : NaN;
+}
+
+async function csPageOffset(cutoff: number): Promise<number> {
+  const first = await csSlice(0, 1);
+  if (first.total <= 0) return 0;
+  const earliest = rowStart(first.rows[0]);
+  if (Number.isFinite(earliest) && earliest < cutoff) return 0;
+  let lo = 0;
+  let hi = Math.max(0, first.total - 1);
+  while (lo + 1 < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    const page = await csSlice(mid, 1);
+    const start = rowStart(page.rows[0]);
+    if (Number.isFinite(start) && start < cutoff) hi = mid;
+    else lo = mid;
+  }
+  return hi;
+}
+
+interface CsPlayer {
+  slug: string;
+  name: string;
+}
+
+async function csRoster(slug: string): Promise<CsPlayer[]> {
+  try {
+    const payload = await bo3Get(`/teams/${encodeURIComponent(slug)}`);
+    const row = record(payload);
+    const players = row && Array.isArray(row.players) ? row.players : [];
+    const list: CsPlayer[] = [];
+    for (const item of players) {
+      const player = record(item);
+      if (!player || player.status !== 1) continue;
+      const playerSlug = text(player.slug);
+      const name = text(player.nickname);
+      if (!playerSlug || !name) continue;
+      list.push({ slug: playerSlug, name });
+    }
+    return list;
+  } catch (error) {
+    console.error(`esports CS2 roster ${slug} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
+    return [];
+  }
+}
+
+interface CsHist {
+  id: string;
+  start: number;
+  maps: number;
+  kills: number | null;
+  headshots: number | null;
+  deaths: number | null;
+  assists: number | null;
+}
+
+function readCsHistory(payload: unknown): CsHist[] {
+  if (!Array.isArray(payload)) return [];
+  const rows: CsHist[] = [];
+  for (const item of payload) {
+    const row = record(item);
+    if (!row) continue;
+    const id = row.match_id;
+    const start = typeof row.match_start_date === 'string' ? Date.parse(row.match_start_date) : NaN;
+    if ((typeof id !== 'number' && typeof id !== 'string') || !Number.isFinite(start)) continue;
+    const stats = Array.isArray(row.stats) ? record(row.stats[0]) : null;
+    const value = (key: string): number | null => (stats ? countOf(stats[key]) : null);
+    rows.push({
+      id: String(id),
+      start,
+      maps: Array.isArray(row.for_game_ids) ? row.for_game_ids.length : 0,
+      kills: value('kills'),
+      headshots: value('headshots'),
+      deaths: value('death'),
+      assists: value('assists'),
+    });
+  }
+  return rows;
+}
+
+async function csHistory(slug: string): Promise<CsHist[]> {
+  try {
+    return readCsHistory(await bo3Get(`/players/${encodeURIComponent(slug)}/matches_list_stats/general`));
+  } catch (error) {
+    console.error(`esports CS2 player ${slug} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
+    return [];
+  }
+}
+
+function csProps(history: readonly CsHist[], matchId: string, startMs: number): EsportsProp[] {
+  return CS2_STATS.map((stat) => {
+    const rows: SeriesRow[] = history.map((row) => ({
+      id: row.id,
+      start: row.start,
+      maps: row.maps,
+      total: stat === 'kills' ? row.kills : stat === 'headshots' ? row.headshots : stat === 'deaths' ? row.deaths : row.assists,
+    }));
+    return { stat, mean: cs2PerMapMean(rows, matchId, startMs) };
+  });
+}
+
+async function buildCs(now: Date): Promise<EsportsTitle | null> {
+  const tomorrow = shiftChicagoDate(chicagoDate(now), 1);
+  let cutoff = Date.parse(`${tomorrow}T06:00:00Z`);
+  for (const hour of [5, 6, 4, 7]) {
+    const instant = Date.parse(`${tomorrow}T${String(hour).padStart(2, '0')}:00:00Z`);
+    if (chicagoDate(new Date(instant)) === tomorrow && chicagoDate(new Date(instant - 60_000)) !== tomorrow) {
+      cutoff = instant;
+      break;
+    }
+  }
+  const offset = await csPageOffset(cutoff);
+  const page = await csSlice(offset, CS_PAGE_LIMIT);
+  const matches = page.rows.map((row) => readCsMatch(row)).filter((match): match is CsMatch => match !== null);
+  const shown = selectForTitle(matches, now, null);
+  const slugs = [...new Set(shown.flatMap((match) => [match.teams[0].slug, match.teams[1].slug]))];
+  const rosters = new Map<string, CsPlayer[]>();
+  const rosterRows = await mapPool(slugs, 4, async (slug) => ({ slug, players: await csRoster(slug) }));
+  for (const row of rosterRows) rosters.set(row.slug, row.players);
+  const needed = new Set<string>();
+  for (const match of shown) {
+    for (const team of match.teams) {
+      for (const player of rosters.get(team.slug) ?? []) needed.add(player.slug);
+    }
+  }
+  const histories = new Map<string, CsHist[]>();
+  const historyRows = await mapPool([...needed], 4, async (slug) => ({ slug, rows: await csHistory(slug) }));
+  for (const row of historyRows) histories.set(row.slug, row.rows);
+  const built: EsportsMatch[] = [];
+  for (const match of shown) {
+    const players: EsportsPlayer[] = [];
+    const seen = new Set<string>();
+    for (const team of match.teams) {
+      for (const player of rosters.get(team.slug) ?? []) {
+        if (seen.has(player.slug)) continue;
+        const history = histories.get(player.slug) ?? [];
+        if (match.status === 'finished' && !history.some((row) => row.id === match.id)) continue;
+        seen.add(player.slug);
+        players.push({ name: player.name, team: team.name, props: csProps(history, match.id, match.startMs) });
+      }
+    }
+    if (players.length === 0) continue;
+    built.push({
+      id: match.id,
+      start_time: match.start_time,
+      teams: [match.teams[0].name, match.teams[1].name],
+      competition: match.competition,
+      players,
+    });
+  }
+  if (built.length === 0) return null;
+  return { title: 'CS2', source: 'BO3.gg', matches: built };
+}
+
+async function loadTitle(name: string, build: () => Promise<EsportsTitle | null>): Promise<EsportsTitle | null> {
+  try {
+    const title = await build();
+    if (!title || title.matches.length === 0) {
+      console.error(`esports ${name} was not loaded: no player rows`);
+      return null;
+    }
+    const players = title.matches.reduce((sum, match) => sum + match.players.length, 0);
+    const fitted = title.matches.reduce((sum, match) => sum + match.players.reduce((inner, player) => inner + player.props.filter((prop) => prop.mean !== null).length, 0), 0);
+    console.log(`esports ${name}: ${title.matches.length} matches, ${players} players, ${fitted} fitted stats`);
+    return title;
+  } catch (error) {
+    console.error(`esports ${name} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
+    return null;
+  }
 }
 
 export async function buildEsportsSlate(now = new Date()): Promise<void> {
-  const tickerHtml = await pageText('Liquipedia:Matches');
-  if (!tickerHtml) throw new Error('Liquipedia matches page was empty');
-  const ticker = parseTicker(tickerHtml, now);
-  const category = await liquipedia({
-    action: 'query',
-    list: 'categorymembers',
-    cmtitle: 'Category:S-Tier Tournaments',
-    cmlimit: '50',
-    cmsort: 'timestamp',
-    cmdir: 'desc',
-  });
-  const members = ((category as { query?: { categorymembers?: { title?: string }[] } }).query?.categorymembers ?? [])
-    .map((member) => member.title ?? '')
-    .filter(Boolean);
-  const titles = selectTournamentTitles(ticker.map((match) => match.tournament_title), members, TITLE_LIMIT);
-  const tiers = new Map<string, string>();
-  const results: MapResult[] = [];
-  let fetches = 0;
-  for (const title of titles) {
-    if (fetches >= 24) break;
-    fetches += 1;
-    let html: string | null = null;
-    try {
-      html = await pageText(title);
-    } catch (error) {
-      console.error(`esports ${title} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
-      if (error instanceof Error && error.message.includes('rate limit')) break;
-      continue;
-    }
-    if (!html) continue;
-    let parsed = parseTournamentPage(html);
-    if (!parsed.tier) {
-      const parent = parentTitle(title);
-      if (parent && fetches < 24) {
-        fetches += 1;
-        let parentHtml: string | null = null;
-        try {
-          parentHtml = await pageText(parent);
-        } catch (error) {
-          console.error(`esports ${parent} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
-        }
-        if (parentHtml) {
-          const parentParsed = parseTournamentPage(parentHtml);
-          if (parentParsed.tier) tiers.set(parent, parentParsed.tier);
-          if (!parsed.tier && parentParsed.tier) parsed = { ...parsed, tier: parentParsed.tier };
-          if (parentParsed.tier === 'S-Tier') results.push(...mapResultsFrom(parentParsed, now));
-        }
-      }
-    }
-    if (parsed.tier) tiers.set(title, parsed.tier);
-    if (parsed.tier === 'S-Tier') results.push(...mapResultsFrom({ ...parsed, tier: 'S-Tier' }, now));
-    console.log(`esports ${title}: ${parsed.tier ?? 'no tier'}`);
-  }
-  const slate = composeEsportsSlate(ticker, tiers, results, now);
-  publish(slate);
-  console.log(`Esports slate: ${slate.games.length} in window, ${slate.later.length} tier-1 later; projection ${slate.model.fitted ? 'shown' : 'not fitted'}`);
-}
-
-export function composeEsportsSlate(ticker: TickerMatch[], tiers: Map<string, string>, results: MapResult[], now: Date): FeedSlate {
-  const today = chicagoDate(now);
-  const yesterday = shiftChicagoDate(today, -1);
-  const unique = new Map<string, MapResult>();
-  for (const result of results) unique.set(`${result.day}|${result.map}|${result.winner}|${result.loser}`, result);
-  const maps = [...unique.values()];
-  const scored = mapBrier(maps);
-  const show = scored.games >= MIN_SCORED && scored.brier < 0.25;
-  const brierText = scored.brier.toFixed(3);
-  const modelNote = maps.length === 0
-    ? 'Projection is not fitted. No completed tier-1 maps were available from Liquipedia.'
-    : !show
-      ? scored.games < MIN_SCORED
-        ? `Projection is not fitted. Not enough earlier tier-1 maps to test the Glicko-2 chance (${scored.games} scored).`
-        : `Projection is not fitted. The tier-1 Glicko-2 map chance did not beat a coin flip on held-out maps (Brier ${brierText} on ${scored.games} maps).`
-      : `Global Glicko-2 fit on ${maps.length} completed tier-1 maps from Liquipedia S-tier events. Holdout map Brier ${brierText} on ${scored.games} maps where both teams already had 3 maps. A series chance treats every map as an independent draw at that rate. Veto, round simulation, and calibration are not fitted. No market line was used.`;
-  const cache = new Map<string, Map<string, TeamState>>();
-  const ratingsOn = (day: string) => {
-    const cached = cache.get(day);
-    if (cached) return cached;
-    const ratings = ratingsBefore(maps, day);
-    cache.set(day, ratings);
-    return ratings;
-  };
-  const project = (match: TickerMatch): { projection: FeedGame['projection']; note: string; ratings: Map<string, TeamState> | null } => {
-    const tier = tierFor(match.tournament_title, tiers);
-    if (tier !== null && tier !== 'S-Tier') return { projection: null, note: 'Projection is not fitted. This event is not tier-1.', ratings: null };
-    if (!show || tier === null) return { projection: null, note: 'Projection is not fitted.', ratings: null };
-    if (isPlaceholderTeam(match.away.name) || isPlaceholderTeam(match.home.name)) return { projection: null, note: 'Projection is not fitted.', ratings: null };
-    const day = match.start_time.slice(0, 10);
-    const ratings = ratingsOn(day);
-    const projection = projectionFor(match.away.name, ratings.get(match.away.name), match.home.name, ratings.get(match.home.name), match.format_label);
-    if (!projection) return { projection: null, note: 'Projection is not fitted. One of these teams has fewer than 3 tier-1 maps in the fit.', ratings };
-    return { projection, note: '', ratings };
-  };
-  const inWindow = (match: TickerMatch) => {
-    const day = chicagoDate(new Date(match.start_time));
-    return day === today || day === yesterday;
-  };
-  const games = ticker
-    .filter(inWindow)
-    .sort((a, b) => a.start_time.localeCompare(b.start_time))
-    .map((match) => {
-      const projected = project(match);
-      return card(match, projected.projection, projected.note, projected.ratings);
-    });
-  const later = ticker
-    .filter((match) => !inWindow(match) && match.status !== 'final' && tierFor(match.tournament_title, tiers) === 'S-Tier')
-    .filter((match) => {
-      const start = Date.parse(match.start_time);
-      return start >= now.getTime() - 12 * 3_600_000 && start <= now.getTime() + LATER_MS;
-    })
-    .filter((match) => !isPlaceholderTeam(match.away.name) && !isPlaceholderTeam(match.home.name))
-    .sort((a, b) => a.start_time.localeCompare(b.start_time))
-    .slice(0, 16)
-    .map((match) => {
-      const projected = project(match);
-      return card(match, projected.projection, projected.note, projected.ratings);
-    });
-  return {
-    sport: 'esports',
-    source: 'Liquipedia',
-    generated_at: now.toISOString(),
-    timezone: 'America/Chicago',
-    dates: [yesterday, today],
-    games,
-    later,
-    model: {
-      fitted: show,
-      name: show ? 'cs2-glicko2-v0.1' : 'none',
-      note: modelNote,
-      holdout_games: scored.games > 0 ? scored.games : null,
-      holdout_brier: scored.games > 0 ? scored.brier : null,
-    },
-  };
+  const loaded = await Promise.all([
+    loadTitle('Dota 2', () => buildDota(now)),
+    loadTitle('League of Legends', () => buildLol(now)),
+    loadTitle('CS2', () => buildCs(now)),
+  ]);
+  const titles = loaded.filter((title): title is EsportsTitle => title !== null);
+  if (titles.length === 0) throw new Error('Esports slate was not updated');
+  const doc = esportsDocument(titles, now);
+  publish(doc);
+  console.log(`Esports slate: ${titles.map((title) => title.title).join(', ')}; fitted ${doc.model.fitted}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
