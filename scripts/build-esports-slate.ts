@@ -14,7 +14,12 @@ import {
   type EsportsProp,
   type EsportsTitle,
   type SeriesRow,
+  type EsportsCheck,
+  type EsportsProjection,
+  type EsportsStat,
 } from '../src/esports/props.ts';
+import { fitStatCalibration, poolRate, projectCs2, projectGame, type ProjectionBand, type RateRow, type StatCalibration } from '../src/esports/projection.ts';
+import { fnv1a } from '../src/rng.ts';
 
 const OUT = 'public/data/esports.json';
 const PRO_MATCH_PAGES = 3;
@@ -141,6 +146,40 @@ function publish(doc: ReturnType<typeof esportsDocument>): void {
   renameSync(tmp, OUT);
 }
 
+/** Stats each title projects: CS2 kills and headshots over maps 1-2, the other titles per game. */
+export const PROJECTED = { 'Dota 2': ['kills', 'assists'], 'League of Legends': ['kills', 'assists'], CS2: ['kills', 'headshots'] } as const satisfies Record<EsportsTitle['title'], readonly EsportsStat[]>;
+/** Fallback per-game rates when no history loaded at all. */
+const FALLBACK_RATE: Record<string, number> = { kills: 5, assists: 8, headshots: 0.3 };
+
+export interface TitleBuild {
+  title: EsportsTitle;
+  checks: EsportsCheck[];
+}
+
+function publishedProjection(band: ProjectionBand, scope: EsportsProjection['scope']): EsportsProjection {
+  return { scope, mean: Math.round(band.mean * 10) / 10, p10: Math.max(0, Math.round(band.p10)), p50: Math.max(0, Math.round(band.p50)), p90: Math.max(0, Math.round(band.p90)) };
+}
+
+function checkOf(title: EsportsTitle['title'], stat: EsportsStat, calibration: StatCalibration): EsportsCheck {
+  return { title, stat, rows: calibration.rows, coverage: Number.isFinite(calibration.coverage) ? calibration.coverage : 0, mae: Number.isFinite(calibration.mae) ? calibration.mae : 0, dispersion: calibration.dispersion, bias: calibration.bias };
+}
+
+/** One game a row: a player's value of one stat, for a per-game projection. */
+function perGame(rows: readonly { id: string; start: number; value: number | null }[]): RateRow[] {
+  return rows.filter((row) => row.value !== null && Number.isFinite(row.value)).map((row) => ({ id: row.id, start: row.start, units: 1, value: row.value as number }));
+}
+
+/** Per-game calibration for each projected stat, from every loaded player's earlier games. */
+function gameCalibrations(stats: readonly EsportsStat[], players: readonly (readonly { id: string; start: number; values: Partial<Record<EsportsStat, number | null>> }[])[]) {
+  const out = new Map<EsportsStat, { prior: number; calibration: StatCalibration }>();
+  for (const stat of stats) {
+    const rows = players.map((games) => perGame(games.map((game) => ({ id: game.id, start: game.start, value: game.values[stat] ?? null }))));
+    const prior = poolRate(rows, FALLBACK_RATE[stat] ?? 5);
+    out.set(stat, { prior, calibration: fitStatCalibration(rows, prior, 3) });
+  }
+  return out;
+}
+
 interface ProGame {
   id: number;
   startMs: number;
@@ -202,22 +241,7 @@ function readDotaHistory(payload: unknown): DotaHist[] {
   return rows;
 }
 
-function dotaProps(
-  history: readonly DotaHist[],
-  listed: ReadonlySet<number>,
-  matchId: number,
-  startMs: number,
-  played: Record<(typeof DOTA_STATS)[number], number | null>,
-): EsportsProp[] {
-  const kept = history.filter((row) => listed.has(row.matchId));
-  return DOTA_STATS.map((stat) => ({
-    stat,
-    mean: earlierMean(kept.map((row) => ({ id: String(row.matchId), start: row.start, value: row[stat] })), String(matchId), startMs),
-    actual: played[stat],
-  }));
-}
-
-async function buildDota(now: Date): Promise<EsportsTitle | null> {
+async function buildDota(now: Date): Promise<TitleBuild | null> {
   const listed = new Set<number>();
   const games: ProGame[] = [];
   const seen = new Set<number>();
@@ -242,7 +266,7 @@ async function buildDota(now: Date): Promise<EsportsTitle | null> {
   }
   const shown = selectForTitle(games, now, SHOWN_MATCH_DETAILS);
   const historyCache = new Map<number, DotaHist[]>();
-  const matches: EsportsMatch[] = [];
+  const pending: { game: ProGame; match: EsportsMatch; players: { name: string; team: string; accountId: number | null; played: Record<(typeof DOTA_STATS)[number], number | null> }[] }[] = [];
   for (const game of shown) {
     let detail: unknown;
     try {
@@ -264,39 +288,50 @@ async function buildDota(now: Date): Promise<EsportsTitle | null> {
       players.push({ accountId, name, team: player.player_slot < 128 ? game.radiant : game.dire, played });
     }
     if (players.length === 0) continue;
-    const built: EsportsPlayer[] = [];
     for (const player of players) {
-      let history: DotaHist[] = [];
-      if (player.accountId !== null) {
-        const cached = historyCache.get(player.accountId);
-        if (cached) history = cached;
-        else {
-          try {
-            history = readDotaHistory(await dotaGet(`/players/${player.accountId}/matches?limit=${HISTORY_LIMIT}`));
-          } catch (error) {
-            console.error(`esports Dota 2 player ${player.accountId} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
-            history = [];
-          }
-          historyCache.set(player.accountId, history);
-        }
+      if (player.accountId === null || historyCache.has(player.accountId)) continue;
+      try {
+        historyCache.set(player.accountId, readDotaHistory(await dotaGet(`/players/${player.accountId}/matches?limit=${HISTORY_LIMIT}`)));
+      } catch (error) {
+        console.error(`esports Dota 2 player ${player.accountId} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
+        historyCache.set(player.accountId, []);
       }
-      built.push({ name: player.name, team: player.team, props: dotaProps(history, listed, game.id, game.startMs, player.played) });
     }
     const teams: [string, string] = [game.radiant, game.dire];
     const radiantWin = body && typeof body.radiant_win === 'boolean' ? body.radiant_win : game.radiantWin;
-    matches.push({
-      id: String(game.id),
-      start_time: game.start_time,
-      teams,
-      competition: game.league,
-      status: 'finished',
-      winner: sideWinner(teams, radiantWin),
-      score: null,
-      players: built,
-    });
+    pending.push({ game, players, match: { id: String(game.id), start_time: game.start_time, teams, competition: game.league, status: 'finished', winner: sideWinner(teams, radiantWin), score: null, players: [] } });
   }
-  if (matches.length === 0) return null;
-  return { title: 'Dota 2', source: 'OpenDota', matches };
+  if (pending.length === 0) return null;
+  // Only pro games count toward a rate: a player's public games are a different game.
+  const kept = (accountId: number | null) => (accountId === null ? [] : (historyCache.get(accountId) ?? []).filter((row) => listed.has(row.matchId)));
+  const asGames = (rows: readonly DotaHist[]) => rows.map((row) => ({ id: String(row.matchId), start: row.start, values: { kills: row.kills, assists: row.assists } }));
+  const calibrations = gameCalibrations(PROJECTED['Dota 2'], [...historyCache.keys()].map((id) => asGames(kept(id))));
+  const matches: EsportsMatch[] = [];
+  for (const { game, match, players } of pending) {
+    const built: EsportsPlayer[] = players.map((player) => {
+      const history = kept(player.accountId);
+      return {
+        name: player.name,
+        team: player.team,
+        props: PROJECTED['Dota 2'].map((stat) => {
+          const fit = calibrations.get(stat)!;
+          const rows = perGame(history.map((row) => ({ id: String(row.matchId), start: row.start, value: row[stat] })));
+          const projected = projectGame(rows, game.startMs, String(game.id), fit.prior, fit.calibration, fnv1a(`dota:${game.id}:${player.name}:${stat}`));
+          return {
+            stat,
+            mean: earlierMean(history.map((row) => ({ id: String(row.matchId), start: row.start, value: row[stat] })), String(game.id), game.startMs),
+            actual: player.played[stat],
+            projection: publishedProjection(projected.band, 'game'),
+          };
+        }),
+      };
+    });
+    matches.push({ ...match, players: built });
+  }
+  return {
+    title: { title: 'Dota 2', source: 'OpenDota', matches },
+    checks: PROJECTED['Dota 2'].map((stat) => checkOf('Dota 2', stat, calibrations.get(stat)!.calibration)),
+  };
 }
 
 interface LolFlat {
@@ -427,14 +462,20 @@ function lolValue(row: LolFlat, stat: (typeof LOL_STATS)[number]): number | null
   return stat === 'kills' ? row.kills : stat === 'deaths' ? row.deaths : stat === 'assists' ? row.assists : row.cs;
 }
 
-function lolProps(player: string, game: LolGame, rows: readonly LolFlat[]): EsportsProp[] {
+function lolProps(player: string, game: LolGame, rows: readonly LolFlat[], calibrations: ReturnType<typeof gameCalibrations>): EsportsProp[] {
   const history = rows.filter((row) => row.player === player);
   const played = history.find((row) => row.gameId === game.id) ?? null;
-  return LOL_STATS.map((stat) => ({
-    stat,
-    mean: earlierMean(history.map((row) => ({ id: row.gameId, start: row.startMs, value: lolValue(row, stat) })), game.id, game.startMs),
-    actual: played ? lolValue(played, stat) : null,
-  }));
+  return PROJECTED['League of Legends'].map((stat) => {
+    const fit = calibrations.get(stat)!;
+    const games = history.map((row) => ({ id: row.gameId, start: row.startMs, value: lolValue(row, stat) }));
+    const projected = projectGame(perGame(games), game.startMs, game.id, fit.prior, fit.calibration, fnv1a(`lol:${game.id}:${player}:${stat}`));
+    return {
+      stat,
+      mean: earlierMean(games, game.id, game.startMs),
+      actual: played ? lolValue(played, stat) : null,
+      projection: publishedProjection(projected.band, 'game'),
+    };
+  });
 }
 
 function chicagoNextStart(now: Date): string {
@@ -475,7 +516,7 @@ async function lolPlayerHistory(players: readonly string[]): Promise<LolFlat[]> 
   return rows;
 }
 
-async function buildLol(now: Date): Promise<EsportsTitle | null> {
+async function buildLol(now: Date): Promise<TitleBuild | null> {
   const upper = chicagoNextStart(now);
   const first = await cargoRows(`ScoreboardGames.DateTime_UTC >= '2025-01-01 00:00:00' AND ScoreboardGames.DateTime_UTC < '${upper}'`);
   if (first === null) throw new Error('Leaguepedia request failed');
@@ -489,9 +530,15 @@ async function buildLol(now: Date): Promise<EsportsTitle | null> {
   }
   const shown = selectForTitle(groupLol(rows), now, null);
   const history = dedupeLol([...rows, ...(await lolPlayerHistory(shown.flatMap((game) => game.players.map((player) => player.name))))]);
+  const byPlayer = new Map<string, LolFlat[]>();
+  for (const row of history) byPlayer.set(row.player, [...(byPlayer.get(row.player) ?? []), row]);
+  const calibrations = gameCalibrations(
+    PROJECTED['League of Legends'],
+    [...byPlayer.values()].map((games) => games.map((row) => ({ id: row.gameId, start: row.startMs, values: { kills: row.kills, assists: row.assists } }))),
+  );
   const matches: EsportsMatch[] = [];
   for (const game of shown) {
-    const players = game.players.map((player) => ({ name: player.name, team: player.team, props: lolProps(player.name, game, history) }));
+    const players = game.players.map((player) => ({ name: player.name, team: player.team, props: lolProps(player.name, game, history, calibrations) }));
     if (players.length === 0) continue;
     // Leaguepedia scoreboards are filed after a game ends.
     matches.push({
@@ -506,7 +553,10 @@ async function buildLol(now: Date): Promise<EsportsTitle | null> {
     });
   }
   if (matches.length === 0) return null;
-  return { title: 'League of Legends', source: 'Leaguepedia', matches };
+  return {
+    title: { title: 'League of Legends', source: 'Leaguepedia', matches },
+    checks: PROJECTED['League of Legends'].map((stat) => checkOf('League of Legends', stat, calibrations.get(stat)!.calibration)),
+  };
 }
 
 interface CsTeam {
@@ -656,6 +706,8 @@ interface CsHist {
   id: string;
   start: number;
   maps: number;
+  /** Rounds played across the series. */
+  rounds: number | null;
   kills: number | null;
   headshots: number | null;
   deaths: number | null;
@@ -677,6 +729,7 @@ function readCsHistory(payload: unknown): CsHist[] {
       id: String(id),
       start,
       maps: Array.isArray(row.for_game_ids) ? row.for_game_ids.length : 0,
+      rounds: typeof row.rounds_count === 'number' && Number.isFinite(row.rounds_count) && row.rounds_count > 0 ? row.rounds_count : null,
       kills: value('kills'),
       headshots: value('headshots'),
       deaths: value('death'),
@@ -699,18 +752,41 @@ function csTotal(row: CsHist, stat: (typeof CS2_STATS)[number]): number | null {
   return stat === 'kills' ? row.kills : stat === 'headshots' ? row.headshots : stat === 'deaths' ? row.deaths : row.assists;
 }
 
-function csProps(history: readonly CsHist[], matchId: string, startMs: number): EsportsProp[] {
+/** Rounds-weighted rows of one stat: a series counts by the rounds it ran. Rows without a round count are left out. */
+export function perRound(history: readonly CsHist[], stat: (typeof CS2_STATS)[number]): RateRow[] {
+  const rows: RateRow[] = [];
+  for (const row of history) {
+    const total = csTotal(row, stat);
+    if (row.rounds === null || total === null) continue;
+    rows.push({ id: row.id, start: row.start, units: row.rounds, value: total });
+  }
+  return rows;
+}
+
+interface CsFit {
+  priors: { kpr: number; hspr: number };
+  kills: StatCalibration;
+  headshots: StatCalibration;
+}
+
+function csProps(history: readonly CsHist[], matchId: string, startMs: number, fit: CsFit, finished: boolean, seed: string): EsportsProp[] {
   const played = history.find((row) => row.id === matchId) ?? null;
-  return CS2_STATS.map((stat) => {
+  const projected = projectCs2(perRound(history, 'kills'), perRound(history, 'headshots'), startMs, matchId, fit.priors, { kills: fit.kills, headshots: fit.headshots }, fnv1a(seed));
+  return PROJECTED.CS2.map((stat) => {
     const rows: SeriesRow[] = history.map((row) => ({ id: row.id, start: row.start, maps: row.maps, total: csTotal(row, stat) }));
-    // This series on the mean's scale: its total over the maps played.
+    // This series on the average's scale: its total over the maps played.
     const total = played ? csTotal(played, stat) : null;
-    const actual = played && played.maps > 0 && total !== null ? Number((total / played.maps).toFixed(2)) : null;
-    return { stat, mean: cs2PerMapMean(rows, matchId, startMs), actual };
+    const actual = finished && played && played.maps > 0 && total !== null ? Number((total / played.maps).toFixed(2)) : null;
+    return {
+      stat,
+      mean: cs2PerMapMean(rows, matchId, startMs),
+      ...(finished ? { actual } : {}),
+      projection: publishedProjection(stat === 'kills' ? projected.kills : projected.headshots, 'maps12'),
+    };
   });
 }
 
-async function buildCs(now: Date): Promise<EsportsTitle | null> {
+async function buildCs(now: Date): Promise<TitleBuild | null> {
   const tomorrow = shiftChicagoDate(chicagoDate(now), 1);
   let cutoff = Date.parse(`${tomorrow}T06:00:00Z`);
   for (const hour of [5, 6, 4, 7]) {
@@ -737,6 +813,11 @@ async function buildCs(now: Date): Promise<EsportsTitle | null> {
   const histories = new Map<string, CsHist[]>();
   const historyRows = await mapPool([...needed], 4, async (slug) => ({ slug, rows: await csHistory(slug) }));
   for (const row of historyRows) histories.set(row.slug, row.rows);
+  // Rates and their calibration come from every loaded player's earlier series.
+  const killRows = [...histories.values()].map((rows) => perRound(rows, 'kills'));
+  const hsRows = [...histories.values()].map((rows) => perRound(rows, 'headshots'));
+  const priors = { kpr: poolRate(killRows, 0.68), hspr: poolRate(hsRows, 0.3) };
+  const fit: CsFit = { priors, kills: fitStatCalibration(killRows, priors.kpr, 120), headshots: fitStatCalibration(hsRows, priors.hspr, 120) };
   const built: EsportsMatch[] = [];
   for (const match of shown) {
     const players: EsportsPlayer[] = [];
@@ -753,8 +834,8 @@ async function buildCs(now: Date): Promise<EsportsTitle | null> {
             });
       for (const player of lineup) {
         seen.add(player.slug);
-        const props = csProps(histories.get(player.slug) ?? [], match.id, match.startMs);
-        players.push({ name: player.name, team: team.name, props: match.status === 'finished' ? props : props.map(({ stat, mean }) => ({ stat, mean })) });
+        const props = csProps(histories.get(player.slug) ?? [], match.id, match.startMs, fit, match.status === 'finished', `cs2:${match.id}:${player.slug}`);
+        players.push({ name: player.name, team: team.name, props });
       }
     }
     if (players.length === 0) continue;
@@ -768,20 +849,22 @@ async function buildCs(now: Date): Promise<EsportsTitle | null> {
     });
   }
   if (built.length === 0) return null;
-  return { title: 'CS2', source: 'BO3.gg', matches: built };
+  return { title: { title: 'CS2', source: 'BO3.gg', matches: built }, checks: [checkOf('CS2', 'kills', fit.kills), checkOf('CS2', 'headshots', fit.headshots)] };
 }
 
-async function loadTitle(name: string, build: () => Promise<EsportsTitle | null>): Promise<EsportsTitle | null> {
+async function loadTitle(name: string, build: () => Promise<TitleBuild | null>): Promise<TitleBuild | null> {
   try {
-    const title = await build();
-    if (!title || title.matches.length === 0) {
+    const result = await build();
+    if (!result || result.title.matches.length === 0) {
       console.error(`esports ${name} was not loaded: no player rows`);
       return null;
     }
+    const title = result.title;
     const players = title.matches.reduce((sum, match) => sum + match.players.length, 0);
     const fitted = title.matches.reduce((sum, match) => sum + match.players.reduce((inner, player) => inner + player.props.filter((prop) => prop.mean !== null).length, 0), 0);
-    console.log(`esports ${name}: ${title.matches.length} matches, ${players} players, ${fitted} fitted stats`);
-    return title;
+    const checks = result.checks.map((check) => `${check.stat} ${check.rows} rows, inside ${Math.round(check.coverage * 100)}%, spread ${check.dispersion}, bias ${check.bias}`).join('; ');
+    console.log(`esports ${name}: ${title.matches.length} matches, ${players} players, ${fitted} fitted averages; ${checks}`);
+    return result;
   } catch (error) {
     console.error(`esports ${name} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
     return null;
@@ -794,9 +877,10 @@ export async function buildEsportsSlate(now = new Date()): Promise<void> {
     loadTitle('League of Legends', () => buildLol(now)),
     loadTitle('CS2', () => buildCs(now)),
   ]);
-  const titles = loaded.filter((title): title is EsportsTitle => title !== null);
+  const built = loaded.filter((result): result is TitleBuild => result !== null);
+  const titles = built.map((result) => result.title);
   if (titles.length === 0) throw new Error('Esports slate was not updated');
-  const doc = esportsDocument(titles, now);
+  const doc = esportsDocument(titles, now, built.flatMap((result) => result.checks));
   publish(doc);
   console.log(`Esports slate: ${titles.map((title) => title.title).join(', ')}; fitted ${doc.model.fitted}`);
 }

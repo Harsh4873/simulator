@@ -1323,6 +1323,7 @@ const CALIBRATION_GROUPS: readonly { group: PropCalibrationGroup; label: string 
   { group: 'points', label: 'points and point combos' },
   { group: 'rebAst', label: 'rebounds, assists and R+A' },
   { group: 'tpm', label: 'threes' },
+  { group: 'defense', label: 'steals and blocks' },
 ];
 
 export interface CalibrationStatus {

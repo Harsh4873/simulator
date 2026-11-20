@@ -173,7 +173,7 @@ export function serializePicks(picks: PicksFile): string {
   return `${JSON.stringify(picks)}\n`;
 }
 
-const CALIBRATION_GROUPS = ['points', 'rebAst', 'tpm'] as const;
+const CALIBRATION_GROUPS = ['points', 'rebAst', 'tpm', 'defense'] as const;
 
 function calibrationSummary(map: ReadonlyMap<PropCalibrationGroup, PropCalibrationArtifact> | undefined): PicksFile['calibration'] {
   if (!map?.size) return undefined;

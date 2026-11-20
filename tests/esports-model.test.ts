@@ -73,11 +73,13 @@ function title(mean: number | null, start: string): EsportsTitle {
 test('a price or a win chance is rejected', () => {
   const now = new Date('2026-11-20T18:00:00Z');
   const doc = esportsDocument([title(11.25, '2026-11-20T18:00:00Z')], now);
-  assert.equal(doc.model.name, 'esports-player-means-v1');
+  assert.equal(doc.model.name, 'esports-player-projections-v1');
+  assert.ok(parseEsportsDocument(JSON.stringify({ ...doc, model: { ...doc.model, name: 'esports-player-means-v1' } })), 'files from before projections still parse');
   assert.equal(doc.model.fitted, true);
-  assert.match(doc.model.note, /arithmetic mean/);
-  assert.match(doc.model.note, /map count/);
-  assert.match(doc.model.note, /8/);
+  assert.match(doc.model.note, /own rate from his earlier games/);
+  assert.match(doc.model.note, /kills and headshots per round over maps 1 and 2/);
+  assert.match(doc.model.note, /calibrated/);
+  assert.match(doc.model.note, /never part of its own projection/);
   assert.match(doc.model.note, /match winner/);
   assert.match(doc.model.note, /posted line/);
   const raw = JSON.stringify(doc);
@@ -112,7 +114,9 @@ test('a CS2 lineup is the five who played most recently, and a result names the 
   assert.deepEqual(csResult({ status: 'current', teams, score: [1, 0], winnerId: null }), { status: 'live', winner: null, score: [1, 0] });
   assert.deepEqual(csResult({ status: 'upcoming', teams, score: null, winnerId: null }), { status: 'upcoming', winner: null, score: null });
   assert.equal(csResult({ status: 'finished', teams, score: [2, 0], winnerId: 12 }).winner, null);
-  assert.equal(resultText({ status: 'finished', teams: ['GamerLegion', 'BIG'], winner: 'GamerLegion', score: [2, 0] }), 'Final · GamerLegion won 2-0');
-  assert.equal(resultText({ status: 'live', teams: ['GamerLegion', 'BIG'], winner: null, score: [1, 1] }), 'Live · GamerLegion 1-1 BIG');
-  assert.equal(resultText({ teams: ['GamerLegion', 'BIG'] }), null);
+  // The card shows players, not a team result: a status word and nothing about who won.
+  assert.equal(resultText({ status: 'finished' }), 'Final');
+  assert.equal(resultText({ status: 'live' }), 'Live');
+  assert.equal(resultText({ status: 'upcoming' }), 'Upcoming');
+  assert.equal(resultText({}), null);
 });

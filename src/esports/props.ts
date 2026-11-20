@@ -2,10 +2,12 @@ import { chicagoDate, formatTip, shiftChicagoDate } from '../date.ts';
 import { escapeHtml } from '../slate.ts';
 import { CS2_STATS, DOTA_STATS, LOL_STATS, MIN_GAMES } from './config.ts';
 
-export const ESPORTS_MODEL_NAME = 'esports-player-means-v1';
+export const ESPORTS_MODEL_NAME = 'esports-player-projections-v1';
+/** Files published before projections carry this name and still parse. */
+export const LEGACY_ESPORTS_MODEL_NAME = 'esports-player-means-v1';
 
 export const ESPORTS_MODEL_NOTE =
-  `Each number is that player's arithmetic mean of the stat on earlier games, and the displayed game is excluded. Dota 2 and League of Legends treat one game as one map. CS2 divides each earlier series total by that series' map count, then takes the mean of those per-map values. A stat with fewer than ${MIN_GAMES} earlier games is not fitted. No match winner and no posted line were used.`;
+  `Each projection is that player's own rate from his earlier games, newest weighted most and pulled toward the field when he has few: CS2 kills and headshots per round over maps 1 and 2 (each map 13 to about 30 rounds), Dota 2 and League of Legends per game. The displayed game is never part of its own projection. The ranges are calibrated on the same players' earlier games so 8 in 10 results land inside, and the plain average is shown under each projection. No match winner and no posted line were used.`;
 
 export type EsportsStat = (typeof DOTA_STATS)[number] | (typeof LOL_STATS)[number] | (typeof CS2_STATS)[number];
 
@@ -15,6 +17,27 @@ export interface EsportsProp {
   mean: number | null;
   /** The player's value in this game once it is played, on the same scale as the mean (per map for CS2). */
   actual?: number | null;
+  /** Calibrated projection: CS2 over maps 1-2, Dota 2 and League of Legends for this game. */
+  projection?: EsportsProjection | null;
+}
+
+export interface EsportsProjection {
+  scope: 'maps12' | 'game';
+  mean: number;
+  p10: number;
+  p50: number;
+  p90: number;
+}
+
+/** How a stat's projection did on the same players' earlier games. */
+export interface EsportsCheck {
+  title: 'Dota 2' | 'League of Legends' | 'CS2';
+  stat: EsportsStat;
+  rows: number;
+  coverage: number;
+  mae: number;
+  dispersion: number;
+  bias: number;
 }
 
 export interface EsportsPlayer {
@@ -46,9 +69,10 @@ export interface EsportsTitle {
 }
 
 export interface EsportsModel {
-  name: typeof ESPORTS_MODEL_NAME;
+  name: typeof ESPORTS_MODEL_NAME | typeof LEGACY_ESPORTS_MODEL_NAME;
   fitted: boolean;
   note: string;
+  checks?: EsportsCheck[];
 }
 
 export interface EsportsDocument {
@@ -167,7 +191,7 @@ function anyMean(titles: readonly EsportsTitle[]): boolean {
   return false;
 }
 
-export function esportsDocument(titles: readonly EsportsTitle[], now: Date): EsportsDocument {
+export function esportsDocument(titles: readonly EsportsTitle[], now: Date, checks: readonly EsportsCheck[] = []): EsportsDocument {
   const today = chicagoDate(now);
   const yesterday = shiftChicagoDate(today, -1);
   return {
@@ -179,6 +203,7 @@ export function esportsDocument(titles: readonly EsportsTitle[], now: Date): Esp
       name: ESPORTS_MODEL_NAME,
       fitted: anyMean(titles),
       note: ESPORTS_MODEL_NOTE,
+      ...(checks.length ? { checks: checks.map((check) => ({ ...check })) } : {}),
     },
     titles: titles.map((title) => ({
       title: title.title,
@@ -194,7 +219,12 @@ export function esportsDocument(titles: readonly EsportsTitle[], now: Date): Esp
         players: match.players.map((player) => ({
           name: player.name,
           team: player.team,
-          props: player.props.map((prop) => ({ stat: prop.stat, mean: prop.mean, ...(prop.actual !== undefined ? { actual: prop.actual } : {}) })),
+          props: player.props.map((prop) => ({
+            stat: prop.stat,
+            mean: prop.mean,
+            ...(prop.actual !== undefined ? { actual: prop.actual } : {}),
+            ...(prop.projection !== undefined ? { projection: prop.projection } : {}),
+          })),
         })),
       })),
     })),
@@ -208,9 +238,36 @@ function propOf(value: unknown): EsportsProp | null {
   if (!stat || !STATS.has(stat)) return null;
   if (row.mean !== null && finite(row.mean) === null) return null;
   const prop: EsportsProp = { stat: stat as EsportsStat, mean: row.mean === null ? null : finite(row.mean) };
-  if (row.actual === undefined) return prop;
-  if (row.actual !== null && (finite(row.actual) === null || (row.actual as number) < 0)) return null;
-  return { ...prop, actual: row.actual === null ? null : finite(row.actual) };
+  if (row.actual !== undefined) {
+    if (row.actual !== null && (finite(row.actual) === null || (row.actual as number) < 0)) return null;
+    prop.actual = row.actual === null ? null : finite(row.actual);
+  }
+  if (row.projection !== undefined) {
+    const projection = projectionOf(row.projection);
+    if (projection === undefined) return null;
+    prop.projection = projection;
+  }
+  return prop;
+}
+
+function projectionOf(value: unknown): EsportsProjection | null | undefined {
+  if (value === null) return null;
+  const row = record(value);
+  if (!row || (row.scope !== 'maps12' && row.scope !== 'game')) return undefined;
+  const mean = finite(row.mean);
+  const p10 = finite(row.p10);
+  const p50 = finite(row.p50);
+  const p90 = finite(row.p90);
+  if (mean === null || p10 === null || p50 === null || p90 === null || p10 < 0 || !(p10 <= p50 && p50 <= p90)) return undefined;
+  return { scope: row.scope, mean, p10, p50, p90 };
+}
+
+function checkOf(value: unknown): EsportsCheck | null {
+  const row = record(value);
+  if (!row || typeof row.title !== 'string' || !TITLES.has(row.title as EsportsTitle['title']) || typeof row.stat !== 'string' || !STATS.has(row.stat)) return null;
+  const numbers = [row.rows, row.coverage, row.mae, row.dispersion, row.bias];
+  if (!numbers.every((item) => finite(item) !== null) || !Number.isInteger(row.rows) || (row.coverage as number) < 0 || (row.coverage as number) > 1) return null;
+  return { title: row.title as EsportsCheck['title'], stat: row.stat as EsportsStat, rows: row.rows as number, coverage: row.coverage as number, mae: row.mae as number, dispersion: row.dispersion as number, bias: row.bias as number };
 }
 
 const STATUSES = new Set<EsportsStatus>(['upcoming', 'live', 'finished']);
@@ -292,11 +349,19 @@ function titleOf(value: unknown): EsportsTitle | null {
 function modelOf(value: unknown): EsportsModel | null {
   const row = record(value);
   if (!row || (row.fitted !== true && row.fitted !== false)) return null;
-  if (row.name !== ESPORTS_MODEL_NAME) return null;
+  if (row.name !== ESPORTS_MODEL_NAME && row.name !== LEGACY_ESPORTS_MODEL_NAME) return null;
   const note = text(row.note);
   if (!note) return null;
   const fitted = row.fitted === true;
-  return { name: ESPORTS_MODEL_NAME, fitted, note };
+  if (row.checks === undefined) return { name: row.name, fitted, note };
+  if (!Array.isArray(row.checks)) return null;
+  const checks: EsportsCheck[] = [];
+  for (const item of row.checks) {
+    const check = checkOf(item);
+    if (!check) return null;
+    checks.push(check);
+  }
+  return { name: row.name, fitted, note, checks };
 }
 
 /** Rejects a file that carries a price, a line, or a win chance, or that is not a player-mean document. */
@@ -348,32 +413,37 @@ function whenLabel(iso: string, now: Date): string {
   return formatTip(iso);
 }
 
-/** The played value under a mean: whole counts as they are, CS2 per-map values to one decimal. */
+/** The played value under a projection: whole counts as they are, CS2 per-map values to one decimal. */
 function actualText(actual: number, perMap: boolean): string {
   const shown = Number.isInteger(actual) ? String(actual) : actual.toFixed(1);
   return perMap ? `${shown} a map` : shown;
 }
 
+const SCOPE_LABEL: Record<EsportsProjection['scope'], string> = { maps12: 'maps 1-2', game: 'this game' };
+
+function renderTile(prop: EsportsProp, perMap: boolean): string {
+  const label = STAT_LABEL[prop.stat];
+  const played =
+    typeof prop.actual === 'number' && Number.isFinite(prop.actual)
+      ? `<p class="tile-sub" data-actual>Played ${escapeHtml(actualText(prop.actual, perMap))}</p>`
+      : '';
+  const average = prop.mean === null ? 'Average not fitted' : `Average ${formatStat(prop.mean)}${perMap ? ' a map' : ' a game'}`;
+  if (prop.projection) {
+    const projection = prop.projection;
+    return `<div class="tile" data-projection><p class="tile-label">${escapeHtml(label)}, ${escapeHtml(SCOPE_LABEL[projection.scope])}</p><p class="tile-value">${escapeHtml(String(Math.round(projection.p50)))}</p><p class="tile-sub">${escapeHtml(`${Math.round(projection.p10)} to ${Math.round(projection.p90)}`)}</p><p class="tile-sub">${escapeHtml(average)}</p>${played}</div>`;
+  }
+  return `<div class="tile"><p class="tile-label">${escapeHtml(label)}</p><p class="tile-value">${escapeHtml(formatStat(prop.mean))}</p>${played}</div>`;
+}
+
 function renderPlayer(player: EsportsPlayer, perMap: boolean): string {
-  const tiles = player.props.map((prop) => {
-    const shown = formatStat(prop.mean);
-    const played =
-      typeof prop.actual === 'number' && Number.isFinite(prop.actual)
-        ? `<p class="tile-sub" data-actual>Played ${escapeHtml(actualText(prop.actual, perMap))}</p>`
-        : '';
-    return `<div class="tile"><p class="tile-label">${escapeHtml(STAT_LABEL[prop.stat])}</p><p class="tile-value">${escapeHtml(shown)}</p>${played}</div>`;
-  }).join('');
+  const tiles = player.props.map((prop) => renderTile(prop, perMap)).join('');
   return `<div class="panel-section"><p class="who-name">${escapeHtml(player.name)}</p><p class="who-team">${escapeHtml(player.team)}</p><div class="tiles">${tiles}</div></div>`;
 }
 
-/** "Final · Team A won 2-1", "Live · 1-0", "Upcoming". A file without result fields shows nothing extra. */
-export function resultText(match: Pick<EsportsMatch, 'status' | 'winner' | 'score' | 'teams'>): string | null {
+/** Upcoming, live or final. Files from before the status field show nothing extra. */
+export function resultText(match: Pick<EsportsMatch, 'status'>): string | null {
   if (!match.status) return null;
-  const score = match.score ? `${match.score[0]}-${match.score[1]}` : null;
-  if (match.status === 'upcoming') return 'Upcoming';
-  if (match.status === 'live') return score ? `Live · ${match.teams[0]} ${score} ${match.teams[1]}` : 'Live';
-  if (match.winner) return score ? `Final · ${match.winner} won ${match.winner === match.teams[0] ? score : `${match.score![1]}-${match.score![0]}`}` : `Final · ${match.winner} won`;
-  return score ? `Final · ${match.teams[0]} ${score} ${match.teams[1]}` : 'Final';
+  return match.status === 'upcoming' ? 'Upcoming' : match.status === 'live' ? 'Live' : 'Final';
 }
 
 function renderMatch(match: EsportsMatch, now: Date, perMap: boolean): string {
@@ -383,14 +453,26 @@ function renderMatch(match: EsportsMatch, now: Date, perMap: boolean): string {
   // Players of each side together, in the order the teams are listed.
   const ordered = [...match.players].sort((a, b) => Number(a.team !== match.teams[0]) - Number(b.team !== match.teams[0]));
   const players = ordered.map((player) => renderPlayer(player, perMap)).join('');
-  const means = match.status === 'finished' ? '<p class="note">Big numbers are means from earlier games. "Played" is this game.</p>' : '';
-  return `<article class="game-card"><h2 class="matchup">${escapeHtml(match.teams[0])} <span class="at">vs</span> ${escapeHtml(match.teams[1])}</h2>${where}<p class="status">${escapeHtml(whenLabel(match.start_time, now))}</p>${resultHtml}${means}${players}</article>`;
+  return `<article class="game-card"><h2 class="matchup">${escapeHtml(match.teams[0])} <span class="at">vs</span> ${escapeHtml(match.teams[1])}</h2>${where}<p class="status">${escapeHtml(whenLabel(match.start_time, now))}</p>${resultHtml}${players}</article>`;
+}
+
+/** How the projections did on the same players' earlier games, one line per title. */
+function checksMarkup(checks: readonly EsportsCheck[] | undefined): string {
+  if (!checks?.length) return '';
+  const titles = [...new Set(checks.map((check) => check.title))];
+  const parts = titles.map((title) => {
+    const mine = checks.filter((check) => check.title === title && check.rows > 0);
+    const rows = Math.max(...mine.map((check) => check.rows), 0);
+    const coverage = mine.map((check) => `${STAT_LABEL[check.stat].toLowerCase()} ${Math.round(check.coverage * 100)}%`).join(', ');
+    return `${title}: ${rows.toLocaleString('en-US')} earlier ${title === 'CS2' ? 'series' : 'games'}, inside the range ${coverage}`;
+  });
+  return `<p class="note" data-checks>Checked by projecting each earlier game from the ones before it. ${escapeHtml(parts.join('. '))}.</p>`;
 }
 
 export function renderEsports(doc: EsportsDocument, now: Date): string {
   const sources = doc.titles.map((title) => title.source).join(', ');
   const built = `Published ${formatTip(doc.generated_at)} · ${sources}`;
-  const head = `<div class="slate-head"><p class="slate-meta">Esports</p><p class="status captured">${escapeHtml(built)}</p><p class="note">${escapeHtml(doc.model.note)}</p></div>`;
+  const head = `<div class="slate-head"><p class="slate-meta">Esports</p><p class="status captured">${escapeHtml(built)}</p><p class="note">${escapeHtml(doc.model.note)}</p>${checksMarkup(doc.model.checks)}</div>`;
   const sections = doc.titles.map((title) => {
     const cards = title.matches.map((match) => renderMatch(match, now, title.title === 'CS2')).join('');
     return `<section class="slate-day"><h2 class="slate-title">${escapeHtml(title.title)}</h2><div class="slate">${cards}</div></section>`;

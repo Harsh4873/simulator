@@ -134,18 +134,23 @@ test('the rest of the week shows under its own days, with records, after an empt
   assert.ok(parseFeedSlate(JSON.stringify(slate(now)), 'nfl'));
 });
 
-test('a finished esports game shows its result and each player\'s played value under the mean', () => {
+test('a finished esports game shows each player\'s projection and what he did, and no team result', () => {
   const now = new Date();
   const doc = JSON.parse(esportsFixture(now)) as { titles: { matches: Record<string, unknown>[] }[] };
   const match = doc.titles[0]!.matches[0]!;
   Object.assign(match, { status: 'finished', winner: 'BIG', score: [1, 2] });
   (match.players as { props: Record<string, unknown>[] }[])[0]!.props[0]!.actual = 21.5;
+  (match.players as { props: Record<string, unknown>[] }[])[0]!.props[0]!.projection = { scope: 'maps12', mean: 36.4, p10: 26, p50: 36, p90: 47 };
   const parsed = parseEsportsDocument(JSON.stringify(doc));
   assert.ok(parsed);
   const html = renderEsports(parsed, now);
-  assert.match(html, /Final · BIG won 2-1/);
+  assert.match(html, /Kills, maps 1-2<\/p><p class="tile-value">36<\/p><p class="tile-sub">26 to 47<\/p><p class="tile-sub">Average 18\.2 a map/);
   assert.match(html, /Played 21\.5 a map/);
-  assert.match(html, /18\.2/);
+  assert.match(html, /data-result>Final</);
+  assert.doesNotMatch(html, /won/);
+  const badProjection = JSON.parse(JSON.stringify(doc));
+  badProjection.titles[0].matches[0].players[0].props[0].projection.p10 = 50;
+  assert.equal(parseEsportsDocument(JSON.stringify(badProjection)), null);
   const wrongWinner = JSON.parse(JSON.stringify(doc));
   wrongWinner.titles[0].matches[0].winner = 'Somebody Else';
   assert.equal(parseEsportsDocument(JSON.stringify(wrongWinner)), null);

@@ -39,8 +39,8 @@ import {
 } from '../src/prop-calibration.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const GROUPS: readonly PropCalibrationGroup[] = ['points', 'rebAst', 'tpm'];
-const GROUP_LABEL: Record<PropCalibrationGroup, string> = { points: 'Points and point combos', rebAst: 'Rebounds, assists, and R+A', tpm: 'Threes' };
+const GROUPS: readonly PropCalibrationGroup[] = ['points', 'rebAst', 'tpm', 'defense'];
+const GROUP_LABEL: Record<PropCalibrationGroup, string> = { points: 'Points and point combos', rebAst: 'Rebounds, assists, and R+A', tpm: 'Threes', defense: 'Steals and blocks' };
 export const MIN_GROUP_FIT_ROWS = 300;
 export const MIN_VALIDATION_CLUSTERS = 100;
 const UNCONFIRMED_WEIGHT_CAP = 0.25;
@@ -131,7 +131,8 @@ interface RunContext {
 function releaseNoteLine(files: readonly LedgerFile[]): string {
   const window = files.filter((file) => file.date <= SPEC_THROUGH);
   const settled = window.reduce((sum, file) => sum + describeFile(file).settled, 0);
-  const rows = rowsFromLedger(window);
+  // The note measured the three groups it had; steals and blocks were added after it.
+  const rows = rowsFromLedger(window).filter((row) => row.group !== 'defense');
   const metrics = rows.length ? calibrationMetrics(rows, (row) => row.p) : null;
   const material = censusIsMaterial(settled, metrics);
   return `Release note through ${SPEC_THROUGH}: ${SPEC_SETTLED_ROWS.toLocaleString('en-US')} settled non-push live rows, ECE ${SPEC_ECE_WIDTH10}, Brier ${SPEC_BRIER}, log loss ${SPEC_LOG_LOSS}. This tree on those days: ${settled.toLocaleString('en-US')} rows, ECE ${fmt(metrics?.eceWidth10 ?? Number.NaN)}, Brier ${fmt(metrics?.brier ?? Number.NaN)}, log loss ${fmt(metrics?.logLoss ?? Number.NaN)}. ${material ? 'It does not reproduce the note.' : 'It reproduces the note.'}`;
@@ -161,7 +162,7 @@ export function executeCalibration(
 
 function censusMarkdown(context: RunContext): string[] {
   const { directory, qualifying, settledNonPush, metrics } = context;
-  const counts = { points: 0, rebAst: 0, tpm: 0 };
+  const counts = { points: 0, rebAst: 0, tpm: 0, defense: 0 };
   for (const row of qualifying) counts[row.group] += 1;
   const age = median(qualifying.map((row) => row.lineAgeMinutes));
   const bins = qualifying.length ? reliabilityBins(qualifying, (row) => row.p) : [];
@@ -181,6 +182,7 @@ function censusMarkdown(context: RunContext): string[] {
     `| points | ${counts.points} |`,
     `| rebAst | ${counts.rebAst} |`,
     `| tpm | ${counts.tpm} |`,
+    `| defense | ${counts.defense} |`,
     '',
     '| Score, every qualifying row | ECE width 10 | ECE freq 10 | Brier | Log loss |',
     '|---|---:|---:|---:|---:|',

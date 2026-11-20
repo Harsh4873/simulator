@@ -37,6 +37,59 @@ export interface FeedGame {
   competition: string | null;
   projection: FeedProjection | null;
   projection_note: string;
+  /** Simulated game and player projections. Older files omit it. */
+  sim?: FeedGameSim | null;
+}
+
+export const FEED_STATS = ['pass_yds', 'pass_td', 'int', 'pass_cmp', 'rush_yds', 'car', 'rec', 'rec_yds', 'tgt'] as const;
+export type FeedStat = (typeof FEED_STATS)[number];
+
+/** Mean, median and the 10th to 90th percentile range of simulated values. */
+export interface FeedBand {
+  mean: number;
+  p10: number;
+  p50: number;
+  p90: number;
+}
+
+export interface FeedPlayerSim {
+  id: string;
+  name: string;
+  side: 'away' | 'home';
+  position: string;
+  status: string | null;
+  /** Share of draws the player was active. */
+  play: number;
+  stats: Partial<Record<FeedStat, FeedBand>>;
+  /** Chance of a rushing or receiving touchdown when he plays. */
+  td: number;
+  /** What he recorded, once the game is final. */
+  actual?: Partial<Record<FeedStat, number>> | null;
+}
+
+export interface FeedGameSim {
+  draws: number;
+  away_points: FeedBand;
+  home_points: FeedBand;
+  /** Home minus away. */
+  margin: FeedBand;
+  /** Both teams' points. */
+  combined: FeedBand;
+  home_win: number;
+  players: FeedPlayerSim[];
+}
+
+/** Walk-forward check of the simulation on earlier weeks of the season. */
+export interface FeedValidation {
+  games: number;
+  from_week: number | null;
+  through_week: number | null;
+  win_brier: number;
+  margin_mae: number;
+  td_brier: number;
+  /** Share of outcomes inside the published 10th to 90th range, per stat. */
+  coverage: Partial<Record<FeedStat | 'margin' | 'combined', number>>;
+  mae: Partial<Record<FeedStat, number>>;
 }
 
 export interface FeedModel {
@@ -45,6 +98,7 @@ export interface FeedModel {
   note: string;
   holdout_games: number | null;
   holdout_brier: number | null;
+  validation?: FeedValidation | null;
 }
 
 export interface FeedSlate {
@@ -118,6 +172,96 @@ function projectionOf(value: unknown): FeedProjection | null | undefined {
   return { kind: row.kind as FeedProjection['kind'], away_win: away, home_win: home, summary };
 }
 
+const finiteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const chance = (value: unknown): value is number => finiteNumber(value) && value >= 0 && value <= 1;
+const STAT_SET = new Set<string>(FEED_STATS);
+
+function bandOf(value: unknown): FeedBand | null {
+  const row = record(value);
+  if (!row || !finiteNumber(row.mean) || !finiteNumber(row.p10) || !finiteNumber(row.p50) || !finiteNumber(row.p90)) return null;
+  if (!(row.p10 <= row.p50 + 1e-9 && row.p50 <= row.p90 + 1e-9)) return null;
+  return { mean: row.mean, p10: row.p10, p50: row.p50, p90: row.p90 };
+}
+
+function statMap<T>(value: unknown, read: (item: unknown) => T | null): Partial<Record<FeedStat, T>> | null {
+  const row = record(value);
+  if (!row) return null;
+  const out: Partial<Record<FeedStat, T>> = {};
+  for (const [key, item] of Object.entries(row)) {
+    if (!STAT_SET.has(key)) return null;
+    const parsed = read(item);
+    if (parsed === null) return null;
+    out[key as FeedStat] = parsed;
+  }
+  return out;
+}
+
+function playerSimOf(value: unknown): FeedPlayerSim | null {
+  const row = record(value);
+  if (!row) return null;
+  const id = text(row.id);
+  const name = text(row.name);
+  const position = text(row.position);
+  if (!id || !name || !position || (row.side !== 'away' && row.side !== 'home') || !chance(row.play) || !chance(row.td)) return null;
+  if (row.status !== null && text(row.status) === null) return null;
+  const stats = statMap(row.stats, bandOf);
+  if (!stats) return null;
+  let actual: FeedPlayerSim['actual'];
+  if (row.actual !== undefined) {
+    actual = row.actual === null ? null : statMap(row.actual, (item) => (finiteNumber(item) ? item : null));
+    if (actual === undefined || (row.actual !== null && actual === null)) return null;
+  }
+  return { id, name, side: row.side, position, status: row.status === null ? null : text(row.status), play: row.play, stats, td: row.td, ...(actual !== undefined ? { actual } : {}) };
+}
+
+function simOf(value: unknown): FeedGameSim | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const row = record(value);
+  if (!row || !Number.isInteger(row.draws) || !chance(row.home_win) || !Array.isArray(row.players)) return undefined;
+  const away = bandOf(row.away_points);
+  const home = bandOf(row.home_points);
+  const margin = bandOf(row.margin);
+  const combined = bandOf(row.combined);
+  if (!away || !home || !margin || !combined) return undefined;
+  const players: FeedPlayerSim[] = [];
+  for (const item of row.players) {
+    const player = playerSimOf(item);
+    if (!player) return undefined;
+    players.push(player);
+  }
+  return { draws: row.draws as number, away_points: away, home_points: home, margin, combined, home_win: row.home_win, players };
+}
+
+function validationOf(value: unknown): FeedValidation | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const row = record(value);
+  if (!row || !Number.isInteger(row.games) || !finiteNumber(row.win_brier) || !finiteNumber(row.margin_mae) || !finiteNumber(row.td_brier)) return undefined;
+  const week = (item: unknown) => item === null || (Number.isInteger(item) && (item as number) > 0);
+  if (!week(row.from_week) || !week(row.through_week)) return undefined;
+  const coverageRow = record(row.coverage);
+  const maeRow = record(row.mae);
+  if (!coverageRow || !maeRow) return undefined;
+  const coverage: FeedValidation['coverage'] = {};
+  for (const [key, item] of Object.entries(coverageRow)) {
+    if ((!STAT_SET.has(key) && key !== 'margin' && key !== 'combined') || !chance(item)) return undefined;
+    coverage[key as FeedStat] = item;
+  }
+  const mae = statMap(maeRow, (item) => (finiteNumber(item) && item >= 0 ? item : null));
+  if (!mae) return undefined;
+  return {
+    games: row.games as number,
+    from_week: row.from_week as number | null,
+    through_week: row.through_week as number | null,
+    win_brier: row.win_brier,
+    margin_mae: row.margin_mae,
+    td_brier: row.td_brier,
+    coverage,
+    mae,
+  };
+}
+
 function gameOf(value: unknown): FeedGame | null {
   const row = record(value);
   if (!row) return null;
@@ -136,6 +280,8 @@ function gameOf(value: unknown): FeedGame | null {
   if (row.venue !== null && venue === null) return null;
   if (row.competition !== null && competition === null) return null;
   if ((status === 'scheduled' && (away.score !== null || home.score !== null)) || (status !== 'scheduled' && (away.score === null || home.score === null))) return null;
+  const sim = simOf(row.sim);
+  if (row.sim !== undefined && sim === undefined) return null;
   return {
     id,
     start_time: new Date(start).toISOString(),
@@ -148,6 +294,7 @@ function gameOf(value: unknown): FeedGame | null {
     competition,
     projection,
     projection_note: note,
+    ...(sim !== undefined ? { sim } : {}),
   };
 }
 
@@ -161,7 +308,9 @@ function modelOf(value: unknown): FeedModel | null {
   const brier = row.holdout_brier;
   if (games !== null && (typeof games !== 'number' || !Number.isInteger(games) || games < 0)) return null;
   if (brier !== null && (typeof brier !== 'number' || !Number.isFinite(brier) || brier < 0 || brier > 1)) return null;
-  return { fitted: row.fitted, name, note, holdout_games: games, holdout_brier: brier };
+  const validation = validationOf(row.validation);
+  if (row.validation !== undefined && validation === undefined) return null;
+  return { fitted: row.fitted, name, note, holdout_games: games, holdout_brier: brier, ...(validation !== undefined ? { validation } : {}) };
 }
 
 /** Rejects a file that carries a price, spread, or total, or that does not match the feed shape. */
@@ -252,9 +401,74 @@ function renderGame(game: FeedGame): string {
     <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
     <p class="status">${escapeHtml(statusLine(game))}</p>
     ${competition}
-    ${game.projection ? `<p class="status">${escapeHtml(game.projection.summary)}</p>` : ''}
+    ${game.projection ? `<p class="status" data-projection>${escapeHtml(game.projection.summary)}</p>` : ''}
+    ${game.sim ? simMarkup(game, game.sim) : ''}
     <p class="note">${escapeHtml(game.projection_note)}</p>
   </article>`;
+}
+
+const STAT_LABEL: Record<FeedStat, string> = {
+  pass_yds: 'Pass yds',
+  pass_td: 'Pass TD',
+  int: 'INT',
+  pass_cmp: 'Completions',
+  rush_yds: 'Rush yds',
+  car: 'Carries',
+  rec: 'Receptions',
+  rec_yds: 'Rec yds',
+  tgt: 'Targets',
+};
+const YARDS = new Set<FeedStat>(['pass_yds', 'rush_yds', 'rec_yds']);
+
+/** Points and yards as whole numbers; a count is whole when it is, else one decimal. */
+function statText(stat: FeedStat | 'points', value: number): string {
+  if (stat === 'points' || YARDS.has(stat as FeedStat) || Number.isInteger(value)) return String(Math.round(value));
+  return value.toFixed(1);
+}
+
+/** A widened range can reach below what a stat can be: counts, passing and receiving yards stop at 0. */
+const FLOOR: Partial<Record<FeedStat | 'points' | 'margin', number>> = { rush_yds: -10, margin: Number.NEGATIVE_INFINITY };
+
+function rangeText(stat: FeedStat | 'points' | 'margin', band: FeedBand): string {
+  const floor = FLOOR[stat] ?? 0;
+  const shown = stat === 'margin' ? 'points' : stat;
+  return `${statText(shown, Math.max(floor, band.p10))} to ${statText(shown, band.p90)}`;
+}
+
+function signedMargin(sim: FeedGameSim, game: FeedGame): string {
+  const mean = sim.margin.mean;
+  if (Math.abs(mean) < 0.5) return 'Even';
+  return `${mean > 0 ? game.home.abbreviation : game.away.abbreviation} by ${Math.abs(mean).toFixed(1)}`;
+}
+
+function playerTiles(player: FeedPlayerSim): string {
+  return (Object.entries(player.stats) as [FeedStat, FeedBand][])
+    .map(([stat, band]) => {
+      const did = player.actual && typeof player.actual[stat] === 'number' ? `<p class="tile-sub" data-actual>Played ${escapeHtml(statText(stat, player.actual[stat]!))}</p>` : '';
+      return `<div class="tile"><p class="tile-label">${escapeHtml(STAT_LABEL[stat])}</p><p class="tile-value">${escapeHtml(statText(stat, band.p50))}</p><p class="tile-sub">${escapeHtml(rangeText(stat, band))}</p>${did}</div>`;
+    })
+    .join('');
+}
+
+function playerMarkup(player: FeedPlayerSim): string {
+  const status = player.status ? ` · ${escapeHtml(player.status)}` : '';
+  const plays = player.play < 0.99 ? ` · plays in ${Math.round(player.play * 100)}% of draws` : '';
+  return `<div class="panel-section" data-nfl-player="${escapeHtml(player.id)}"><p class="who-name">${escapeHtml(player.name)}</p><p class="who-team">${escapeHtml(player.position)}${status}${plays} · anytime TD ${Math.round(player.td * 100)}%</p><div class="tiles">${playerTiles(player)}</div></div>`;
+}
+
+function simMarkup(game: FeedGame, sim: FeedGameSim): string {
+  const team = (side: 'away' | 'home') => {
+    const players = sim.players.filter((player) => player.side === side);
+    if (!players.length) return '';
+    const name = side === 'away' ? game.away.abbreviation : game.home.abbreviation;
+    return `<section class="nfl-team"><h3 class="stat-group-label">${escapeHtml(name)}</h3>${players.map(playerMarkup).join('')}</section>`;
+  };
+  const awayWin = 1 - sim.home_win;
+  return `<div class="nfl-sim" data-sim>
+    <p class="status">Projected ${escapeHtml(game.away.abbreviation)} ${escapeHtml(statText('points', sim.away_points.mean))}, ${escapeHtml(game.home.abbreviation)} ${escapeHtml(statText('points', sim.home_points.mean))} · ${escapeHtml(signedMargin(sim, game))}</p>
+    <p class="note">Win chance ${escapeHtml(game.away.abbreviation)} ${(awayWin * 100).toFixed(1)}%, ${escapeHtml(game.home.abbreviation)} ${(sim.home_win * 100).toFixed(1)}%. ${escapeHtml(game.home.abbreviation)} margin ${escapeHtml(rangeText('margin', sim.margin))}; both teams ${escapeHtml(rangeText('points', sim.combined))} points, 8 in 10 of ${sim.draws.toLocaleString('en-US')} draws.</p>
+    <details class="nfl-players"><summary>Player projections</summary><p class="note">Big number is the median of the draws he plays in; below it, the 10th to 90th percentile.</p>${team('away')}${team('home')}</details>
+  </div>`;
 }
 
 function dayTitle(gameDate: string, today: string): string {
@@ -277,7 +491,7 @@ export function renderFeedSlate(slate: FeedSlate, now: Date): string {
     ? ''
     : `<p class="state" role="alert">This ${sportName} slate was published for ${escapeHtml(slate.dates[0])} and ${escapeHtml(slate.dates[1])}, not the current Chicago window.</p>`;
   const built = `Published ${formatTip(slate.generated_at)} · ${slate.source}`;
-  const head = `<div class="slate-head"><p class="slate-meta">${escapeHtml(sportName)}</p><p class="status captured">${escapeHtml(built)}</p><p class="note">${escapeHtml(slate.model.note)}</p></div>`;
+  const head = `<div class="slate-head"><p class="slate-meta">${escapeHtml(sportName)}</p><p class="status captured">${escapeHtml(built)}</p><p class="note">${escapeHtml(slate.model.note)}</p>${validationMarkup(slate.model.validation)}</div>`;
   const byDate = new Map<string, FeedGame[]>();
   for (const game of slate.games) {
     const day = chicagoDate(new Date(game.start_time));
@@ -299,6 +513,17 @@ export function renderFeedSlate(slate: FeedSlate, now: Date): string {
   }
   const later = [...laterDays.entries()].map(([day, games]) => section(laterTitle(day), games)).join('');
   return `${stale}${head}${empty}${later}`;
+}
+
+/** How the simulation did on earlier weeks it projected without seeing them. */
+function validationMarkup(validation: FeedValidation | null | undefined): string {
+  if (!validation || !validation.games) return '';
+  const weeks = validation.from_week && validation.through_week ? `weeks ${validation.from_week} to ${validation.through_week}` : 'earlier weeks';
+  const covered = (['rec_yds', 'rush_yds', 'pass_yds'] as const)
+    .filter((stat) => typeof validation.coverage[stat] === 'number')
+    .map((stat) => `${STAT_LABEL[stat].toLowerCase()} ${Math.round(validation.coverage[stat]! * 100)}%`)
+    .join(', ');
+  return `<p class="note" data-validation>Checked on ${escapeHtml(weeks)} (${validation.games} games), each projected only from the weeks before it: win Brier ${validation.win_brier.toFixed(3)} (a coin is 0.250), margin off by ${validation.margin_mae.toFixed(1)} points on average. The 10th to 90th ranges are calibrated on those weeks to hold 8 in 10 results${covered ? `: ${escapeHtml(covered)}` : ''}.</p>`;
 }
 
 /** "Sunday, Nov 22" for a Chicago date. */

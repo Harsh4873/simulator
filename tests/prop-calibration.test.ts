@@ -213,7 +213,8 @@ test('Nov 15 through Nov 17 keep their settled counts, and Nov 18 stays a live f
   assert.equal(settled, 740);
   const qualified = rowsFromLedger([nov15]);
   assert.equal(qualified.length, settled - nov15.rows.filter((item) => item.result && !('void' in item.result) && item.result.actual !== (item.last ?? item.open).line && !groupOf(item.m)).length);
-  assert.equal(qualified.length, 735);
+  assert.equal(qualified.length, 740);
+  assert.equal(qualified.filter((item) => item.group !== 'defense').length, 735);
   assert.equal(nov16.source, 'live');
   assert.equal(nov16.rows.length, 796);
   const nov16Settled = nov16.rows.filter((item) => item.result && !('void' in item.result) && item.result.actual !== (item.last ?? item.open).line).length;
@@ -322,7 +323,7 @@ test('voids and pushes contribute no calibration rows', () => {
   assert.equal(rowsFromLedger([{ ...file, source: 'replay' }]).length, 0);
   const nov15 = parseLedger(readFileSync('data/pick-ledger/2026-11-15.json', 'utf8'));
   assert.equal(nov15.rows.length, 790);
-  assert.equal(rowsFromLedger([nov15]).length, 735);
+  assert.equal(rowsFromLedger([nov15]).filter((item) => item.group !== 'defense').length, 735);
 });
 
 test('the blend is the weighted average, a flat curve keeps 0.2, and a sloped curve keeps the argmin', () => {

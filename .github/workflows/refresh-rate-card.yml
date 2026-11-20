@@ -91,6 +91,10 @@ jobs:
           if [ -f public/data/esports.json ]; then
             git add -- public/data/esports.json
           fi
+          # NFL box scores the simulation reads. Off the site; only newly finished games change it.
+          if [ -f data/nfl-cache.json ]; then
+            git add -- data/nfl-cache.json
+          fi
           if ! git diff --cached --quiet; then
             git commit -m 'chore(data): refresh validated simulator generation'
             AUTHOR=$(git show -s --format='%an' HEAD)

@@ -12,6 +12,9 @@ export interface EspnGame {
   season_type: number | null;
   home_score: number | null;
   away_score: number | null;
+  /** ESPN team ids, for the roster endpoint. */
+  home_id: string | null;
+  away_id: string | null;
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -54,7 +57,7 @@ function recordOf(value: unknown): string | null {
   return RECORD.test(summary) ? summary : null;
 }
 
-function sideOf(value: unknown, status: FeedStatus): { side: FeedSide; homeAway: 'home' | 'away' } | null {
+function sideOf(value: unknown, status: FeedStatus): { side: FeedSide; homeAway: 'home' | 'away'; teamId: string | null } | null {
   const row = record(value);
   const team = record(row?.team);
   if (!row || !team) return null;
@@ -67,6 +70,7 @@ function sideOf(value: unknown, status: FeedStatus): { side: FeedSide; homeAway:
   if (status !== 'scheduled' && score === null) return null;
   return {
     homeAway,
+    teamId: typeof team.id === 'string' || typeof team.id === 'number' ? String(team.id) : null,
     side: {
       name,
       abbreviation,
@@ -110,6 +114,8 @@ export function parseEspnScoreboard(payload: unknown): EspnGame[] {
       season_type: numberOf(season?.type),
       away_score: away.side.score,
       home_score: home.side.score,
+      home_id: home.teamId,
+      away_id: away.teamId,
     });
   }
   return games;
@@ -163,4 +169,49 @@ export function historyWeeks(seasonType: number | null, week: number, regularWee
   if (seasonType === 2) return regular(Math.min(week, regularWeeks));
   if (seasonType === 3) return [...regular(regularWeeks), ...Array.from({ length: Math.max(0, week) }, (_, index) => ({ seasonType: 3 as const, week: index + 1 }))];
   return [];
+}
+
+export interface NflRosterPlayer {
+  id: string;
+  name: string;
+  position: string;
+}
+
+/** Offensive players on a team's active roster. Injured reserve, suspensions and the practice squad are left out. */
+export function parseRoster(payload: unknown): NflRosterPlayer[] {
+  const groups = record(payload)?.athletes;
+  if (!Array.isArray(groups)) throw new Error('Invalid NFL roster');
+  const players: NflRosterPlayer[] = [];
+  for (const item of groups) {
+    const group = record(item);
+    if (group?.position !== 'offense' || !Array.isArray(group.items)) continue;
+    for (const entry of group.items) {
+      const athlete = record(entry);
+      const id = typeof athlete?.id === 'string' || typeof athlete?.id === 'number' ? String(athlete.id) : null;
+      const name = typeof athlete?.displayName === 'string' ? athlete.displayName.trim() : '';
+      const position = record(athlete?.position)?.abbreviation;
+      if (!id || !name || typeof position !== 'string') continue;
+      players.push({ id, name, position });
+    }
+  }
+  return players;
+}
+
+/** Injury-report status by athlete id from a game summary: Out, Doubtful, Questionable and the like. */
+export function parseInjuries(payload: unknown): Map<string, string> {
+  const statuses = new Map<string, string>();
+  const teams = record(payload)?.injuries;
+  if (!Array.isArray(teams)) return statuses;
+  for (const item of teams) {
+    const list = record(item)?.injuries;
+    if (!Array.isArray(list)) continue;
+    for (const entry of list) {
+      const row = record(entry);
+      const athlete = record(row?.athlete);
+      const id = typeof athlete?.id === 'string' || typeof athlete?.id === 'number' ? String(athlete.id) : null;
+      const status = typeof row?.status === 'string' ? row.status.trim() : '';
+      if (id && status) statuses.set(id, status);
+    }
+  }
+  return statuses;
 }

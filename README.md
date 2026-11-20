@@ -4,9 +4,9 @@ Today's NBA games in America/Chicago. Simulate draws 10,000 independent games in
 
 This is a simulator, not a betting ticket.
 
-The NFL switch shows today's and yesterday's games, then the rest of the week, with each team's record and an Elo win chance from completed scores. The Elo's K, home advantage and margin rule are chosen on earlier games, and the latest 30% of games score it. No market line is used.
+The NFL switch shows today's and yesterday's games, then the rest of the week, with each team's record. Each game is simulated 10,000 times from this season's box scores and its injury report: a projected score, win chance and margin, and a projection with a 10th-to-90th range for each quarterback, back and receiver. The win chances, ranges and player means are calibrated walk-forward on earlier weeks, which the page reports. No market line is used. Without enough box scores it falls back to a score-only Elo.
 
-The esports switch lists Dota 2, League of Legends, and CS2 players with the mean of each counting stat from that player's earlier games. A finished game also shows its winner and what each player did in it, on the mean's scale. An upcoming CS2 match lists the five players on each side who played most recently.
+The esports switch projects each player: CS2 kills and headshots over maps 1-2 from his kills and headshots per round, Dota 2 and League of Legends kills and assists per game. Each projection has a 10th-to-90th range calibrated on the same players' earlier games, with the plain average beneath it and what he did once the game is played. An upcoming CS2 match lists the five players on each side who played most recently.
 
 Lineups lets you rule any player in or out for one game before simulating. Your calls stay in your browser and never change the published card.
 

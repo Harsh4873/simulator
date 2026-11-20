@@ -4,7 +4,7 @@ import { LOGISTIC_PENALTIES, applyIsotonic, fitLogistic, isotonicKnots } from '.
 import { americanBreakEven, noVigFromBreakEven, type PropMarket } from './props.ts';
 import { mulberry32 } from './rng.ts';
 
-export type PropCalibrationGroup = 'points' | 'rebAst' | 'tpm';
+export type PropCalibrationGroup = 'points' | 'rebAst' | 'tpm' | 'defense';
 export type PropCalibrationMethod = 'beta' | 'platt' | 'temperature' | 'isotonic';
 export type DriftLevel = 'green' | 'amber' | 'red';
 
@@ -193,6 +193,9 @@ export function groupOf(market: PropMarket): PropCalibrationGroup | null {
       return 'rebAst';
     case 'tpm':
       return 'tpm';
+    case 'stl':
+    case 'blk':
+      return 'defense';
     default:
       return null;
   }
@@ -1078,7 +1081,7 @@ export function splitTipDates(dates: readonly string[]): { fit: string[]; valida
   return { fit: unique.slice(0, unique.length - hold), validation: unique.slice(unique.length - hold) };
 }
 
-const PUBLISHED_GROUPS: readonly PropCalibrationGroup[] = ['points', 'rebAst', 'tpm'];
+const PUBLISHED_GROUPS: readonly PropCalibrationGroup[] = ['points', 'rebAst', 'tpm', 'defense'];
 
 function isGroup(value: string): value is PropCalibrationGroup {
   return (PUBLISHED_GROUPS as readonly string[]).includes(value);
