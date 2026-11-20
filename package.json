@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "rate-card": "node --experimental-strip-types scripts/build-rate-card.ts",
+    "slates": "node --experimental-strip-types scripts/build-slates.ts",
     "picks": "node --experimental-strip-types scripts/build-picks.ts",
     "calibrate-props": "node --experimental-strip-types scripts/fit-prop-calibration.ts",
     "picks:backfill": "node --experimental-strip-types scripts/backfill-picks.ts",

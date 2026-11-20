@@ -6,6 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
+import { chicagoDate, shiftChicagoDate } from '../src/date.ts';
 import type { RateCard, Slate } from '../src/types.ts';
 
 const KNOWN_DATA = [
@@ -16,13 +17,71 @@ const KNOWN_DATA = [
   '/picks.json',
   '/prop-calibration.json',
   '/sims/index.json',
+  '/nfl.json',
+  '/esports.json',
 ];
+
+function feedFile(sport: 'nfl' | 'esports', now: Date): string {
+  const today = chicagoDate(now);
+  const yesterday = shiftChicagoDate(today, -1);
+  const side = { score: null, logo_url: null, color: null, alternate_color: null };
+  const base = {
+    source: sport === 'nfl' ? 'ESPN NFL scoreboard' : 'Liquipedia',
+    generated_at: now.toISOString(),
+    timezone: 'America/Chicago',
+    dates: [yesterday, today],
+    later: sport === 'esports'
+      ? [{
+          id: 'later',
+          start_time: new Date(now.getTime() + 5 * 86_400_000).toISOString(),
+          status: 'scheduled',
+          listed: true,
+          away: { ...side, name: 'FaZe Clan', abbreviation: 'FaZe' },
+          home: { ...side, name: 'Team Vitality', abbreviation: 'VIT' },
+          venue: null,
+          neutral_site: true,
+          competition: 'PGL Major Singapore 2026 · Bo3',
+          projection: { kind: 'series', away_win: 0.55, home_win: 0.45, summary: 'FaZe Clan 55.0% · Team Vitality 45.0%' },
+          projection_note: 'Series chance if every map is an independent draw at the global Glicko-2 map chance. Not calibrated.',
+        }]
+      : [],
+    model: { fitted: sport === 'esports', name: sport === 'esports' ? 'cs2-glicko2-v0.1' : 'none', note: 'Projection is not fitted.', holdout_games: null, holdout_brier: null },
+  };
+  const game = sport === 'nfl'
+    ? {
+        id: '401',
+        start_time: new Date(now.getTime() + 3_600_000).toISOString(),
+        status: 'scheduled',
+        listed: false,
+        away: { ...side, name: 'Indianapolis Colts', abbreviation: 'IND' },
+        home: { ...side, name: 'Houston Texans', abbreviation: 'HOU' },
+        venue: 'NRG Stadium',
+        neutral_site: false,
+        competition: null,
+        projection: null,
+        projection_note: 'Projection is not fitted.',
+      }
+    : {
+        id: 'lp-1',
+        start_time: new Date(now.getTime() + 3_600_000).toISOString(),
+        status: 'scheduled',
+        listed: true,
+        away: { ...side, name: 'GamerLegion', abbreviation: 'GL' },
+        home: { ...side, name: 'BIG', abbreviation: 'BIG' },
+        venue: null,
+        neutral_site: true,
+        competition: 'Stake Ranked Episode 6 · Bo3',
+        projection: null,
+        projection_note: 'Projection is not fitted. This event is not tier-1.',
+      };
+  return JSON.stringify({ sport, ...base, games: [game] });
+}
 
 test('the sport switch keeps the NBA slate and parks the other two', async () => {
   const timer = globalThis.setInterval;
   const boots: string[] = [];
   const flush = () => new Promise((resolve) => setTimeout(resolve, 20));
-  async function boot(seed: string | null) {
+  async function boot(seed: string | null, feeds = true) {
     const dir = mkdtempSync(join(tmpdir(), 'sim-sport-'));
     boots.push(dir);
     const { window, document } = parseHTML(readFileSync('index.html', 'utf8'));
@@ -66,8 +125,16 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
     const fetched: string[] = [];
     globals.fetch = async (url: string) => {
       fetched.push(String(url));
-      const ok = url.endsWith('/slate.json') || url.endsWith('/rate-card.json');
-      const body = url.endsWith('/slate.json') ? JSON.stringify(slate) : url.endsWith('/rate-card.json') ? JSON.stringify(card) : '';
+      const ok = url.endsWith('/slate.json') || url.endsWith('/rate-card.json') || (feeds && (url.endsWith('/nfl.json') || url.endsWith('/esports.json')));
+      const body = url.endsWith('/slate.json')
+        ? JSON.stringify(slate)
+        : url.endsWith('/rate-card.json')
+          ? JSON.stringify(card)
+          : url.endsWith('/nfl.json')
+            ? feedFile('nfl', now)
+            : url.endsWith('/esports.json')
+              ? feedFile('esports', now)
+              : '';
       return new Response(body, { status: ok ? 200 : 404 });
     };
     globals.setInterval = () => 0;
@@ -122,16 +189,21 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
 
     document.querySelector<HTMLButtonElement>('[data-sport="nfl"]')?.click();
     await flush();
-    assert.match(document.querySelector('#slate')?.textContent ?? '', /NFL is not live yet\./);
-    assert.equal(document.querySelector('.brand .sub')?.textContent, 'Not live yet.');
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /Indianapolis Colts/);
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /Houston Texans/);
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /Projection is not fitted\./);
+    assert.equal(/not live yet/i.test(document.querySelector('#slate')?.textContent ?? ''), false);
+    assert.equal(document.querySelector('.brand .sub')?.textContent, 'Today and yesterday, Chicago time');
     assert.equal(document.querySelector('button[data-event]'), null);
-    assert.equal(document.querySelector('.game-card'), null);
+    assert.ok(document.querySelector('.game-card'));
     assert.equal(document.querySelector('.projection-board, [data-model-sides], .lean-row'), null);
-    assert.equal(/lean/i.test(document.querySelector('#slate')?.textContent ?? ''), false);
+    assert.equal(/lean|spread|moneyline|odds/i.test(document.querySelector('#slate')?.textContent ?? ''), false);
     assert.equal(document.querySelector('#projections')?.textContent, '');
     assert.equal(document.querySelector('[data-region="projections"]')?.hasAttribute('hidden'), true);
+    assert.equal(document.querySelector('[data-region="board"]')?.hasAttribute('hidden'), true);
     assert.equal(document.querySelector('.desk-tabs')?.hasAttribute('hidden'), true);
     assert.equal(document.querySelector('[data-fresh]')?.hasAttribute('hidden'), true);
+    assert.match(document.querySelector('.foot')?.textContent ?? '', /No line or price is shown/);
     assert.equal(document.querySelector('#desk')?.getAttribute('data-mode'), 'sport');
     assert.equal(page.session.get('simulator.sport'), 'nfl');
     assert.equal(page.localKeys.includes('simulator.sport'), false);
@@ -144,8 +216,13 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
     assert.equal(tab(document, 'esports'), '0');
     assert.equal(tab(document, 'nfl'), '-1');
     assert.equal(tab(document, 'nba'), '-1');
-    assert.match(document.querySelector('#slate')?.textContent ?? '', /Esports is not live yet\./);
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /GamerLegion/);
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /This event is not tier-1/);
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /FaZe Clan 55\.0%/);
+    assert.match(document.querySelector('#slate')?.textContent ?? '', /Not calibrated/);
+    assert.equal(/not live yet/i.test(document.querySelector('#slate')?.textContent ?? ''), false);
     assert.equal(document.querySelector('button[data-event]'), null);
+    assert.equal(document.querySelector('[data-desk-tab="board"]')?.closest('.desk-tabs')?.hasAttribute('hidden'), true);
     key(document, page.window, '[data-sport="esports"]', 'ArrowLeft');
     await flush();
     assert.equal(checked(document), 'nfl');
@@ -168,13 +245,15 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
     await flush();
     assert.ok(document.querySelector('button[data-event]'));
     assert.equal(document.querySelector('.brand .sub')?.textContent, 'Today and yesterday, Chicago time');
+    assert.match(document.querySelector('.foot')?.textContent ?? '', /10,000/);
     assert.equal(document.querySelector('.desk-tabs')?.hasAttribute('hidden'), false);
     assert.equal(document.querySelector('[data-fresh]')?.hasAttribute('hidden'), false);
     assert.equal(checked(document), 'nba');
     assert.equal(page.localKeys.includes('simulator.sport'), false);
 
-    const parked = await boot('esports');
-    assert.match(parked.document.querySelector('#slate')?.textContent ?? '', /Esports is not live yet\./);
+    const parked = await boot('esports', false);
+    assert.match(parked.document.querySelector('#slate')?.textContent ?? '', /Esports slate could not be loaded/);
+    assert.equal(/not live yet/i.test(parked.document.querySelector('#slate')?.textContent ?? ''), false);
     assert.equal(parked.document.querySelector('button[data-event]'), null);
     assert.equal(parked.document.querySelector('[data-sport="esports"]')?.getAttribute('aria-checked'), 'true');
     assert.equal(parked.document.querySelector('.desk-tabs')?.hasAttribute('hidden'), true);
@@ -182,10 +261,14 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
     assert.equal(parked.session.get('simulator.sport'), 'esports');
     assert.ok(parked.fetched.some((url) => url.endsWith('/slate.json')));
     assert.ok(parked.fetched.some((url) => url.endsWith('/rate-card.json')));
+    assert.ok(parked.fetched.some((url) => url.endsWith('/esports.json')));
     for (const url of parked.fetched) {
       assert.ok(KNOWN_DATA.some((name) => url.endsWith(name)), url);
     }
-    assert.equal(parked.fetched.some((url) => /nfl|esports/i.test(url)), false);
+    parked.document.querySelector<HTMLButtonElement>('[data-sport="nba"]')?.click();
+    await flush();
+    assert.ok(parked.document.querySelector('button[data-event]'));
+    assert.match(parked.document.querySelector('.foot')?.textContent ?? '', /10,000/);
   } finally {
     globalThis.setInterval = timer;
     for (const dir of boots) rmSync(dir, { recursive: true, force: true });

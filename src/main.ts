@@ -56,6 +56,7 @@ import {
 import { unpackPlayerGames, type DefenseSlot } from './projection-context.ts';
 import { fetchPublishedIndex, fetchPublishedSimulation, type PublishedExpectation } from './published-sim.ts';
 import { hydrateSimulationCache, persistSimulationEntry } from './simulation-cache.ts';
+import { parseFeedSlate, renderFeedSlate } from './feed.ts';
 import { escapeHtml, renderSlate } from './slate.ts';
 import { ITERATIONS, type Simulation } from './simulate.ts';
 import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
@@ -63,6 +64,7 @@ import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
 const DATA_BASE = '/simulator/data/';
 const THEME_KEY = 'simulator.theme';
 const SPORT_KEY = 'simulator.sport';
+const FEED_FOOT = 'Schedule from a public feed. No line or price is shown. A projection is shown only when it is fit from results.';
 const SECTION_KEY = 'simulator.sections';
 const MEMORY_CACHE_LIMIT = 24;
 
@@ -76,6 +78,8 @@ const projectionsRoot = document.querySelector<HTMLElement>('#projections');
 const projectionsFrame = document.querySelector<HTMLElement>('[data-region="projections"]');
 const boardRoot = document.querySelector<HTMLElement>('#board');
 const boardFrame = document.querySelector<HTMLElement>('[data-region="board"]');
+const foot = document.querySelector<HTMLElement>('.foot p');
+const nbaFoot = foot?.textContent ?? '';
 
 let slate: Slate | null = null;
 let card: RateCard | null = null;
@@ -123,6 +127,8 @@ let prefetchingPublished = false;
 let drawingEvent: string | null = null;
 let drawingProgress = 0;
 let sport: Sport = 'nba';
+let feedToken = 0;
+let nbaFailed = false;
 
 function storedLineups(): string | null {
   try {
@@ -1061,7 +1067,14 @@ function onDeskClick(event: Event): void {
     onSectionToggle(sectionToggle);
     return;
   }
-  if(target.closest('[data-retry]')){void load();return;}
+  if (target.closest('[data-retry]')) {
+    const selected = currentSport();
+    if (selected === 'nba') {
+      nbaFailed = false;
+      void load();
+    } else void showFeed(selected);
+    return;
+  }
   const lineupButton = target.closest('button[data-lineup]');
   if (lineupButton instanceof HTMLButtonElement) {
     const id = lineupButton.dataset.lineup;
@@ -1534,23 +1547,17 @@ async function load(): Promise<void> {
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
     await hydrateSimulationCache(generationKey(), simulationCache);
-    if (currentSport() !== 'nba') showPendingSport();
-    else {
+    if (currentSport() === 'nba') {
       const hash = readHash();
       if (hash === '#projections') showProjections();
       else if (hash === '#board') showBoard();
       else showSlate();
     }
   } catch {
+    nbaFailed = true;
     bind();
-    if (currentSport() !== 'nba') {
-      showPendingSport();
-      return;
-    }
-    unmountBoard();
-    slateRoot.innerHTML = '<p class="state" role="alert">Slate could not be loaded or validated. <button data-retry>Retry</button></p>';
-    if (desk) desk.dataset.mode = 'error';
-    markDeskTabs();
+    if (currentSport() !== 'nba') return;
+    showNbaError();
   }
 }
 
@@ -1597,40 +1604,24 @@ function currentSport(): Sport {
   return sport;
 }
 
-function applySport(next: Sport): void {
-  const changed = next !== sport;
-  sport = next;
-  try {
-    sessionStorage.setItem(SPORT_KEY, next);
-  } catch {
-    // The switch still follows the click when storage is blocked.
-  }
-  document.querySelectorAll<HTMLButtonElement>('[data-sport]').forEach((button) => {
-    const on = button.dataset.sport === next;
-    button.setAttribute('aria-checked', on ? 'true' : 'false');
-    button.setAttribute('tabindex', on ? '0' : '-1');
-  });
-  if (!changed) return;
-  const sub = document.querySelector<HTMLElement>('.brand .sub');
-  if (sub) sub.textContent = next === 'nba' ? 'Today and yesterday, Chicago time' : 'Not live yet.';
-  if (next === 'nba') {
-    const tabs = document.querySelector<HTMLElement>('.desk-tabs');
-    if (tabs) tabs.hidden = false;
-    if (slate && card) {
-      const hash = readHash();
-      if (hash === '#projections') showProjections();
-      else if (hash === '#board') showBoard();
-      else showSlate();
-    }
-    paintFreshness();
-    return;
-  }
-  showPendingSport();
+function showNbaError(): void {
+  if (!slateRoot) return;
+  unmountBoard();
+  slateRoot.innerHTML = '<p class="state" role="alert">Slate could not be loaded or validated. <button data-retry>Retry</button></p>';
+  if (desk) desk.dataset.mode = 'error';
+  markDeskTabs();
 }
 
-function showPendingSport(): void {
-  const pending = currentSport();
-  if (pending === 'nba' || !slateRoot) return;
+function restoreNbaChrome(): void {
+  const sub = document.querySelector<HTMLElement>('.brand .sub');
+  if (sub) sub.textContent = 'Today and yesterday, Chicago time';
+  const tabs = document.querySelector<HTMLElement>('.desk-tabs');
+  if (tabs) tabs.hidden = false;
+  if (foot) foot.textContent = nbaFoot;
+  paintFreshness();
+}
+
+function parkNbaViews(): void {
   stopPrefetch();
   simulationEpoch += 1;
   running = false;
@@ -1650,25 +1641,66 @@ function showPendingSport(): void {
   unmountProjections();
   unmountBoard();
   boxRoot?.replaceChildren();
-  if (desk) desk.dataset.mode = 'sport';
+}
+
+async function showFeed(next: 'nfl' | 'esports'): Promise<void> {
+  const token = ++feedToken;
   const sub = document.querySelector<HTMLElement>('.brand .sub');
-  if (sub) sub.textContent = 'Not live yet.';
+  if (sub) sub.textContent = 'Today and yesterday, Chicago time';
   const tabs = document.querySelector<HTMLElement>('.desk-tabs');
   if (tabs) tabs.hidden = true;
   const pill = document.querySelector<HTMLElement>('[data-fresh]');
   if (pill) pill.hidden = true;
-  const label = pending === 'nfl' ? 'NFL' : 'Esports';
-  queueMicrotask(() => {
-    if (currentSport() !== pending || !slateRoot) return;
-    // The cancelled draw attaches its alert while the button is still connected; this replaces it.
-    slateRoot.innerHTML = `<p class="state" role="status">${label} is not live yet.</p>`;
-    unmountBoard();
+  if (foot) foot.textContent = FEED_FOOT;
+  if (desk) desk.dataset.mode = 'sport';
+  parkNbaViews();
+  if (!slateRoot) return;
+  const label = next === 'nfl' ? 'NFL' : 'Esports';
+  slateRoot.innerHTML = `<p class="state" role="status">Loading ${label}…</p>`;
+  let text: string | null = null;
+  try {
+    text = await getData(`${next}.json`);
+  } catch {
+    text = null;
+  }
+  if (token !== feedToken || currentSport() !== next || !slateRoot) return;
+  const parsed = text ? parseFeedSlate(text, next) : null;
+  if (!parsed) {
+    slateRoot.innerHTML = `<p class="state" role="alert">${label} slate could not be loaded. <button data-retry>Retry</button></p>`;
     if (desk) desk.dataset.mode = 'sport';
-    const laterTabs = document.querySelector<HTMLElement>('.desk-tabs');
-    if (laterTabs) laterTabs.hidden = true;
-    const laterPill = document.querySelector<HTMLElement>('[data-fresh]');
-    if (laterPill) laterPill.hidden = true;
+    return;
+  }
+  slateRoot.innerHTML = renderFeedSlate(parsed, new Date());
+  if (desk) desk.dataset.mode = 'sport';
+}
+
+function applySport(next: Sport): void {
+  const changed = next !== sport;
+  sport = next;
+  try {
+    sessionStorage.setItem(SPORT_KEY, next);
+  } catch {
+    // The switch still follows the click when storage is blocked.
+  }
+  document.querySelectorAll<HTMLButtonElement>('[data-sport]').forEach((button) => {
+    const on = button.dataset.sport === next;
+    button.setAttribute('aria-checked', on ? 'true' : 'false');
+    button.setAttribute('tabindex', on ? '0' : '-1');
   });
+  if (!changed) return;
+  if (next === 'nba') {
+    feedToken += 1;
+    restoreNbaChrome();
+    if (slate && card) {
+      const hash = readHash();
+      if (hash === '#projections') showProjections();
+      else if (hash === '#board') showBoard();
+      else showSlate();
+    } else if (nbaFailed) showNbaError();
+    else if (slateRoot) slateRoot.innerHTML = '<p class="state" role="status">Loading slate…</p>';
+    return;
+  }
+  void showFeed(next);
 }
 
 function readHash(): string {

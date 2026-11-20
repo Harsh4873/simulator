@@ -476,6 +476,7 @@ html[data-theme="light"] .pill.tone-out { background: #fde8e7; color: #b42318; }
 .game-card .tip { display: none; }
 
 .game-card .status { font-size: 0.8125rem; margin: 0; }
+.game-card .note { margin: 8px 0 0; font-size: 0.8125rem; }
 
 .card-actions {
   display: flex;
