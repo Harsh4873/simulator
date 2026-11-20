@@ -27,7 +27,7 @@ import {
 } from './projection-context.ts';
 import { bookKey, type BookLine } from './book-lines.ts';
 import { EXTREME_CLAIM, leanSide, liveTierFor, rankLeans, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
-import { quoteCalibrationFor, type PropPanelCalibration } from './prop-calibration.ts';
+import { quoteCalibrationFor, type PropCalibrationArtifact, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
 import { gradeProp, parseBookPrice, quoteProp, valueAt, type PlayerSample, type PropMarket } from './props.ts';
 import type { Simulation } from './simulate.ts';
 import { escapeHtml, placeLine, playerSideLine, statusLabel, viewToggles } from './slate.ts';
@@ -1313,11 +1313,48 @@ function tierLabel(tier: Pick<TierRecord, 'lo' | 'hi'>): string {
   return tier.hi === null ? `${lo}+` : `${lo} to ${Math.round(tier.hi * 100)}`;
 }
 
+/** The lean side's raw simulated share, when a fitted map moved it. */
+function rawSideShare(lean: Pick<Lean, 'calibrationMethod' | 'modelRaw' | 'side'>): number | null {
+  if (!lean.calibrationMethod || lean.modelRaw === undefined || !Number.isFinite(lean.modelRaw)) return null;
+  return lean.side === 'over' ? lean.modelRaw : 1 - lean.modelRaw;
+}
+
+const CALIBRATION_GROUPS: readonly { group: PropCalibrationGroup; label: string }[] = [
+  { group: 'points', label: 'points and point combos' },
+  { group: 'rebAst', label: 'rebounds, assists and R+A' },
+  { group: 'tpm', label: 'threes' },
+];
+
+export interface CalibrationStatus {
+  artifacts: readonly PropCalibrationArtifact[];
+  family: string | null;
+}
+
+/** Which stat groups the page shows calibrated, and how much each map helped on games it was not fitted on. */
+export function calibrationStatusHtml(status: CalibrationStatus | null | undefined): string {
+  if (!status) return '';
+  const fitted = new Map(status.artifacts.filter((item) => item.status === 'fitted' && item.model_version === status.family).map((item) => [item.group, item]));
+  if (!fitted.size) {
+    return '<p class="prop-note" data-calibration-status>Model chances are the raw simulation. No prop calibration map has passed its check on later games yet.</p>';
+  }
+  const parts = CALIBRATION_GROUPS.map(({ group, label }) => {
+    const item = fitted.get(group);
+    if (!item) return `${label} raw until enough lines settle`;
+    const raw = item.metrics_raw?.logLoss;
+    const gain = raw !== undefined && Number.isFinite(raw) ? `, log loss ${raw.toFixed(3)} to ${item.metrics_validated.logLoss.toFixed(3)}` : '';
+    return `${label} calibrated (checked on ${item.rows_validated.toLocaleString('en-US')} later lines${gain})`;
+  });
+  const weight = Math.round(([...fitted.values()][0]?.w ?? 0) * 100);
+  return `<p class="prop-note" data-calibration-status>Prop calibration: ${escapeHtml(parts.join('; '))}. A calibrated chance is the simulation moved by a map fitted on earlier settled lines, then weighed ${weight}% against the no-vig price.</p>`;
+}
+
 function leanRowHtml(lean: RankedLean, record: PickRecord | null | undefined): string {
   const side = lean.side === 'over' ? 'Over' : 'Under';
   const odds = lean.side === 'over' ? lean.over_odds : lean.under_odds;
   const tier = liveTierFor(record, lean.side, lean.claimed);
-  const measured = lean.claimed >= EXTREME_CLAIM
+  const measured = lean.drift === 'red'
+    ? '<span class="lean-measured edge-down">Calibration for this stat missed on recent games by more than noise explains, so its leans are not listed until a refit passes</span>'
+    : lean.claimed >= EXTREME_CLAIM
     ? `<span class="lean-measured edge-down">A gap of ${Math.round(EXTREME_CLAIM * 100)} points or more is too large to trust. It usually means the price or the card is missing news${tier && tier.n > 0 ? `: ${tier.n.toLocaleString('en-US')} graded gaps this size hit ${escapeHtml(percent(tier.wins / tier.n))}` : ''}</span>`
     : tier && tier.pooled > 0
       ? `<span class="lean-measured ${tier.edge > 0 ? 'edge-up' : 'edge-down'}">Leans this strong: ${points(tier.edge)} against the price, ${tier.pooled.toLocaleString('en-US')} graded</span>`
@@ -1326,7 +1363,7 @@ function leanRowHtml(lean: RankedLean, record: PickRecord | null | undefined): s
       <span class="lean-name">${escapeHtml(lean.name)}</span>
       <span class="lean-call">${side} ${escapeHtml(lineText(lean.line))} ${escapeHtml(marketShort(lean.market))} <small>${escapeHtml(americanText(odds))}</small></span>
       <span class="lean-meta">${escapeHtml(lean.matchup)} · projection ${lean.projection.toFixed(1)} in ${lean.minutes.toFixed(0)} min${lean.play < 0.9 ? ` · plays in ${escapeHtml(percent(lean.play))} of simulations, and a sit-out voids the line` : ''}</span>
-      <span class="lean-odds">Model ${escapeHtml(percent(lean.model))} · price needs ${escapeHtml(percent(lean.need))}${lean.also ? ` · ${lean.also} more of his lines ${lean.also === 1 ? 'leans' : 'lean'} ${lean.side}` : ''}</span>
+      <span class="lean-odds">Model ${escapeHtml(percent(lean.model))}${rawSideShare(lean) !== null ? ` calibrated, ${escapeHtml(percent(rawSideShare(lean)!))} in the raw simulation` : ''} · price needs ${escapeHtml(percent(lean.need))}${lean.also ? ` · ${lean.also} more of his lines ${lean.also === 1 ? 'leans' : 'lean'} ${lean.side}` : ''}</span>
       ${measured}
     </button></li>`;
 }
@@ -1428,12 +1465,14 @@ export interface LeanPanelInput {
   open: boolean;
   /** Whether any posted line exists on the slate at all. */
   posted: boolean;
+  /** Published prop maps, for the line that says which stats are calibrated. */
+  calibration?: CalibrationStatus | null;
 }
 
 export function leanPanelInner(input: LeanPanelInput): string {
   const book = input.book?.trim() || 'sportsbook';
   const head = '<h2>Leans against the posted lines</h2>';
-  const lede = `<p class="section-sub">The simulation's side at the posted ${escapeHtml(book)} over/under lines, for games that have not started. A lean is listed only while graded leans of that side and strength have been beating the posted price. The model percentage is the claim. The measured line under it is how claims like it have settled.</p>`;
+  const lede = `<p class="section-sub">The simulation's side at the posted ${escapeHtml(book)} over/under lines, for games that have not started. A lean is listed only while graded leans of that side and strength have been beating the posted price. The model percentage is the claim. The measured line under it is how claims like it have settled.</p>${calibrationStatusHtml(input.calibration)}`;
   if (!input.posted) {
     return `${head}${lede}<p class="prop-note">No posted line is in for this slate yet. They usually arrive late morning Central, and this list fills at the next refresh.</p>${recordHtml(input.record)}`;
   }
@@ -1531,7 +1570,9 @@ export function openLeanEvents(slate: Slate, lines: ReadonlyMap<string, BookLine
   return open;
 }
 
-export function leanPanelHtml(view: Pick<ProjectionView, 'slate' | 'now' | 'lines' | 'leans' | 'leansWaiting' | 'record' | 'book'>): string {
+export function leanPanelHtml(
+  view: Pick<ProjectionView, 'slate' | 'now' | 'lines' | 'leans' | 'leansWaiting' | 'record' | 'book'> & { calibration?: CalibrationStatus | null },
+): string {
   return leanPanelInner({
     leans: view.leans ?? [],
     waiting: view.leansWaiting ?? 0,
@@ -1539,6 +1580,7 @@ export function leanPanelHtml(view: Pick<ProjectionView, 'slate' | 'now' | 'line
     book: view.book,
     open: openLeanEvents(view.slate, view.lines, view.now).size > 0,
     posted: (view.lines?.size ?? 0) > 0,
+    calibration: view.calibration ?? null,
   });
 }
 

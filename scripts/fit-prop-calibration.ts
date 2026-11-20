@@ -1,5 +1,7 @@
-// Fits a prop-probability map from live ledger rows only. A census that misses the release note
-// writes a report and no group file. Replay rows are never fitted.
+// Fits a prop-probability map per stat group from live ledger rows of the card's simulation family. Each run fits on
+// the older 70% of settled tip dates and scores the map on the newer 30%, which it never saw. A map ships only while
+// it beats the raw simulation on those later games; otherwise its group goes back to the raw simulation. Replay rows
+// are never fitted.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -13,31 +15,38 @@ import {
   SPEC_ECE_WIDTH10,
   SPEC_LOG_LOSS,
   SPEC_SETTLED_ROWS,
+  SPEC_THROUGH,
   applyCalibration,
   blendWithMarket,
   calibrationMetrics,
   censusIsMaterial,
+  eceNoise,
   expectedCalibrationError,
   fitBlendWeight,
+  previousHeldOutBest,
+  recordHeldOutBest,
   reliabilityBins,
   rowsFromLedger,
-  selectMethod,
-  splitChronological,
-  splitTipDates,
+  selectWalkForward,
+  shippingCheck,
+  walkForwardFolds,
   type PropCalibrationArtifact,
   type PropCalibrationGroup,
   type PropCalibrationMetrics,
   type PropCalibrationRow,
+  type WalkForwardFold,
+  type WalkForwardSelection,
 } from '../src/prop-calibration.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GROUPS: readonly PropCalibrationGroup[] = ['points', 'rebAst', 'tpm'];
-const MIN_GROUP_FIT_ROWS = 300;
-const MIN_VALIDATION_CLUSTERS = 100;
-const MIN_VALIDATION_ROWS = 500;
+const GROUP_LABEL: Record<PropCalibrationGroup, string> = { points: 'Points and point combos', rebAst: 'Rebounds, assists, and R+A', tpm: 'Threes' };
+export const MIN_GROUP_FIT_ROWS = 300;
+export const MIN_VALIDATION_CLUSTERS = 100;
 const UNCONFIRMED_WEIGHT_CAP = 0.25;
 const CONFIRMED_WEIGHT_ROWS = 2000;
 const WEIGHT_MATCH = 1e-9;
+const MEAN_BIAS_NOTE = 'Mean-bias checks were not run. The ledger stores no projection, and the sims archive is not used.';
 
 export interface FileCensus {
   date: string;
@@ -92,8 +101,10 @@ function fmt(value: number): string {
   return Number.isFinite(value) ? value.toFixed(4) : 'n/a';
 }
 
+const lastDate = (rows: readonly PropCalibrationRow[]) => rows.reduce((last, row) => (row.date > last ? row.date : last), rows[0].date);
+
 export interface CalibrationRun {
-  action: 'mismatch' | 'refused' | 'written';
+  action: 'refused' | 'written';
   reportPath: string;
   artifacts: string[];
   qualifying: number;
@@ -101,45 +112,69 @@ export interface CalibrationRun {
   metrics: PropCalibrationMetrics | null;
 }
 
+interface RunContext {
+  outDir: string;
+  reportPath: string;
+  today: string;
+  family: string;
+  directory: readonly LedgerFile[];
+  qualifying: readonly PropCalibrationRow[];
+  settledNonPush: number;
+  metrics: PropCalibrationMetrics | null;
+  noteLine: string;
+}
+
+/**
+ * Whether this tree still reproduces the release note on the days the note measured. Report only: a mismatch here
+ * means the census code or those ledger days changed, which the report should say, but later days never block a fit.
+ */
+function releaseNoteLine(files: readonly LedgerFile[]): string {
+  const window = files.filter((file) => file.date <= SPEC_THROUGH);
+  const settled = window.reduce((sum, file) => sum + describeFile(file).settled, 0);
+  const rows = rowsFromLedger(window);
+  const metrics = rows.length ? calibrationMetrics(rows, (row) => row.p) : null;
+  const material = censusIsMaterial(settled, metrics);
+  return `Release note through ${SPEC_THROUGH}: ${SPEC_SETTLED_ROWS.toLocaleString('en-US')} settled non-push live rows, ECE ${SPEC_ECE_WIDTH10}, Brier ${SPEC_BRIER}, log loss ${SPEC_LOG_LOSS}. This tree on those days: ${settled.toLocaleString('en-US')} rows, ECE ${fmt(metrics?.eceWidth10 ?? Number.NaN)}, Brier ${fmt(metrics?.brier ?? Number.NaN)}, log loss ${fmt(metrics?.logLoss ?? Number.NaN)}. ${material ? 'It does not reproduce the note.' : 'It reproduces the note.'}`;
+}
+
 export function executeCalibration(
   files: readonly LedgerFile[],
-  options: { outDir: string; directory?: readonly LedgerFile[]; modelVersion?: string | null; force?: boolean; now?: Date },
+  options: { outDir: string; directory?: readonly LedgerFile[]; modelVersion?: string | null; now?: Date },
 ): CalibrationRun {
   refuseNonLive(files);
   const directory = options.directory ?? files;
-  const qualifying = rowsFromLedger(files);
-  const settledNonPush = files.reduce((sum, file) => sum + describeFile(file).settled, 0);
-  const metrics = qualifying.length ? calibrationMetrics(qualifying, (row) => row.p) : null;
   const today = chicagoDate(options.now ?? new Date());
   mkdirSync(options.outDir, { recursive: true });
   const reportPath = join(options.outDir, `report-${today}.md`);
-  if (censusIsMaterial(settledNonPush, metrics)) {
-    writeFileSync(reportPath, mismatchReport(directory, qualifying, settledNonPush, metrics, today));
-    return { action: 'mismatch', reportPath, artifacts: [], qualifying: qualifying.length, settledNonPush, metrics };
+  const settledNonPush = files.reduce((sum, file) => sum + describeFile(file).settled, 0);
+  const noteLine = releaseNoteLine(files);
+  if (!options.modelVersion) {
+    const qualifying = rowsFromLedger(files);
+    const metrics = qualifying.length ? calibrationMetrics(qualifying, (row) => row.p) : null;
+    const context: RunContext = { outDir: options.outDir, reportPath, today, family: 'none', directory, qualifying, settledNonPush, metrics, noteLine };
+    return refuse(context, 'The rate card has no model_version, so a map cannot be keyed to a simulation family.');
   }
-  return fitGroups(qualifying, directory, settledNonPush, metrics, { ...options, reportPath, today });
+  const qualifying = rowsFromLedger(files, options.modelVersion);
+  const metrics = qualifying.length ? calibrationMetrics(qualifying, (row) => row.p) : null;
+  return fitGroups({ outDir: options.outDir, reportPath, today, family: options.modelVersion, directory, qualifying, settledNonPush, metrics, noteLine });
 }
 
-function censusMarkdown(
-  directory: readonly LedgerFile[],
-  qualifying: readonly PropCalibrationRow[],
-  settledNonPush: number,
-  metrics: PropCalibrationMetrics | null,
-): string[] {
+function censusMarkdown(context: RunContext): string[] {
+  const { directory, qualifying, settledNonPush, metrics } = context;
   const counts = { points: 0, rebAst: 0, tpm: 0 };
   for (const row of qualifying) counts[row.group] += 1;
   const age = median(qualifying.map((row) => row.lineAgeMinutes));
-  const lines = directory.map(describeFile);
   const bins = qualifying.length ? reliabilityBins(qualifying, (row) => row.p) : [];
   return [
-    `The release note measured ${SPEC_SETTLED_ROWS.toLocaleString('en-US')} settled non-push live rows, with 10-bin equal-width ECE ${SPEC_ECE_WIDTH10}, Brier ${SPEC_BRIER}, and log loss ${SPEC_LOG_LOSS}.`,
-    `This tree has ${settledNonPush} settled non-push live rows and ${qualifying.length} qualifying calibration rows.`,
+    `Simulation family ${context.family}. ${settledNonPush.toLocaleString('en-US')} settled non-push live rows, ${qualifying.length.toLocaleString('en-US')} of them qualifying calibration rows from this family.`,
+    '',
+    context.noteLine,
     '',
     '## Census',
     '',
     '| File | Source | Rows | Settled | Voids | Pushes | Unsettled |',
     '|---|---|---:|---:|---:|---:|---:|',
-    ...lines.map((row) => `| ${row.date} | ${row.source} | ${row.rows} | ${row.settled} | ${row.voids} | ${row.pushes} | ${row.unsettled} |`),
+    ...directory.map(describeFile).map((row) => `| ${row.date} | ${row.source} | ${row.rows} | ${row.settled} | ${row.voids} | ${row.pushes} | ${row.unsettled} |`),
     '',
     '| Group | Qualifying rows |',
     '|---|---:|',
@@ -147,14 +182,14 @@ function censusMarkdown(
     `| rebAst | ${counts.rebAst} |`,
     `| tpm | ${counts.tpm} |`,
     '',
-    '| Score | ECE width 10 | ECE freq 10 | Brier | Log loss |',
+    '| Score, every qualifying row | ECE width 10 | ECE freq 10 | Brier | Log loss |',
     '|---|---:|---:|---:|---:|',
-    `| Raw model | ${fmt(metrics?.eceWidth10 ?? Number.NaN)} | ${fmt(metrics?.eceFreq10 ?? Number.NaN)} | ${fmt(metrics?.brier ?? Number.NaN)} | ${fmt(metrics?.logLoss ?? Number.NaN)} |`,
+    `| Raw simulation | ${fmt(metrics?.eceWidth10 ?? Number.NaN)} | ${fmt(metrics?.eceFreq10 ?? Number.NaN)} | ${fmt(metrics?.brier ?? Number.NaN)} | ${fmt(metrics?.logLoss ?? Number.NaN)} |`,
     `| No-vig price | ${fmt(qualifying.length ? expectedCalibrationError(qualifying, (row) => row.noVig, 10, 'width') : Number.NaN)} | ${fmt(qualifying.length ? expectedCalibrationError(qualifying, (row) => row.noVig, 10, 'frequency') : Number.NaN)} | ${fmt(metrics?.brierNovig ?? Number.NaN)} | ${fmt(metrics?.logLossNovig ?? Number.NaN)} |`,
     '',
     `Median line age of the qualifying rows: ${age === null ? 'n/a' : `${age.toFixed(1)} minutes`}.`,
     '',
-    'Reliability of the raw model, 10 equal-width bins:',
+    'Reliability of the raw simulation, 10 equal-width bins:',
     '',
     '| Bin | n | Mean p | Actual rate |',
     '|---|---:|---:|---:|',
@@ -163,188 +198,157 @@ function censusMarkdown(
   ];
 }
 
-function mismatchReport(
-  directory: readonly LedgerFile[],
-  qualifying: readonly PropCalibrationRow[],
-  settledNonPush: number,
-  metrics: PropCalibrationMetrics | null,
-  today: string,
-): string {
-  return [
-    `# Prop calibration ${today}`,
-    '',
-    '## Census mismatch',
-    '',
-    ...censusMarkdown(directory, qualifying, settledNonPush, metrics),
-    'The gap is material, so no map was fitted and selectMethod was not called.',
-    '',
-    '## §7.5 items not met',
-    '',
-    '- No held-out day. Live logging on this tree does not have a later validation block.',
-    '- No group has a later validation block of at least 100 clusters.',
-    '- Mean-bias checks were not run. The ledger stores no projection, and there is no sims archive to join.',
-    `- Settled non-push live rows are ${settledNonPush}, below 2,000.`,
-    '- PROP_POLICY.calibrated stays false.',
-    '- No map was fitted. No group JSON was written.',
-    '',
-  ].join('\n');
-}
-
-function refusalReport(
-  directory: readonly LedgerFile[],
-  qualifying: readonly PropCalibrationRow[],
-  settledNonPush: number,
-  metrics: PropCalibrationMetrics | null,
-  today: string,
-  detail: string,
-): string {
-  return [
-    `# Prop calibration ${today}`,
-    '',
-    '## Fit refused',
-    '',
-    ...censusMarkdown(directory, qualifying, settledNonPush, metrics),
-    detail,
-    '',
-    '## §7.5 items not met',
-    '',
-    '- No group has a later validation block of at least 100 clusters, so selectMethod was not called.',
-    '- Mean-bias checks were not run. The ledger stores no projection, and there is no sims archive to join.',
-    '- PROP_POLICY.calibrated stays false.',
-    '- No map was fitted. No group JSON was written.',
-    '',
-  ].join('\n');
-}
-
-function fitGroups(
-  qualifying: readonly PropCalibrationRow[],
-  directory: readonly LedgerFile[],
-  settledNonPush: number,
-  metrics: PropCalibrationMetrics | null,
-  options: { outDir: string; reportPath: string; today: string; modelVersion?: string | null; force?: boolean },
-): CalibrationRun {
-  const dates = [...new Set(qualifying.map((row) => row.date))].sort();
-  const days = splitTipDates(dates);
-  if (!days) {
-    writeFileSync(options.reportPath, refusalReport(directory, qualifying, settledNonPush, metrics, options.today, 'One settled day cannot be both the fit and the validation.'));
-    return { action: 'refused', reportPath: options.reportPath, artifacts: [], qualifying: qualifying.length, settledNonPush, metrics };
-  }
-  let split: { fit: PropCalibrationRow[]; validation: PropCalibrationRow[] };
-  try {
-    split = splitChronological(qualifying, days.fit[days.fit.length - 1]);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    writeFileSync(options.reportPath, refusalReport(directory, qualifying, settledNonPush, metrics, options.today, `Refused: ${message}`));
-    return { action: 'refused', reportPath: options.reportPath, artifacts: [], qualifying: qualifying.length, settledNonPush, metrics };
-  }
-  const prepared: {
-    group: PropCalibrationGroup;
-    fit: PropCalibrationRow[];
-    validation: PropCalibrationRow[];
-    selected: ReturnType<typeof selectMethod>;
-  }[] = [];
-  const skipped: string[] = [];
-  for (const group of GROUPS) {
-    const fit = split.fit.filter((row) => row.group === group);
-    const validation = split.validation.filter((row) => row.group === group);
-    const clusters = new Set(validation.map((row) => row.key)).size;
-    if (fit.length < MIN_GROUP_FIT_ROWS || clusters < MIN_VALIDATION_CLUSTERS) {
-      skipped.push(`${group}: fit rows ${fit.length}, validation clusters ${clusters}`);
-      continue;
-    }
-    prepared.push({ group, fit, validation, selected: selectMethod(fit, validation) });
-  }
-  if (!options.modelVersion) {
-    writeFileSync(options.reportPath, refusalReport(directory, qualifying, settledNonPush, metrics, options.today, 'Refused: the rate card has no model_hash, so a map cannot be versioned.'));
-    return { action: 'refused', reportPath: options.reportPath, artifacts: [], qualifying: qualifying.length, settledNonPush, metrics };
-  }
-  if (!prepared.length) {
-    writeFileSync(options.reportPath, refusalReport(directory, qualifying, settledNonPush, metrics, options.today, `Refused before a map was written.\n\n${skipped.join('\n')}`));
-    return { action: 'refused', reportPath: options.reportPath, artifacts: [], qualifying: qualifying.length, settledNonPush, metrics };
-  }
-  const pooled = prepared.flatMap((item) => item.validation);
-  const weightOf = (row: PropCalibrationRow) => {
-    const item = prepared.find((candidate) => candidate.group === row.group);
-    return item ? applyCalibration(item.selected.params, row.p) : row.p;
-  };
-  let weight = fitBlendWeight(pooled, weightOf);
-  const previous = prepared.map((item) => previousWeight(options.outDir, item.group));
-  const mature = prepared.some((item) => item.fit.length >= CONFIRMED_WEIGHT_ROWS);
-  const repeated = previous.every((value) => value !== null) && previous.every((value) => Math.abs((value ?? 0) - weight) < WEIGHT_MATCH);
-  if (!(mature && repeated)) weight = Math.min(weight, UNCONFIRMED_WEIGHT_CAP);
-  const written: string[] = [];
-  const sections: string[] = [];
-  for (const item of prepared) {
-    const reasons = item.selected.reason ? [item.selected.reason] : [];
-    reasons.push('Mean-bias checks were not run. The ledger stores no projection, and the sims archive is not used.');
-    const raw = calibrationMetrics(item.validation, (row) => row.p);
-    const blended = calibrationMetrics(item.validation, (row) => blendWithMarket(applyCalibration(item.selected.params, row.p), row.noVig, weight));
-    if (!(item.selected.metrics.logLoss < raw.logLoss)) reasons.push('Calibrated validation log loss is not better than the raw model.');
-    if (item.validation.length < MIN_VALIDATION_ROWS) reasons.push(`Validation rows ${item.validation.length} are below ${MIN_VALIDATION_ROWS}.`);
-    if (!(Math.abs(blended.logLoss - blended.logLossNovig) <= 0.005 && blended.eceWidth10 < 0.03 && blended.eceFreq10 < 0.03 && blended.brier < blended.brierNovig)) {
-      reasons.push('Calibrated-and-blended validation does not meet the log-loss, ECE, and Brier gates.');
-    }
-    if (!(item.selected.metrics.eceWidth10 < 0.05 && item.selected.metrics.eceFreq10 < 0.05)) reasons.push('Group validation ECE is not under 0.05.');
-    if (!(item.selected.metrics.slopeLo <= 1 && item.selected.metrics.slopeHi >= 1 && item.selected.metrics.interceptLo <= 0 && item.selected.metrics.interceptHi >= 0)) {
-      reasons.push('Cox slope or intercept confidence interval misses the target.');
-    }
-    const artifact: PropCalibrationArtifact = {
-      schema_version: 1,
-      group: item.group,
-      method: item.selected.method,
-      model_version: options.modelVersion,
-      input_hash: inputHash(item.fit, options.modelVersion),
-      fitted_through: item.fit.reduce((last, row) => (row.date > last ? row.date : last), item.fit[0].date),
-      validated_through: item.validation.reduce((last, row) => (row.date > last ? row.date : last), item.validation[0].date),
-      rows_fit: item.fit.length,
-      rows_validated: item.validation.length,
-      clusters_fit: new Set(item.fit.map((row) => row.key)).size,
-      params: item.selected.params,
-      w: weight,
-      metrics_fit: calibrationMetrics(item.fit, (row) => applyCalibration(item.selected.params, row.p)),
-      metrics_validated: item.selected.metrics,
-      status: reasons.length ? 'rejected' : 'fitted',
-      reason: reasons.length ? reasons.join(' ') : null,
-    };
-    const path = join(options.outDir, `${item.group}.json`);
-    if (existsSync(path) && !options.force) {
-      const previousArtifact = JSON.parse(readFileSync(path, 'utf8')) as { model_version?: string };
-      if (previousArtifact.model_version && previousArtifact.model_version !== artifact.model_version) {
-        console.warn(`skip ${item.group}: existing model_version differs; pass --force`);
-        sections.push(`${item.group} was not overwritten because its model_version differs.`);
-        continue;
-      }
-    }
-    writeFileSync(path, `${JSON.stringify(artifact, null, 2)}\n`);
-    written.push(path);
-    sections.push(`${item.group}: ${artifact.method}, status ${artifact.status}, validation log loss ${fmt(artifact.metrics_validated.logLoss)}, w ${weight}. ${artifact.reason ?? ''}`);
-  }
-  const flat = Math.abs(weight - BLEND_PRIOR) < WEIGHT_MATCH;
+function refuse(context: RunContext, detail: string): CalibrationRun {
   writeFileSync(
-    options.reportPath,
-    [
-      `# Prop calibration ${options.today}`,
-      '',
-      `Global blend weight ${weight}${flat ? ' (flat curve, prior 0.2)' : ''}. One validation block cannot confirm a second win, so a non-flat weight stays capped at ${UNCONFIRMED_WEIGHT_CAP} until a group has ${CONFIRMED_WEIGHT_ROWS} fit rows and the stored weight matches.`,
-      '',
-      ...sections,
-      '',
-      skipped.length ? `Skipped:\n\n${skipped.join('\n')}` : '',
-      '',
-    ].join('\n'),
+    context.reportPath,
+    [`# Prop calibration ${context.today}`, '', '## No map fitted', '', detail, '', ...censusMarkdown(context)].join('\n'),
   );
-  return { action: 'written', reportPath: options.reportPath, artifacts: written, qualifying: qualifying.length, settledNonPush, metrics };
+  return { action: 'refused', reportPath: context.reportPath, artifacts: [], qualifying: context.qualifying.length, settledNonPush: context.settledNonPush, metrics: context.metrics };
 }
 
-function previousWeight(dir: string, group: PropCalibrationGroup): number | null {
-  const path = join(dir, `${group}.json`);
+function readArtifact(path: string): PropCalibrationArtifact | null {
   if (!existsSync(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as { w?: number };
-    return typeof parsed.w === 'number' ? parsed.w : null;
+    return JSON.parse(readFileSync(path, 'utf8')) as PropCalibrationArtifact;
   } catch {
     return null;
   }
+}
+
+function scoresRow(label: string, metrics: PropCalibrationMetrics): string {
+  return `| ${label} | ${fmt(metrics.logLoss)} | ${fmt(metrics.brier)} | ${fmt(metrics.eceWidth10)} | ${fmt(metrics.eceFreq10)} |`;
+}
+
+function fitGroups(context: RunContext): CalibrationRun {
+  const { qualifying, family, outDir } = context;
+  if (new Set(qualifying.map((row) => row.date)).size < 2) {
+    return refuse(context, 'Fewer than two settled tip dates: one day cannot be both the fit and the later check.');
+  }
+  const prepared: {
+    group: PropCalibrationGroup;
+    validatedThrough: string;
+    previous: PropCalibrationArtifact | null;
+    selected: WalkForwardSelection;
+  }[] = [];
+  const skipped: string[] = [];
+  for (const group of GROUPS) {
+    const rows = qualifying.filter((row) => row.group === group);
+    let folds: WalkForwardFold[];
+    try {
+      folds = walkForwardFolds(rows, MIN_GROUP_FIT_ROWS);
+    } catch (error) {
+      skipped.push(`- ${GROUP_LABEL[group]}: ${error instanceof Error ? error.message : String(error)}. Stays raw.`);
+      continue;
+    }
+    const clusters = new Set(folds.flatMap((fold) => fold.validation.map((row) => row.key))).size;
+    if (!folds.length || clusters < MIN_VALIDATION_CLUSTERS) {
+      const earliest = rows.length ? rows.reduce((first, row) => (row.date < first ? row.date : first), rows[0].date) : null;
+      skipped.push(
+        `- ${GROUP_LABEL[group]}: ${rows.length} settled rows${earliest ? ` since ${earliest}` : ''}. A day is scored once ${MIN_GROUP_FIT_ROWS} earlier rows exist, and the scored days need ${MIN_VALIDATION_CLUSTERS} player-games; they hold ${clusters}. Stays raw.`,
+      );
+      continue;
+    }
+    const stored = readArtifact(join(outDir, `${group}.json`));
+    const previous = stored && stored.model_version === family ? stored : null;
+    const validatedThrough = folds[folds.length - 1].day;
+    try {
+      const selected = selectWalkForward(folds, previousHeldOutBest(previous?.held_out_best, validatedThrough));
+      prepared.push({ group, validatedThrough, previous, selected });
+    } catch (error) {
+      skipped.push(`- ${GROUP_LABEL[group]}: ${error instanceof Error ? error.message : String(error)}. Stays raw.`);
+    }
+  }
+  if (!prepared.length) {
+    return refuse(context, `No group has enough rows yet.\n\n${skipped.join('\n')}`);
+  }
+  const pooled = prepared.flatMap((item) => item.selected.heldOut);
+  const owner = new Map<PropCalibrationRow, WalkForwardSelection>();
+  for (const item of prepared) for (const row of item.selected.heldOut) owner.set(row, item.selected);
+  const forecastOf = (row: PropCalibrationRow) => owner.get(row)!.predicted.get(row)!;
+  const open = fitBlendWeight(pooled, forecastOf);
+  // A weight past the cap needs a mature fit and an earlier held-out block that chose the same weight.
+  const mature = prepared.some((item) => item.selected.fit.length >= CONFIRMED_WEIGHT_ROWS);
+  const repeated = prepared.every(
+    (item) => item.previous?.w_open !== undefined && Math.abs(item.previous.w_open - open) < WEIGHT_MATCH && item.previous.validated_through < item.validatedThrough,
+  );
+  const weight = mature && repeated ? open : fitBlendWeight(pooled, forecastOf, UNCONFIRMED_WEIGHT_CAP);
+  const written: string[] = [];
+  const sections: string[] = [];
+  for (const item of prepared) {
+    const { selected } = item;
+    const heldOut = selected.heldOut;
+    const forecast = (row: PropCalibrationRow) => selected.predicted.get(row)!;
+    const raw = calibrationMetrics(heldOut, (row) => row.p);
+    const blended = calibrationMetrics(heldOut, (row) => blendWithMarket(forecast(row), row.noVig, weight));
+    const noise = eceNoise(heldOut.map(forecast));
+    const check = shippingCheck({ raw, calibrated: selected.metrics, blended, noise, validationRows: heldOut.length });
+    const notes = [...(selected.reason ? [selected.reason] : []), ...check.notes, MEAN_BIAS_NOTE];
+    const artifact: PropCalibrationArtifact = {
+      schema_version: 1,
+      group: item.group,
+      method: selected.method,
+      model_version: family,
+      input_hash: inputHash(selected.fit, family),
+      fitted_through: lastDate(selected.fit),
+      validated_through: item.validatedThrough,
+      validated_from: selected.days[0],
+      rows_fit: selected.fit.length,
+      rows_validated: heldOut.length,
+      clusters_fit: new Set(selected.fit.map((row) => row.key)).size,
+      params: selected.params,
+      w: weight,
+      metrics_fit: calibrationMetrics(selected.fit, (row) => applyCalibration(selected.params, row.p)),
+      metrics_validated: selected.metrics,
+      status: check.issues.length ? 'rejected' : 'fitted',
+      reason: check.issues.length ? check.issues.join(' ') : null,
+      metrics_raw: raw,
+      notes,
+      drift: check.drift,
+      w_open: open,
+      held_out_best: recordHeldOutBest(item.previous?.held_out_best, item.validatedThrough, selected.heldOutBest),
+    };
+    const path = join(outDir, `${item.group}.json`);
+    writeFileSync(path, `${JSON.stringify(artifact, null, 2)}\n`);
+    written.push(path);
+    const sample = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8].map((p) => `${p.toFixed(1)} → ${applyCalibration(selected.params, p).toFixed(3)}`).join(', ');
+    sections.push(
+      [
+        `## ${GROUP_LABEL[item.group]}: ${artifact.status === 'fitted' ? 'map applied' : 'map withheld'}`,
+        '',
+        `Walk-forward: each tip date from ${selected.days[0]} through ${item.validatedThrough} (${selected.days.length} days, ${heldOut.length} rows, ${selected.metrics.clusters} player-games) was scored by a ${artifact.method} map fitted only on earlier days. The shipped map is fitted on ${artifact.rows_fit} rows through ${artifact.fitted_through}. Drift ${artifact.drift}.`,
+        '',
+        '| Held-out score | Log loss | Brier | ECE width 10 | ECE freq 10 |',
+        '|---|---:|---:|---:|---:|',
+        scoresRow('Raw simulation', raw),
+        scoresRow('Calibrated', item.selected.metrics),
+        scoresRow(`Blended, w ${weight}`, blended),
+        `| No-vig price | ${fmt(blended.logLossNovig)} | ${fmt(blended.brierNovig)} | | |`,
+        '',
+        `Raw to calibrated: ${sample}.`,
+        `Sampling-noise ECE for these rows at the 95th percentile: width ${fmt(noise.width95)}, frequency ${fmt(noise.freq95)}.`,
+        '',
+        ...(artifact.reason ? [`Withheld: ${artifact.reason}`, ''] : []),
+        ...notes.map((note) => `- ${note}`),
+        '',
+      ].join('\n'),
+    );
+  }
+  const flat = Math.abs(weight - BLEND_PRIOR) < WEIGHT_MATCH;
+  writeFileSync(
+    context.reportPath,
+    [
+      `# Prop calibration ${context.today}`,
+      '',
+      'Every settled tip date is scored by a map fitted only on the days before it, and the scores are pooled over the last ten such days. A group is shown calibrated only while that pooled score beats the raw simulation. The shipped map is the one fitted on every day before the last, so it too was scored on a day it never saw.',
+      '',
+      `Blend weight ${weight}${flat ? ' (the curve is flat up to the cap, so the 0.2 prior stands)' : ''}: the page shows ${weight} of the calibrated chance plus ${Number((1 - weight).toFixed(2))} of the no-vig price. Over all weights the lowest log loss is at ${open}. A weight above ${UNCONFIRMED_WEIGHT_CAP} needs ${CONFIRMED_WEIGHT_ROWS} fit rows in a group and an earlier held-out block that chose the same weight.`,
+      '',
+      ...sections,
+      ...(skipped.length ? ['## Not fitted yet', '', ...skipped, ''] : []),
+      ...censusMarkdown(context),
+    ].join('\n'),
+  );
+  return { action: 'written', reportPath: context.reportPath, artifacts: written, qualifying: qualifying.length, settledNonPush: context.settledNonPush, metrics: context.metrics };
 }
 
 function loadDirectory(dir: string): LedgerFile[] {
@@ -357,39 +361,33 @@ function loadDirectory(dir: string): LedgerFile[] {
   return files;
 }
 
-function printCensus(directory: readonly LedgerFile[], result: CalibrationRun): void {
-  console.log('file source rows settled voids pushes unsettled');
-  for (const row of directory.map(describeFile)) {
-    console.log(`${row.date} ${row.source} ${row.rows} ${row.settled} ${row.voids} ${row.pushes} ${row.unsettled}`);
-  }
-  console.log(`qualifying ${result.qualifying}`);
-  console.log(`settled non-push live ${result.settledNonPush}`);
-  console.log(`eceWidth10 ${fmt(result.metrics?.eceWidth10 ?? Number.NaN)} eceFreq10 ${fmt(result.metrics?.eceFreq10 ?? Number.NaN)} brier ${fmt(result.metrics?.brier ?? Number.NaN)} logLoss ${fmt(result.metrics?.logLoss ?? Number.NaN)}`);
-  console.log(`brierNovig ${fmt(result.metrics?.brierNovig ?? Number.NaN)} logLossNovig ${fmt(result.metrics?.logLossNovig ?? Number.NaN)}`);
-  console.log(`spec settled ${SPEC_SETTLED_ROWS} ece ${SPEC_ECE_WIDTH10} brier ${SPEC_BRIER} logLoss ${SPEC_LOG_LOSS}`);
-  console.log(`action ${result.action}`);
-  console.log(`report ${result.reportPath}`);
-  console.log(`artifacts ${result.artifacts.length ? result.artifacts.join(',') : 'none'}`);
-}
-
 function main(): void {
   const root = process.env.PICKS_ROOT ?? ROOT;
   const directory = loadDirectory(join(root, 'data/pick-ledger'));
   const live = directory.filter((file) => file.source === 'live');
   let modelVersion: string | null = null;
   try {
-    const card = JSON.parse(readFileSync(join(root, 'public/data/rate-card.json'), 'utf8')) as { model_hash?: string };
-    modelVersion = card.model_hash ?? null;
+    const card = JSON.parse(readFileSync(join(root, 'public/data/rate-card.json'), 'utf8')) as { model_version?: string };
+    modelVersion = typeof card.model_version === 'string' && card.model_version ? card.model_version : null;
   } catch {
     modelVersion = null;
   }
-  const result = executeCalibration(live, {
-    outDir: join(root, 'data/prop-calibration'),
-    directory,
-    modelVersion,
-    force: process.argv.includes('--force'),
+  const result = executeCalibration(live, { outDir: join(root, 'data/prop-calibration'), directory, modelVersion });
+  const groups = result.artifacts.map((path) => {
+    const artifact = readArtifact(path);
+    return artifact ? `${artifact.group}:${artifact.method}:${artifact.status}` : path;
   });
-  printCensus(directory, result);
+  console.log(
+    JSON.stringify({
+      action: result.action,
+      family: modelVersion,
+      settled_non_push_live: result.settledNonPush,
+      qualifying: result.qualifying,
+      raw_log_loss: result.metrics ? Number(result.metrics.logLoss.toFixed(4)) : null,
+      groups,
+      report: result.reportPath,
+    }),
+  );
 }
 
 function runningAsCli(): boolean {

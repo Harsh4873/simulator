@@ -826,10 +826,14 @@ export function renderPropResults(
       ? '<p>The opposite price was not valid in this format, so the no-vig price is left out.</p>'
       : '';
   const noVig = quote.noVig === null ? '' : `<p>No-vig price on this side: ${percent(quote.noVig)}. That is not the break-even of the price you would bet.</p>`;
+  const calibratedNote = quote.calibrated
+    ? `<p class="prop-note" data-calibrated>Calibrated chance. The simulations alone put this side at ${percent(quote.calibrated.raw)}. Settled lines like it have landed closer to even, so the map for this stat moves that to ${percent(quote.calibrated.mapped)}, and the model chance weighs it ${Math.round(quote.calibrated.w * 100)}% against the no-vig price.</p>`
+    : '';
   return `<div class="prop-results" data-verdict="${verdict.verdict.toLowerCase()}">
     <p class="prop-caption">${escapeHtml(caption)}</p>
     <p class="verdict-mark ${verdict.verdict.toLowerCase()}">${verdict.verdict}</p>
     ${stats}
+    ${calibratedNote}
     <p class="verdict-why"><span class="why-kicker">Why this call</span>${escapeHtml(verdict.text)}</p>
     <p class="stat-group-label">Model against the book</p>
     <div class="prop-compare" role="img" aria-label="Model ${quote.modelProbability === null ? 'not graded' : percent(quote.modelProbability)} versus book ${percent(quote.breakEven)}">

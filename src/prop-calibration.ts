@@ -6,6 +6,22 @@ import { mulberry32 } from './rng.ts';
 
 export type PropCalibrationGroup = 'points' | 'rebAst' | 'tpm';
 export type PropCalibrationMethod = 'beta' | 'platt' | 'temperature' | 'isotonic';
+export type DriftLevel = 'green' | 'amber' | 'red';
+
+/**
+ * A prop map is keyed to the simulation family (`RateCard.model_version`), not to the hash of every source file. A page,
+ * feed, or fitter change does not move the simulated probabilities, and bumping the family retires every map.
+ * Snapshots logged before the family was stamped on them were all made by possessions-v9: it went live on Nov 14, 2026,
+ * and live logging began on Nov 15.
+ */
+export const LEGACY_LEDGER_FAMILY = 'possessions-v9';
+
+export function snapshotFamily(snap: { v?: string }): string {
+  return typeof snap.v === 'string' && snap.v ? snap.v : LEGACY_LEDGER_FAMILY;
+}
+
+/** A map whose held-out block ended this many days before today is not applied. A healthy refresh refits every run. */
+export const MAP_MAX_AGE_DAYS = 7;
 
 export interface PropCalibrationRow {
   date: string;
@@ -62,12 +78,24 @@ export interface PropCalibrationArtifact {
   rows_fit: number;
   rows_validated: number;
   clusters_fit: number;
+  /** First scored day of the walk-forward check. `validated_through` is the last. */
+  validated_from?: string;
   params: PropCalibrationParams;
   w: number;
   metrics_fit: PropCalibrationMetrics;
   metrics_validated: PropCalibrationMetrics;
   status: 'fitted' | 'rejected';
   reason: string | null;
+  /** Raw-model scores on the same held-out rows, so the gain can be read off the artifact. */
+  metrics_raw?: PropCalibrationMetrics;
+  /** Release checks this map does not meet yet. They gate a BET verdict, not the map. */
+  notes?: string[];
+  /** Noise-aware drift on the held-out block. Red suspends listing for the group. */
+  drift?: DriftLevel;
+  /** Best weight over [0, 1] before the cap. A weight above the cap needs two different held-out blocks to agree on it. */
+  w_open?: number;
+  /** Winner of each held-out block, oldest first. Isotonic ships only after it wins two different blocks in a row. */
+  held_out_best?: { validated_through: string; method: PropCalibrationMethod }[];
 }
 
 /** The fields a lean or a quote needs in order to apply a map. An artifact satisfies this. */
@@ -79,6 +107,8 @@ export interface PropCalibrationCard {
   fitted_through: string;
   params: PropCalibrationParams;
   w: number;
+  /** Red suspends listing for the group. The map still applies. */
+  drift?: DriftLevel;
 }
 
 export interface PropCalibrationTable {
@@ -99,7 +129,11 @@ export interface PropPanelCalibration {
   cutoff?: string;
 }
 
-/** The §0 release note this tree is compared with. A material gap refuses the fit. */
+/**
+ * The §0 release note: the live ledger through Nov 17, 2026. The fit report checks that this tree still reproduces it
+ * on those days. Later days only add rows, so the check never blocks a fit.
+ */
+export const SPEC_THROUGH = '2026-11-17';
 export const SPEC_SETTLED_ROWS = 1986;
 export const SPEC_ECE_WIDTH10 = 0.0704;
 export const SPEC_BRIER = 0.2574;
@@ -172,14 +206,16 @@ function tipDate(iso: string, fallback: string): string {
 /**
  * One calibration row per settled live lean. The target is P(over | played, not pushed): a void has no stat,
  * and a push is neither side. Replay files are ignored. Line age is kept, including rows older than 30 minutes.
+ * With a family, only snapshots that family made are kept: a map is never fitted on another model's probabilities.
  */
-export function rowsFromLedger(files: readonly LedgerFile[]): PropCalibrationRow[] {
+export function rowsFromLedger(files: readonly LedgerFile[], family?: string | null): PropCalibrationRow[] {
   const rows: PropCalibrationRow[] = [];
   for (const file of files) {
     if (file.source !== 'live') continue;
     for (const row of file.rows) {
       if (!row.result || 'void' in row.result) continue;
       const snap = row.last ?? row.open;
+      if (family && snapshotFamily(snap) !== family) continue;
       if (row.result.actual === snap.line || !(snap.play >= MIN_CALIBRATION_PLAY)) continue;
       const group = groupOf(row.m);
       if (!group) continue;
@@ -395,9 +431,10 @@ export function blendWithMarket(pCal: number, noVig: number, w: number): number 
 export function blendWeightCurve(
   rows: readonly PropCalibrationRow[],
   pCal: (row: PropCalibrationRow) => number,
+  cap = 1,
 ): { w: number; loss: number }[] {
   const curve: { w: number; loss: number }[] = [];
-  for (let step = 0; step <= Math.round(1 / BLEND_STEP); step += 1) {
+  for (let step = 0; step <= Math.round(cap / BLEND_STEP); step += 1) {
     const w = Number((step * BLEND_STEP).toFixed(2));
     const loss = mean(rows.map((row) => logLoss(blendWithMarket(pCal(row), row.noVig, w), row.y)));
     curve.push({ w, loss });
@@ -405,14 +442,20 @@ export function blendWeightCurve(
   return curve;
 }
 
-export function fitBlendWeight(rows: readonly PropCalibrationRow[], pCal: (row: PropCalibrationRow) => number): number {
-  if (!rows.length) return BLEND_PRIOR;
-  const curve = blendWeightCurve(rows, pCal);
+/**
+ * The weight in [0, cap] with the lowest log loss. When the curve over those weights varies by less than 0.002, the
+ * data cannot tell them apart and the prior is kept: a curve that only climbs past the cap says nothing about the
+ * weights the page can use.
+ */
+export function fitBlendWeight(rows: readonly PropCalibrationRow[], pCal: (row: PropCalibrationRow) => number, cap = 1): number {
+  const prior = Math.min(BLEND_PRIOR, cap);
+  if (!rows.length) return prior;
+  const curve = blendWeightCurve(rows, pCal, cap);
   console.log(`prop blend weight ${JSON.stringify(curve.map((point) => ({ w: point.w, logLoss: Number(point.loss.toFixed(6)) })))}`);
   const losses = curve.map((point) => point.loss);
-  if (!losses.every((loss) => Number.isFinite(loss))) return BLEND_PRIOR;
+  if (!losses.every((loss) => Number.isFinite(loss))) return prior;
   const span = Math.max(...losses) - Math.min(...losses);
-  if (span < BLEND_FLAT_GAP) return BLEND_PRIOR;
+  if (span < BLEND_FLAT_GAP) return prior;
   return curve.reduce((best, point) => (point.loss < best.loss ? point : best)).w;
 }
 
@@ -651,12 +694,13 @@ function mapDecreases(params: PropCalibrationParams): boolean {
   return false;
 }
 
-export function selectMethod(
-  fit: readonly PropCalibrationRow[],
-  validation: readonly PropCalibrationRow[],
-  previousMethod?: PropCalibrationMethod | null,
-): { method: PropCalibrationMethod; params: PropCalibrationParams; metrics: PropCalibrationMetrics; reason: string | null } {
-  if (!fit.length || !validation.length) throw new Error('Method selection needs a fit block and a later validation block');
+interface Candidate {
+  method: PropCalibrationMethod;
+  params: PropCalibrationParams;
+}
+
+/** Every method fitted on one block, with its clamping notes. A map that falls as the raw chance rises is dropped. */
+function fitCandidates(fit: readonly PropCalibrationRow[]): { candidates: Candidate[]; notes: string[]; support: { lo: number; hi: number } } {
   const support = supportOf(fit);
   const beta = betaMember(fit);
   const platt = plattMember(fit);
@@ -664,16 +708,37 @@ export function selectMethod(
   const notes: string[] = [];
   if (beta.clamped) notes.push('Unconstrained beta had a negative coefficient and was clamped at 0 before the remaining parameters were refit.');
   if (platt.clamped) notes.push('Platt slope was negative and was clamped at 0.');
-  const scored: ScoredMethod[] = [];
-  if (temperature > 0) scored.push({ method: 'temperature', params: { method: 'temperature', temperature, support }, loss: 0 });
-  scored.push({ method: 'platt', params: { method: 'platt', platt: { a: platt.a, b: platt.b }, support }, loss: 0 });
-  scored.push({ method: 'beta', params: { method: 'beta', beta: { a: beta.a, b: beta.b, c: beta.c }, support }, loss: 0 });
+  const candidates: Candidate[] = [];
+  if (temperature > 0) candidates.push({ method: 'temperature', params: { method: 'temperature', temperature, support } });
+  candidates.push({ method: 'platt', params: { method: 'platt', platt: { a: platt.a, b: platt.b }, support } });
+  candidates.push({ method: 'beta', params: { method: 'beta', beta: { a: beta.a, b: beta.b, c: beta.c }, support } });
   const knots = fit.length >= PROP_ISOTONIC_BLOCK * PROP_ISOTONIC_MIN_BLOCKS ? fitIsotonic(fit) : null;
-  if (knots) scored.push({ method: 'isotonic', params: { method: 'isotonic', isotonic: knots, support }, loss: 0 });
-  for (const candidate of scored) {
-    candidate.loss = mean(validation.map((row) => logLoss(applyCalibration(candidate.params, row.p), row.y)));
-  }
-  const monotone = scored.filter((candidate) => !mapDecreases(candidate.params));
+  if (knots) candidates.push({ method: 'isotonic', params: { method: 'isotonic', isotonic: knots, support } });
+  return { candidates: candidates.filter((candidate) => !mapDecreases(candidate.params)), notes, support };
+}
+
+/**
+ * Fits every method on the fit block and scores it on the later validation block. A parametric map wins ties.
+ * Isotonic replaces it only when it beats the best parametric map by more than the tie margin here and it also won
+ * the previous, earlier held-out block (`previousBest`). `heldOutBest` is this block's winner, for the next fit.
+ */
+export function selectMethod(
+  fit: readonly PropCalibrationRow[],
+  validation: readonly PropCalibrationRow[],
+  previousBest?: PropCalibrationMethod | null,
+): {
+  method: PropCalibrationMethod;
+  params: PropCalibrationParams;
+  metrics: PropCalibrationMetrics;
+  reason: string | null;
+  heldOutBest: PropCalibrationMethod;
+} {
+  if (!fit.length || !validation.length) throw new Error('Method selection needs a fit block and a later validation block');
+  const { candidates, notes, support } = fitCandidates(fit);
+  const monotone: ScoredMethod[] = candidates.map((candidate) => ({
+    ...candidate,
+    loss: mean(validation.map((row) => logLoss(applyCalibration(candidate.params, row.p), row.y))),
+  }));
   const isotonic = monotone.find((candidate) => candidate.method === 'isotonic');
   const rest = monotone.filter((candidate) => candidate.method !== 'isotonic');
   if (!rest.length) {
@@ -684,15 +749,139 @@ export function selectMethod(
       params,
       metrics: calibrationMetrics(validation, (row) => applyCalibration(params, row.p)),
       reason: 'Slopes were clamped at 0.',
+      heldOutBest: isotonic ? 'isotonic' : 'platt',
     };
   }
   const best = Math.min(...rest.map((candidate) => candidate.loss));
   const tied = rest.filter((candidate) => candidate.loss <= best + METHOD_TIE);
   tied.sort((a, b) => METHOD_PRIORITY.indexOf(a.method) - METHOD_PRIORITY.indexOf(b.method));
   let chosen = tied[0];
-  if (isotonic && previousMethod === 'isotonic' && isotonic.loss < best - METHOD_TIE) chosen = isotonic;
+  const isotonicWins = Boolean(isotonic && isotonic.loss < best - METHOD_TIE);
+  if (isotonic && isotonicWins && previousBest === 'isotonic') chosen = isotonic;
   const metrics = calibrationMetrics(validation, (row) => applyCalibration(chosen.params, row.p));
-  return { method: chosen.method, params: chosen.params, metrics, reason: notes.length ? notes.join(' ') : null };
+  return {
+    method: chosen.method,
+    params: chosen.params,
+    metrics,
+    reason: notes.length ? notes.join(' ') : null,
+    heldOutBest: isotonicWins ? 'isotonic' : tied[0].method,
+  };
+}
+
+/** The winner of the latest held-out block that ended before `validatedThrough`. A refit on the same block is not a second win. */
+export function previousHeldOutBest(
+  history: PropCalibrationArtifact['held_out_best'],
+  validatedThrough: string,
+): PropCalibrationMethod | null {
+  if (!Array.isArray(history)) return null;
+  let found: { validated_through: string; method: PropCalibrationMethod } | null = null;
+  for (const entry of history) {
+    if (!entry || typeof entry.validated_through !== 'string' || !(entry.validated_through < validatedThrough)) continue;
+    if (!found || entry.validated_through > found.validated_through) found = entry;
+  }
+  return found?.method ?? null;
+}
+
+export interface WalkForwardFold {
+  /** The settled tip date this fold scores. */
+  day: string;
+  /** Every qualifying row that tipped before `day`. */
+  fit: PropCalibrationRow[];
+  validation: PropCalibrationRow[];
+}
+
+/** Scored days kept: the most recent settled days decide, and an old slate stops counting after ten more. */
+export const MAX_WALK_FORWARD_FOLDS = 10;
+
+/**
+ * Each settled day is scored by maps fitted on every earlier day, once those earlier days hold `minFitRows` rows.
+ * No row is scored by a map that saw it, and a player-game never sits on both sides. Only the last
+ * `MAX_WALK_FORWARD_FOLDS` days are kept.
+ */
+export function walkForwardFolds(rows: readonly PropCalibrationRow[], minFitRows: number): WalkForwardFold[] {
+  const sorted = ordered(rows);
+  const dates = [...new Set(sorted.map((row) => row.date))];
+  const folds: WalkForwardFold[] = [];
+  for (let index = 1; index < dates.length; index += 1) {
+    const { fit, validation } = splitChronological(sorted.filter((row) => row.date <= dates[index]), dates[index - 1]);
+    if (fit.length < minFitRows) continue;
+    folds.push({ day: dates[index], fit, validation });
+  }
+  return folds.slice(-MAX_WALK_FORWARD_FOLDS);
+}
+
+export interface WalkForwardSelection {
+  method: PropCalibrationMethod;
+  /** The chosen method fitted on the last fold's fit block: every settled day before the last one. */
+  params: PropCalibrationParams;
+  fit: PropCalibrationRow[];
+  /** Every fold's scored rows. */
+  heldOut: PropCalibrationRow[];
+  /** The chosen method's chance for each scored row, from the map fitted before that row's day. */
+  predicted: Map<PropCalibrationRow, number>;
+  metrics: PropCalibrationMetrics;
+  /** Clamping notes for the shipped map. */
+  reason: string | null;
+  heldOutBest: PropCalibrationMethod;
+  days: string[];
+}
+
+/**
+ * Walk-forward method choice. Every method is refit at each fold and scored on that fold's day; the scores are pooled
+ * over all folds, so the choice rests on every scored day rather than one block. A parametric map wins ties.
+ * Isotonic is eligible only when it fitted in every fold, and replaces the parametric choice only when it wins here and
+ * also won the previous, earlier evaluation (`previousBest`).
+ */
+export function selectWalkForward(folds: readonly WalkForwardFold[], previousBest?: PropCalibrationMethod | null): WalkForwardSelection {
+  if (!folds.length) throw new Error('Walk-forward selection needs at least one fold');
+  const predictions = new Map<PropCalibrationMethod, Map<PropCalibrationRow, number>>();
+  const heldOut: PropCalibrationRow[] = [];
+  let last: ReturnType<typeof fitCandidates> | null = null;
+  for (const fold of folds) {
+    last = fitCandidates(fold.fit);
+    for (const candidate of last.candidates) {
+      const map = predictions.get(candidate.method) ?? new Map<PropCalibrationRow, number>();
+      for (const row of fold.validation) map.set(row, applyCalibration(candidate.params, row.p));
+      predictions.set(candidate.method, map);
+    }
+    heldOut.push(...fold.validation);
+  }
+  const final = last!;
+  const complete = (method: PropCalibrationMethod) =>
+    predictions.get(method)?.size === heldOut.length && final.candidates.some((candidate) => candidate.method === method);
+  const loss = (method: PropCalibrationMethod) => mean(heldOut.map((row) => logLoss(predictions.get(method)!.get(row)!, row.y)));
+  const parametric = METHOD_PRIORITY.filter((method) => method !== 'isotonic' && complete(method)).map((method) => ({ method, loss: loss(method) }));
+  if (!parametric.length) throw new Error('No monotone map was fitted in every fold');
+  const best = Math.min(...parametric.map((candidate) => candidate.loss));
+  const tied = parametric.filter((candidate) => candidate.loss <= best + METHOD_TIE);
+  tied.sort((a, b) => METHOD_PRIORITY.indexOf(a.method) - METHOD_PRIORITY.indexOf(b.method));
+  let chosen = tied[0].method;
+  const isotonicWins = complete('isotonic') && loss('isotonic') < best - METHOD_TIE;
+  if (isotonicWins && previousBest === 'isotonic') chosen = 'isotonic';
+  const predicted = predictions.get(chosen)!;
+  return {
+    method: chosen,
+    params: final.candidates.find((candidate) => candidate.method === chosen)!.params,
+    fit: folds[folds.length - 1].fit,
+    heldOut,
+    predicted,
+    metrics: calibrationMetrics(heldOut, (row) => predicted.get(row)!),
+    reason: final.notes.length ? final.notes.join(' ') : null,
+    heldOutBest: isotonicWins ? 'isotonic' : tied[0].method,
+    days: folds.map((fold) => fold.day),
+  };
+}
+
+/** Adds this block's winner. A refit of the same block replaces its entry. Five blocks are kept. */
+export function recordHeldOutBest(
+  history: PropCalibrationArtifact['held_out_best'],
+  validatedThrough: string,
+  method: PropCalibrationMethod,
+): { validated_through: string; method: PropCalibrationMethod }[] {
+  const kept = (Array.isArray(history) ? history : []).filter((entry) => entry && entry.validated_through !== validatedThrough);
+  return [...kept, { validated_through: validatedThrough, method }]
+    .sort((a, b) => a.validated_through.localeCompare(b.validated_through))
+    .slice(-5);
 }
 
 export function meanBiasCorrection(
@@ -753,20 +942,119 @@ function meanAbsoluteError(rows: readonly { projection: number; actual: number }
   return mean(rows.map((row) => Math.abs(row.actual - (alpha + beta * row.projection))));
 }
 
-export function driftAction(signal: {
-  eceWidth10: number;
-  eceFreq10: number;
-  slopeLo: number;
-  slopeHi: number;
-  interceptLo: number;
-  interceptHi: number;
-  tierEdge: number;
-}): 'green' | 'amber' | 'red' {
-  if (signal.eceWidth10 > 0.05 || signal.eceFreq10 > 0.05 || signal.tierEdge < -0.01) return 'red';
+/**
+ * What 10-bin ECE a perfectly calibrated forecaster would show on these same probabilities, from outcomes redrawn at
+ * each probability. On ~700 rows near 50%, sampling noise alone puts equal-frequency ECE near 0.05, so a fixed 0.03
+ * bar fails even the no-vig price. Rows of one player-game are drawn independently here, which understates the noise,
+ * so these floors are on the strict side.
+ */
+export interface EceNoise {
+  width95: number;
+  width99: number;
+  freq95: number;
+  freq99: number;
+}
+
+const NOISE_REPLICATES = 400;
+const NOISE_SEED = 977;
+
+export function eceNoise(probabilities: readonly number[], replicates = NOISE_REPLICATES, seed = NOISE_SEED): EceNoise {
+  if (!probabilities.length) return { width95: 0, width99: 0, freq95: 0, freq99: 0 };
+  const rng = mulberry32(seed);
+  const width: number[] = [];
+  const freq: number[] = [];
+  for (let replicate = 0; replicate < replicates; replicate += 1) {
+    const values = probabilities.map((p) => ({ p, y: rng() < p ? 1 : 0 }));
+    width.push(eceOf(widthBins(values, ECE_BINS), values.length));
+    freq.push(eceOf(frequencyBins(values, ECE_BINS), values.length));
+  }
+  width.sort((a, b) => a - b);
+  freq.sort((a, b) => a - b);
+  const at = (sorted: number[], q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+  return { width95: at(width, 0.95), width99: at(width, 0.99), freq95: at(freq, 0.95), freq99: at(freq, 0.99) };
+}
+
+/**
+ * Red suspends a map, amber is reported. ECE is judged against the larger of the fixed bar and the noise floor for
+ * this sample; without a floor the fixed bars apply. A NaN tier edge (no graded record) does not count.
+ */
+export function driftAction(
+  signal: {
+    eceWidth10: number;
+    eceFreq10: number;
+    slopeLo: number;
+    slopeHi: number;
+    interceptLo: number;
+    interceptHi: number;
+    tierEdge: number;
+  },
+  noise?: EceNoise,
+): DriftLevel {
+  const redWidth = Math.max(0.05, noise?.width99 ?? 0);
+  const redFreq = Math.max(0.05, noise?.freq99 ?? 0);
+  const amberWidth = Math.max(0.03, noise?.width95 ?? 0);
+  const amberFreq = Math.max(0.03, noise?.freq95 ?? 0);
+  if (signal.eceWidth10 > redWidth || signal.eceFreq10 > redFreq || signal.tierEdge < -0.01) return 'red';
   const slopeExcludesOne = signal.slopeLo > 1 || signal.slopeHi < 1;
   const interceptExcludesZero = signal.interceptLo > 0 || signal.interceptHi < 0;
-  if (signal.eceWidth10 > 0.03 || signal.eceFreq10 > 0.03 || slopeExcludesOne || interceptExcludesZero || signal.tierEdge < 0) return 'amber';
+  if (signal.eceWidth10 > amberWidth || signal.eceFreq10 > amberFreq || slopeExcludesOne || interceptExcludesZero || signal.tierEdge < 0) return 'amber';
   return 'green';
+}
+
+/** The blend may cost at most this much log loss against the no-vig price on the held-out block. */
+export const BLEND_LOG_LOSS_TOLERANCE = 0.005;
+const RELEASE_ECE = 0.03;
+const RELEASE_VALIDATION_ROWS = 500;
+
+/**
+ * Whether a map ships, judged only on the later block it was not fitted on. Withholding a map means showing the raw
+ * simulation, so the bar is relative: `issues` withhold the map when it does not beat the raw simulation on log loss,
+ * Brier, and equal-width ECE, or when the blend falls more than 0.005 log loss behind the no-vig price.
+ * `drift` red (ECE past the 99th-percentile noise floor) keeps the map, because it still beats the raw numbers, and
+ * suspends listing for the group. `notes` are the release checks a BET verdict still needs; they hold nothing back.
+ */
+export function shippingCheck(input: {
+  raw: PropCalibrationMetrics;
+  calibrated: PropCalibrationMetrics;
+  blended: PropCalibrationMetrics;
+  noise: EceNoise;
+  validationRows: number;
+}): { issues: string[]; notes: string[]; drift: DriftLevel } {
+  const { raw, calibrated, blended, noise } = input;
+  const issues: string[] = [];
+  const notes: string[] = [];
+  if (!(calibrated.logLoss < raw.logLoss)) issues.push('Held-out log loss is not better than the raw simulation.');
+  if (!(calibrated.brier < raw.brier)) issues.push('Held-out Brier score is not better than the raw simulation.');
+  if (!(calibrated.eceWidth10 < raw.eceWidth10)) issues.push('Held-out equal-width ECE is not better than the raw simulation.');
+  if (!(blended.logLoss <= blended.logLossNovig + BLEND_LOG_LOSS_TOLERANCE)) {
+    issues.push('The blended probability trails the no-vig price by more than 0.005 log loss.');
+  }
+  const drift = driftAction({ ...calibrated, tierEdge: Number.NaN }, noise);
+  if (drift === 'red') {
+    notes.push(
+      issues.length
+        ? 'Drift is red: held-out ECE is past the 99th-percentile noise floor.'
+        : 'Drift is red: held-out ECE is past the 99th-percentile noise floor, so leans in this group are not listed.',
+    );
+  }
+  if (!(calibrated.slopeLo <= 1 && calibrated.slopeHi >= 1 && calibrated.interceptLo <= 0 && calibrated.interceptHi >= 0)) {
+    notes.push('The held-out Cox slope or intercept interval misses 1 or 0.');
+  }
+  if (!(calibrated.eceWidth10 < RELEASE_ECE && calibrated.eceFreq10 < RELEASE_ECE)) notes.push('Held-out ECE is not under the 0.03 release bar.');
+  if (!(blended.brier < blended.brierNovig)) notes.push('The blend does not beat the no-vig price on Brier score.');
+  if (input.validationRows < RELEASE_VALIDATION_ROWS) notes.push(`Held-out rows ${input.validationRows} are below ${RELEASE_VALIDATION_ROWS}.`);
+  return { issues, notes, drift };
+}
+
+function dayNumber(date: string): number {
+  return Math.floor(Date.parse(`${date}T12:00:00Z`) / 86400000);
+}
+
+/** Applies only to the family it was fitted for, only while fitted, and only while its held-out block is recent. */
+export function mapIsCurrent(card: Pick<PropCalibrationArtifact, 'status' | 'model_version' | 'validated_through'>, family: string | null | undefined, today: string): boolean {
+  if (card.status !== 'fitted' || !family || card.model_version !== family) return false;
+  const age = dayNumber(today) - dayNumber(card.validated_through);
+  return Number.isFinite(age) && age <= MAP_MAX_AGE_DAYS;
 }
 
 export function censusIsMaterial(settledNonPush: number, metrics: PropCalibrationMetrics | null): boolean {
@@ -807,7 +1095,8 @@ function isCard(value: unknown): value is PropCalibrationCard {
     typeof card.method === 'string' &&
     typeof card.w === 'number' &&
     Boolean(card.params) &&
-    card.params.method === card.method
+    card.params.method === card.method &&
+    (card.drift === undefined || card.drift === 'green' || card.drift === 'amber' || card.drift === 'red')
   );
 }
 

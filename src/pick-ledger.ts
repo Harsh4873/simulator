@@ -27,6 +27,7 @@ export function openRows(
   lines: ReadonlyMap<string, BookLine>,
   cardAt: string,
   modelHash?: string,
+  modelVersion?: string,
 ): LedgerRow[] {
   const tip = Date.parse(game.start_time);
   if (!Number.isFinite(tip) || !(Date.parse(cardAt) < tip)) return [];
@@ -59,6 +60,8 @@ export function openRows(
         min: round(summary.minutes, 1),
       },
     };
+    // The family travels with the snapshot, so a `last` taken from a later card keeps the family that made its `p`.
+    if (modelVersion) row.open.v = modelVersion;
     if (modelHash) row.model_hash = modelHash;
     rows.push(row);
   }
@@ -182,6 +185,7 @@ export function parseLedger(text: string): LedgerFile {
     if (!row || typeof row.e !== 'string' || typeof row.a !== 'string' || !MARKETS.has(row.m) || !stamp(row.tip) || !open) throw new Error('Invalid pick ledger row');
     for (const snap of row.last ? [open, row.last] : [open]) {
       if (!stamp(snap.at) || !stamp(snap.priced_at) || !finite(snap.line) || !finite(snap.over) || !finite(snap.under) || !finite(snap.p) || snap.p < 0 || snap.p > 1) throw new Error('Invalid pick ledger opening');
+      if (snap.v !== undefined && (typeof snap.v !== 'string' || !snap.v)) throw new Error('Invalid pick ledger model family');
       // A row is evidence only if the model's number was fixed before the game started.
       if (!(Date.parse(snap.at) < Date.parse(row.tip)) || !(Date.parse(snap.priced_at) < Date.parse(row.tip))) throw new Error('Pick ledger row opened after the tip');
     }

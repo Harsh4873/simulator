@@ -50,6 +50,11 @@ jobs:
           else
             GENERATOR_SHA="$(git rev-parse HEAD)" npm run rate-card -- --cached-summaries
           fi
+      - name: Refit prop calibration
+        # Refits each stat group's map on settled live ledger rows and checks it on later games it never saw.
+        # A failure keeps the last maps, which stop applying a week after their check.
+        continue-on-error: true
+        run: npm run calibrate-props
       - name: Compare with posted lines and grade earlier leans
         # Prices are read after the draws exist and never reach the fit. A failure here leaves the rate card as built.
         continue-on-error: true
@@ -75,9 +80,10 @@ jobs:
           git fetch origin main
           # Never copy an old build onto a newer generator revision. A later run rebuilds.
           test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-          git add -- public/data/slate.json public/data/rate-card.json public/data/manifest.json public/data/picks.json data/shooting-cache.json data/play-history.json.gz data/forecast-archive data/market-archive data/pick-ledger
-          if [ -f public/data/prop-calibration.json ]; then
-            git add -- public/data/prop-calibration.json
+          git add -- public/data/slate.json public/data/rate-card.json public/data/manifest.json public/data/picks.json data/shooting-cache.json data/play-history.json.gz data/forecast-archive data/market-archive data/pick-ledger data/prop-calibration
+          # A withdrawn map deletes the published file, and that deletion has to reach the site too.
+          if [ -f public/data/prop-calibration.json ] || git ls-files --error-unmatch public/data/prop-calibration.json >/dev/null 2>&1; then
+            git add -A -- public/data/prop-calibration.json
           fi
           if [ -f public/data/nfl.json ]; then
             git add -- public/data/nfl.json

@@ -35,6 +35,8 @@ export interface PropQuote {
   fairAmerican: number | null;
   noVig: number | null;
   standardError: number | null;
+  /** Present when a fitted map moved the chance: the side's raw simulated share, the mapped chance, and the blend weight. */
+  calibrated?: { raw: number; mapped: number; w: number };
 }
 
 export type PriceStyle = 'american' | 'multiplier' | 'percent';
@@ -382,7 +384,9 @@ export function decideVerdict(
   if (calibrationIssue(context.calibration,context.modelVersion??'',market,context.cutoff??'')!==null) {
     return {
       verdict: 'LEAN',
-      text: 'The simulations hit this line more often than the sportsbook price requires, but the model has not yet been historically calibrated.',
+      text: context.propCalibration
+        ? 'The calibrated chance still clears the sportsbook price. Prop calibration has not cleared the release checks a bet needs, so this stays a lean.'
+        : 'The simulations hit this line more often than the sportsbook price requires, but the model has not yet been historically calibrated.',
     };
   }
   return {
@@ -417,8 +421,12 @@ export function quoteProp(
   const noVig =
     price === null || opposite === null ? null : noVigFromBreakEven(price.breakEven, opposite.breakEven);
   const vig = calibration?.noVig ?? noVig;
+  let calibrated: PropQuote['calibrated'];
   if (calibration && modelProbability !== null && decided > 0 && vig !== null) {
-    modelProbability = blendWithMarket(calibration.apply(grade.wins / decided), vig, calibration.w);
+    const raw = grade.wins / decided;
+    const mapped = calibration.apply(raw);
+    modelProbability = blendWithMarket(mapped, vig, calibration.w);
+    calibrated = { raw, mapped, w: calibration.w };
     expectedReturn = profit === null || total === 0 ? null : (decided * (modelProbability * profit - (1 - modelProbability))) / total;
     standardError = Math.sqrt((modelProbability * (1 - modelProbability)) / decided) + CALIBRATION_SE;
   }
@@ -432,5 +440,6 @@ export function quoteProp(
     fairAmerican: modelProbability === null ? null : fairAmericanOdds(modelProbability),
     noVig,
     standardError,
+    ...(calibrated ? { calibrated } : {}),
   };
 }

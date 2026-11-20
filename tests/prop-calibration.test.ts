@@ -6,10 +6,14 @@ import test from 'node:test';
 import { parseLedger, serializeLedger } from '../src/pick-ledger.ts';
 import { buildRecord, gradeRow, listed, MIN_MEASURED_EDGE, MIN_PLAY_SHARE, MIN_TIER_LEANS, type Lean, type LedgerFile, type LedgerRow, type PickRecord } from '../src/picks.ts';
 import {
+  LEGACY_LEDGER_FAMILY,
+  MAP_MAX_AGE_DAYS,
+  MAX_WALK_FORWARD_FOLDS,
   applyCalibration,
   blendWithMarket,
   calibrationMetrics,
   driftAction,
+  eceNoise,
   expectedCalibrationError,
   fitBeta,
   fitBlendWeight,
@@ -17,16 +21,28 @@ import {
   fitPlatt,
   fitTemperature,
   groupOf,
+  mapIsCurrent,
   meanBiasCorrection,
+  previousHeldOutBest,
+  recordHeldOutBest,
   rowsFromLedger,
   selectMethod,
+  selectWalkForward,
+  shippingCheck,
   splitChronological,
   splitTipDates,
+  walkForwardFolds,
+  type PropCalibrationArtifact,
   type PropCalibrationCard,
+  type PropCalibrationMetrics,
   type PropCalibrationParams,
   type PropCalibrationRow,
 } from '../src/prop-calibration.ts';
 import { executeCalibration, refuseNonLive } from '../scripts/fit-prop-calibration.ts';
+import { loadCalibration } from '../scripts/build-picks.ts';
+import { renderPropResults } from '../src/boxscore.ts';
+import { calibrationStatusHtml } from '../src/projections.ts';
+import type { Simulation } from '../src/simulate.ts';
 import { mulberry32 } from '../src/rng.ts';
 import { PROP_POLICY } from '../src/props.ts';
 
@@ -223,15 +239,15 @@ test('a map fitted after the tip grades raw, and a map fitted before the tip mov
     tip: '2026-11-16T18:00:00Z',
     book: 'DraftKings',
     model_hash: 'hash-1',
-    open: { at: '2026-11-16T16:00:00Z', priced_at: '2026-11-16T15:00:00Z', line: 10.5, over: -110, under: -110, p: 0.8, play: 0.95, min: 30 },
+    open: { at: '2026-11-16T16:00:00Z', priced_at: '2026-11-16T15:00:00Z', line: 10.5, over: -110, under: -110, p: 0.8, play: 0.95, min: 30, v: 'fam-1' },
     result: { actual: 20, min: 30 },
   };
   const file: LedgerFile = { schema_version: 1, date: '2026-11-16', source: 'live', rows: [ledgerRow] };
-  const card = (fittedThrough: string): PropCalibrationCard => ({
+  const card = (fittedThrough: string, family = 'fam-1'): PropCalibrationCard => ({
     group: 'points',
     method: 'temperature',
     status: 'fitted',
-    model_version: 'hash-1',
+    model_version: family,
     fitted_through: fittedThrough,
     params: { method: 'temperature', temperature: 4 },
     w: 1,
@@ -250,9 +266,16 @@ test('a map fitted after the tip grades raw, and a map fitted before the tip mov
   assert.equal(uncalibrated.settled, 1);
   assert.equal(uncalibrated.gradedUncalibrated, 1);
   assert.equal(buildRecord([file], early).gradedUncalibrated, 0);
-  const without = { ...ledgerRow };
-  delete without.model_hash;
-  assert.equal(gradeRow(without, file.date, true, early)!.calibrated, false);
+  // The map grades only snapshots its own family made. The card hash plays no part.
+  const otherFamily = { ...ledgerRow, open: { ...ledgerRow.open, v: 'fam-2' } };
+  assert.equal(gradeRow(otherFamily, file.date, true, early)!.calibrated, false);
+  const otherHash = { ...ledgerRow, model_hash: 'hash-2' };
+  assert.equal(gradeRow(otherHash, file.date, true, early)!.calibrated, true);
+  // A snapshot from before the family was stamped belongs to possessions-v9.
+  const legacy = { ...ledgerRow, open: { ...ledgerRow.open } };
+  delete legacy.open.v;
+  assert.equal(gradeRow(legacy, file.date, true, early)!.calibrated, false);
+  assert.equal(gradeRow(legacy, file.date, true, new Map([['points' as const, card('2026-11-15', LEGACY_LEDGER_FAMILY)]]))!.calibrated, true);
 });
 
 test('a player-game stays on one side of a date split, and clusters count keys', () => {
@@ -394,29 +417,32 @@ test('mean-bias correction recovers a low projection, and ledger rows have no pr
   assert.equal('projection' in sample, false);
 });
 
-test('the fit writes no group file unless a map clears the gate', () => {
+test('the live ledger fit refuses replay files, needs a family, and writes a status that matches its reason', () => {
   const files = loadLedgers();
   const replay = files.find((file) => file.source === 'replay');
   assert.ok(replay);
   assert.throws(() => refuseNonLive([replay]), /replay/);
   const live = files.filter((file) => file.source === 'live');
+  const unkeyed = mkdtempSync(join(tmpdir(), 'prop-cal-'));
+  const refused = executeCalibration(live, { outDir: unkeyed, directory: files });
+  assert.equal(refused.action, 'refused');
+  assert.equal(readdirSync(unkeyed).filter((name) => name.endsWith('.json')).length, 0);
+  assert.match(readFileSync(refused.reportPath, 'utf8'), /model_version/);
+  // Later days only add rows: the note check is a report line and never blocks the fit.
   const dir = mkdtempSync(join(tmpdir(), 'prop-cal-'));
-  const result = executeCalibration(live, { outDir: dir, directory: files });
+  const result = executeCalibration(live, { outDir: dir, directory: files, modelVersion: LEGACY_LEDGER_FAMILY });
   const json = readdirSync(dir).filter((name) => name.endsWith('.json'));
   assert.equal(json.length, result.artifacts.length);
-  if (result.action === 'written') {
-    for (const name of json) {
-      const artifact = JSON.parse(readFileSync(join(dir, name), 'utf8')) as { status?: string };
-      assert.equal(artifact.status, 'fitted');
-    }
-  } else {
-    assert.ok(result.action === 'refused' || result.action === 'mismatch');
-    assert.equal(json.length, 0);
-    const report = readFileSync(result.reportPath, 'utf8');
-    assert.match(report, /1,986/);
-    assert.match(report, /calibrated stays false/);
-    assert.match(report, /Mean-bias checks were not run/);
-    assert.match(report, /No map was fitted/);
+  const report = readFileSync(result.reportPath, 'utf8');
+  assert.match(report, /Release note through 2026-11-17: 1,986/);
+  assert.match(report, /It reproduces the note/);
+  for (const name of json) {
+    const artifact = JSON.parse(readFileSync(join(dir, name), 'utf8')) as PropCalibrationArtifact;
+    assert.equal(artifact.model_version, LEGACY_LEDGER_FAMILY);
+    assert.equal(artifact.status === 'fitted', artifact.reason === null);
+    assert.ok(artifact.fitted_through < artifact.validated_through);
+    assertMonotone(artifact.params);
+    assert.ok(artifact.notes?.some((note) => /Mean-bias/.test(note)));
   }
 });
 
@@ -449,4 +475,274 @@ test('a logged model hash survives the ledger file and is absent unless it was p
   delete plain.model_hash;
   const stripped = parseLedger(serializeLedger({ schema_version: 1, date: '2026-11-16', source: 'live', rows: [plain] }));
   assert.equal(stripped.rows[0].model_hash, undefined);
+});
+
+/** A live ledger from an overconfident model: the simulated chance is the truth pushed three times as far from even. */
+function syntheticLedger(days: number, perDay: number, seed: number, family?: string): LedgerFile[] {
+  const rng = mulberry32(seed);
+  const files: LedgerFile[] = [];
+  for (let day = 1; day <= days; day += 1) {
+    const date = `2026-03-${String(day).padStart(2, '0')}`;
+    const rows: LedgerRow[] = [];
+    for (let index = 0; index < perDay; index += 1) {
+      for (const m of ['pts', 'reb', 'tpm'] as const) {
+        const truth = 0.3 + 0.4 * rng();
+        const p = Number(sigmoid(3 * logit(truth)).toFixed(4));
+        const over = rng() < truth;
+        rows.push({
+          e: `${date}-g${Math.floor(index / 10)}`,
+          a: `p${index}`,
+          m,
+          name: `Player ${index}`,
+          team: 't',
+          tip: `${date}T23:00:00Z`,
+          book: 'DraftKings',
+          open: { at: `${date}T18:00:00Z`, priced_at: `${date}T17:00:00Z`, line: 10.5, over: -110, under: -110, p, play: 0.95, min: 30, ...(family ? { v: family } : {}) },
+          result: { actual: over ? 12 : 9, min: 30 },
+        });
+      }
+    }
+    files.push({ schema_version: 1, date, source: 'live', rows });
+  }
+  return files;
+}
+
+test('a fit on an overconfident ledger ships maps that pull the chance toward even, and the picks step loads them', () => {
+  const files = syntheticLedger(6, 120, 41, 'fam-1');
+  const root = mkdtempSync(join(tmpdir(), 'prop-fit-'));
+  const outDir = join(root, 'data/prop-calibration');
+  const result = executeCalibration(files, { outDir, modelVersion: 'fam-1', now: new Date('2026-03-07T18:00:00Z') });
+  assert.equal(result.action, 'written');
+  assert.equal(result.artifacts.length, 3);
+  for (const path of result.artifacts) {
+    const artifact = JSON.parse(readFileSync(path, 'utf8')) as PropCalibrationArtifact;
+    assert.equal(artifact.status, 'fitted', `${artifact.group}: ${artifact.reason}`);
+    // 120 rows a day: days 1-3 are the first 300 earlier rows, so days 4-6 are scored, and the shipped map is fitted
+    // through day 5 and scored on day 6.
+    assert.equal(artifact.validated_from, '2026-03-04');
+    assert.equal(artifact.fitted_through, '2026-03-05');
+    assert.equal(artifact.validated_through, '2026-03-06');
+    assert.equal(artifact.rows_fit, 600);
+    assert.equal(artifact.rows_validated, 360);
+    assert.ok(artifact.metrics_validated.logLoss < artifact.metrics_raw!.logLoss);
+    const high = applyCalibration(artifact.params, 0.8);
+    assert.ok(high > 0.5 && high < 0.75, `${artifact.group} 0.8 -> ${high}`);
+    assert.ok(artifact.w >= 0 && artifact.w <= 0.25);
+    assert.equal(artifact.held_out_best?.length, 1);
+    assert.equal(artifact.held_out_best?.[0].validated_through, '2026-03-06');
+  }
+  assert.match(readFileSync(result.reportPath, 'utf8'), /map applied/);
+  assert.equal(loadCalibration(root, 'fam-1', '2026-03-07').size, 3);
+  assert.equal(loadCalibration(root, 'fam-2', '2026-03-07').size, 0);
+  assert.equal(loadCalibration(root, 'fam-1', '2026-03-20').size, 0);
+  // Snapshots from another family are left out of the fit, so too few rows remain and the fit refuses.
+  const other = executeCalibration(files, { outDir: mkdtempSync(join(tmpdir(), 'prop-fit-')), modelVersion: 'fam-2' });
+  assert.equal(other.action, 'refused');
+  assert.equal(other.qualifying, 0);
+});
+
+test('a model that is already calibrated keeps its raw chances: the map does not beat it on later games', () => {
+  const rng = mulberry32(5);
+  const files: LedgerFile[] = syntheticLedger(6, 120, 43).map((file) => ({
+    ...file,
+    rows: file.rows.map((item) => {
+      const p = 0.3 + 0.4 * rng();
+      return { ...item, open: { ...item.open, p: Number(p.toFixed(4)) }, result: { actual: rng() < p ? 12 : 9, min: 30 } };
+    }),
+  }));
+  const outDir = mkdtempSync(join(tmpdir(), 'prop-fit-'));
+  const result = executeCalibration(files, { outDir, modelVersion: LEGACY_LEDGER_FAMILY, now: new Date('2026-03-07T18:00:00Z') });
+  assert.equal(result.action, 'written');
+  for (const path of result.artifacts) {
+    const artifact = JSON.parse(readFileSync(path, 'utf8')) as PropCalibrationArtifact;
+    // Whatever ships here has to stay close to the identity; whatever is withheld says why.
+    if (artifact.status === 'fitted') assert.ok(Math.abs(applyCalibration(artifact.params, 0.65) - 0.65) < 0.05);
+    else assert.ok(artifact.reason && artifact.reason.length > 0);
+  }
+});
+
+function metrics(patch: Partial<PropCalibrationMetrics>): PropCalibrationMetrics {
+  return {
+    n: 700, clusters: 200, eceWidth10: 0.03, eceFreq10: 0.05, mce: 0.1, brier: 0.249, brierNovig: 0.249, logLoss: 0.692, logLossNovig: 0.692,
+    slope: 1, intercept: 0, slopeLo: 0.4, slopeHi: 1.8, interceptLo: -0.2, interceptHi: 0.2, reliability: 0.001, resolution: 0.001,
+    ...patch,
+  };
+}
+
+test('the shipping check withholds a map that loses to the raw simulation, and the 0.03 bar is a release note', () => {
+  const noise = { width95: 0.04, width99: 0.05, freq95: 0.066, freq99: 0.08 };
+  const raw = metrics({ logLoss: 0.708, brier: 0.2567, eceWidth10: 0.087, eceFreq10: 0.0915 });
+  const calibrated = metrics({ logLoss: 0.6923, brier: 0.2496, eceWidth10: 0.0296, eceFreq10: 0.0542 });
+  const blended = metrics({ logLoss: 0.6918, logLossNovig: 0.6918, brier: 0.2493, brierNovig: 0.2493 });
+  const ok = shippingCheck({ raw, calibrated, blended, noise, validationRows: 742 });
+  assert.deepEqual(ok.issues, []);
+  assert.notEqual(ok.drift, 'red');
+  assert.ok(ok.notes.some((note) => /0\.03 release bar/.test(note)));
+  assert.ok(ok.notes.some((note) => /Brier/.test(note)));
+  assert.match(shippingCheck({ raw, calibrated: { ...calibrated, logLoss: 0.71 }, blended, noise, validationRows: 742 }).issues.join(' '), /log loss/);
+  assert.match(shippingCheck({ raw, calibrated: { ...calibrated, brier: 0.26 }, blended, noise, validationRows: 742 }).issues.join(' '), /Brier/);
+  assert.match(shippingCheck({ raw, calibrated, blended: { ...blended, logLoss: 0.7 }, noise, validationRows: 742 }).issues.join(' '), /no-vig/);
+  // A Cox interval miss is shared by the raw simulation, so it is a release note and the better map still ships.
+  const cox = shippingCheck({ raw, calibrated: { ...calibrated, interceptLo: -0.57, interceptHi: -0.03 }, blended, noise, validationRows: 742 });
+  assert.deepEqual(cox.issues, []);
+  assert.match(cox.notes.join(' '), /Cox/);
+  // Red drift keeps a map that still beats the raw numbers, and says listing stops.
+  const red = shippingCheck({ raw: { ...raw, eceFreq10: 0.2 }, calibrated: { ...calibrated, eceFreq10: 0.12 }, blended, noise, validationRows: 742 });
+  assert.equal(red.drift, 'red');
+  assert.deepEqual(red.issues, []);
+  assert.match(red.notes.join(' '), /not listed/);
+});
+
+test('a red map still moves the chance, but none of its leans are listed', () => {
+  const record = buildRecord(loadLedgers());
+  const passing = withUnderTier(
+    { ...record, tiers: record.tiers },
+    { pooled: MIN_TIER_LEANS, edge: MIN_MEASURED_EDGE },
+    'tiersLive',
+  );
+  const lean = sampleLean();
+  assert.equal(listed(lean, passing), true);
+  assert.equal(listed({ ...lean, drift: 'amber' }, passing), true);
+  assert.equal(listed({ ...lean, drift: 'red' }, passing), false);
+  const card = (drift: 'green' | 'red'): PropCalibrationCard => ({
+    group: 'points', method: 'temperature', status: 'fitted', model_version: LEGACY_LEDGER_FAMILY, fitted_through: '2026-11-10',
+    params: { method: 'temperature', temperature: 2 }, w: 0.2, drift,
+  });
+  const ledgerRow: LedgerRow = {
+    e: 'e1', a: 'p1', m: 'pts', name: 'Player', team: 't', tip: '2026-11-16T18:00:00Z', book: 'DraftKings',
+    open: { at: '2026-11-16T16:00:00Z', priced_at: '2026-11-16T15:00:00Z', line: 10.5, over: -110, under: -110, p: 0.8, play: 0.95, min: 30 },
+    result: { actual: 20, min: 30 },
+  };
+  const graded = gradeRow(ledgerRow, '2026-11-16', true, new Map([['points' as const, card('red')]]))!;
+  assert.equal(graded.calibrated, true);
+});
+
+test('sampling noise alone puts 10-bin ECE above 0.03 on a few hundred lines near even', () => {
+  const rng = mulberry32(8);
+  const probabilities = Array.from({ length: 700 }, () => 0.45 + 0.1 * rng());
+  const noise = eceNoise(probabilities);
+  assert.ok(noise.freq95 > 0.03, `freq95 ${noise.freq95}`);
+  assert.ok(noise.freq99 >= noise.freq95 && noise.width99 >= noise.width95);
+  // A forecaster that is calibrated by construction lands under the 99th percentile in most samples.
+  let under = 0;
+  for (let sample = 0; sample < 20; sample += 1) {
+    const rows = probabilities.map((p, index) => row({ key: `e:${index}`, p, y: rng() < p ? 1 : 0 }));
+    if (expectedCalibrationError(rows, (item) => item.p, 10, 'frequency') <= noise.freq99) under += 1;
+  }
+  assert.ok(under >= 17, `${under} of 20`);
+  // With a floor above the fixed bars, ECE 0.06 is amber, not red. Without one the fixed bars apply.
+  const signal = { eceWidth10: 0.02, eceFreq10: 0.06, slopeLo: 0.8, slopeHi: 1.2, interceptLo: -0.02, interceptHi: 0.02, tierEdge: Number.NaN };
+  assert.equal(driftAction(signal), 'red');
+  assert.equal(driftAction(signal, { width95: 0.04, width99: 0.05, freq95: 0.066, freq99: 0.08 }), 'green');
+  assert.equal(driftAction({ ...signal, eceFreq10: 0.07 }, { width95: 0.04, width99: 0.05, freq95: 0.066, freq99: 0.08 }), 'amber');
+});
+
+test('rows from another simulation family are never fitted, and unstamped rows are possessions-v9', () => {
+  const [file] = syntheticLedger(1, 10, 3);
+  const mixed: LedgerFile = { ...file, rows: file.rows.map((item, index) => (index % 2 ? { ...item, open: { ...item.open, v: 'possessions-v10' } } : item)) };
+  const all = rowsFromLedger([mixed]);
+  const legacy = rowsFromLedger([mixed], LEGACY_LEDGER_FAMILY);
+  const next = rowsFromLedger([mixed], 'possessions-v10');
+  assert.equal(all.length, 30);
+  assert.equal(legacy.length + next.length, 30);
+  assert.equal(legacy.length, 15);
+  // A refreshed `last` decides the family, the same way it decides the probability.
+  const refreshed: LedgerFile = { ...file, rows: file.rows.map((item) => ({ ...item, last: { ...item.open, at: `${file.date}T19:00:00Z`, v: 'possessions-v10' } })) };
+  assert.equal(rowsFromLedger([refreshed], LEGACY_LEDGER_FAMILY).length, 0);
+});
+
+test('a map applies only to its family, only while fitted, and only for a week after its check', () => {
+  const card = { status: 'fitted' as const, model_version: 'fam-1', validated_through: '2026-11-18' };
+  assert.equal(mapIsCurrent(card, 'fam-1', '2026-11-19'), true);
+  assert.equal(mapIsCurrent(card, 'fam-1', `2026-11-${18 + MAP_MAX_AGE_DAYS}`), true);
+  assert.equal(mapIsCurrent(card, 'fam-1', `2026-11-${19 + MAP_MAX_AGE_DAYS}`), false);
+  assert.equal(mapIsCurrent(card, 'fam-2', '2026-11-19'), false);
+  assert.equal(mapIsCurrent(card, null, '2026-11-19'), false);
+  assert.equal(mapIsCurrent({ ...card, status: 'rejected' }, 'fam-1', '2026-11-19'), false);
+});
+
+test('isotonic ships only after winning two different held-out blocks', () => {
+  // A step the logit maps cannot follow: chances under 0.5 hit 30%, chances over 0.5 hit 70%.
+  const draw = (rng: () => number) => {
+    const p = 0.05 + 0.9 * rng();
+    return { p, y: (rng() < (p < 0.5 ? 0.3 : 0.7) ? 1 : 0) as 0 | 1 };
+  };
+  const fit = datedRows(1600, 21, draw);
+  const validation = datedRows(800, 22, draw).map((item) => ({ ...item, date: '2026-04-01', key: `v:${item.key}` }));
+  const first = selectMethod(fit, validation, null);
+  assert.equal(first.heldOutBest, 'isotonic');
+  assert.notEqual(first.method, 'isotonic');
+  const second = selectMethod(fit, validation, 'isotonic');
+  assert.equal(second.method, 'isotonic');
+  assertMonotone(second.params);
+  // A refit on the same block is not a second win; an earlier block is.
+  const history = recordHeldOutBest([], '2026-04-01', 'isotonic');
+  assert.equal(previousHeldOutBest(history, '2026-04-01'), null);
+  assert.equal(previousHeldOutBest(history, '2026-04-03'), 'isotonic');
+  const replaced = recordHeldOutBest(history, '2026-04-01', 'temperature');
+  assert.deepEqual(replaced, [{ validated_through: '2026-04-01', method: 'temperature' }]);
+  let long = replaced;
+  for (let day = 2; day <= 8; day += 1) long = recordHeldOutBest(long, `2026-04-0${day}`, 'platt');
+  assert.equal(long.length, 5);
+  assert.equal(long[4].validated_through, '2026-04-08');
+});
+
+test('the prop panel says when a chance is calibrated, and the leans panel says which stats are', () => {
+  const artifact = (group: 'points' | 'rebAst', status: 'fitted' | 'rejected'): PropCalibrationArtifact => ({
+    schema_version: 1, group, method: 'temperature', model_version: LEGACY_LEDGER_FAMILY, input_hash: 'a'.repeat(64),
+    fitted_through: '2026-11-16', validated_through: '2026-11-18', rows_fit: 732, rows_validated: 742, clusters_fit: 211,
+    params: { method: 'temperature', temperature: 2 }, w: 0.2,
+    metrics_fit: metrics({}), metrics_validated: metrics({ logLoss: 0.6923 }), metrics_raw: metrics({ logLoss: 0.708 }),
+    status, reason: status === 'fitted' ? null : 'Held-out log loss is not better than the raw simulation.',
+  });
+  const none = calibrationStatusHtml({ artifacts: [], family: LEGACY_LEDGER_FAMILY });
+  assert.match(none, /raw simulation/);
+  const some = calibrationStatusHtml({ artifacts: [artifact('points', 'fitted'), artifact('rebAst', 'rejected')], family: LEGACY_LEDGER_FAMILY });
+  assert.match(some, /points and point combos calibrated \(checked on 742 later lines, log loss 0\.708 to 0\.692\)/);
+  assert.match(some, /rebounds, assists and R\+A raw until enough lines settle/);
+  assert.match(some, /threes raw/);
+  assert.match(some, /20% against the no-vig price/);
+  assert.match(calibrationStatusHtml({ artifacts: [artifact('points', 'fitted')], family: 'possessions-v10' }), /raw simulation/);
+  assert.equal(calibrationStatusHtml(null), '');
+
+  const draws = new Map([['p', { min: Array(2000).fill(30), pts: Array.from({ length: 2000 }, (_, i) => (i % 10 < 7 ? 20 : 10)) }]]);
+  const score = { playerDraws: draws } as unknown as Simulation;
+  const form = { market: 'pts' as const, side: 'over' as const, line: '17.5', style: 'american' as const, odds: '-110', opposite: '-110' };
+  const panel = { table: new Map([['points' as const, artifact('points', 'fitted')]]), modelVersion: LEGACY_LEDGER_FAMILY, tipDate: '2026-11-20', artifacts: [artifact('points', 'fitted')], cutoff: '2026-11-20' };
+  const html = renderPropResults(score, 'p', form, { minutes_weight: 1, shooting_games: 20, thin_sample: false }, null, panel);
+  assert.match(html, /data-calibrated/);
+  assert.match(html, /simulations alone put this side at 70%/);
+  assert.doesNotMatch(renderPropResults(score, 'p', form, { minutes_weight: 1, shooting_games: 20, thin_sample: false }, null, null), /data-calibrated/);
+  // A page-only release changes the card hash, not the family, so the map keeps applying.
+  assert.match(renderPropResults(score, 'p', form, { minutes_weight: 1, shooting_games: 20, thin_sample: false }, null, { ...panel, modelVersion: 'possessions-v10' }), /^(?![\s\S]*data-calibrated)/);
+});
+
+test('walk-forward scores each day only with maps fitted on earlier days, and keeps the last ten days', () => {
+  const rows = rowsFromLedger(syntheticLedger(14, 40, 51)).filter((item) => item.group === 'points');
+  const folds = walkForwardFolds(rows, 300);
+  // 40 rows a day: the first day with 300 earlier rows is day 9, and every later day is a fold.
+  assert.deepEqual(folds.map((fold) => fold.day), ['2026-03-09', '2026-03-10', '2026-03-11', '2026-03-12', '2026-03-13', '2026-03-14']);
+  for (const fold of folds) {
+    assert.ok(fold.fit.every((item) => item.date < fold.day));
+    assert.ok(fold.validation.every((item) => item.date === fold.day));
+  }
+  assert.equal(walkForwardFolds(rows, 40).length, MAX_WALK_FORWARD_FOLDS);
+  const selected = selectWalkForward(folds, null);
+  assert.equal(selected.heldOut.length, 6 * 40);
+  assert.deepEqual(selected.fit, folds[folds.length - 1].fit);
+  // A day-9 row is scored by the map fitted on days 1-8, not by the shipped map that has seen day 9.
+  const early = folds[0].validation[0];
+  const foldMap = selectMethod(folds[0].fit, folds[0].validation).params;
+  const fromFold = selected.method === 'temperature' ? applyCalibration({ method: 'temperature', temperature: fitTemperature(folds[0].fit), support: foldMap.support }, early.p) : null;
+  if (fromFold !== null) assert.ok(Math.abs(selected.predicted.get(early)! - fromFold) < 1e-12);
+  assert.ok(selected.metrics.logLoss < calibrationMetrics(selected.heldOut, (item) => item.p).logLoss);
+});
+
+test('the blend weight keeps its prior when the weights the page can use score alike', () => {
+  // The calibrated chance leans a quarter point the wrong way: the curve rises about 0.0013 up to the cap and about
+  // 0.005 by a weight of 1, so only the uncapped curve can tell the weights apart.
+  const rows = Array.from({ length: 400 }, (_, index) => row({ key: `e:${index}`, y: (index % 2) as 0 | 1, noVig: 0.5, p: 0.5 }));
+  const wrongWay = (item: PropCalibrationRow) => (item.y ? 0.4975 : 0.5025);
+  assert.equal(fitBlendWeight(rows, wrongWay, 0.25), 0.2);
+  assert.equal(fitBlendWeight(rows, wrongWay), 0);
 });

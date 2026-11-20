@@ -358,7 +358,8 @@ function projectionView(): ProjectionView | null {
 
 function panelCalibration(tipDate: string | null | undefined): PropPanelCalibration | null {
   if (!propCalibration || !tipDate) return null;
-  return { table: propCalibration.table, modelVersion: card?.model_hash ?? null, tipDate, artifacts: propCalibration.artifacts, cutoff: tipDate };
+  // Maps are keyed to the simulation family, so a page-only release does not retire them.
+  return { table: propCalibration.table, modelVersion: card?.model_version ?? null, tipDate, artifacts: propCalibration.artifacts, cutoff: tipDate };
 }
 
 function postedLine(eventId: string | null, athleteId: string | null, market: PropFormState['market']): BookLine | null {
@@ -383,7 +384,7 @@ function slateLeans(): { leans: Lean[]; leansWaiting: number } {
     if (simulation) {
       let mine = localLeans.get(simulation);
       if (!mine) {
-        mine = gameLeans(game, applyLineupOverrides(base, overrides), simulation.playerDraws, bookLines, propCalibration?.table, card.model_hash).filter(
+        mine = gameLeans(game, applyLineupOverrides(base, overrides), simulation.playerDraws, bookLines, propCalibration?.table, card.model_version).filter(
           (lean) => lean.claimed >= LEAN_BUCKETS[1] && lean.play >= MIN_PLAY_SHARE,
         );
         localLeans.set(simulation, mine);
@@ -401,7 +402,15 @@ function paintModelSides(): void {
   if (!el || !slate || !card) return;
   const open = el.querySelectorAll<HTMLDetailsElement>('details[open]');
   const keep = new Set(Array.from(open, (item) => item.className));
-  el.innerHTML = leanPanelHtml({ slate, now: new Date(), lines: bookLines, ...slateLeans(), record: picks?.record ?? null, book: picks?.book ?? null });
+  el.innerHTML = leanPanelHtml({
+    slate,
+    now: new Date(),
+    lines: bookLines,
+    ...slateLeans(),
+    record: picks?.record ?? null,
+    book: picks?.book ?? null,
+    calibration: { artifacts: propCalibration?.artifacts ?? [], family: card.model_version ?? null },
+  });
   for (const details of el.querySelectorAll<HTMLDetailsElement>('details')) if (keep.has(details.className)) details.open = true;
 }
 

@@ -8,7 +8,8 @@ import { gunzipSync } from 'node:zlib';
 import { bookKey, parseBookLines, postedLines, type BookLine } from '../src/book-lines.ts';
 import { emptyLedger, ledgerKey, mergeOpen, openRows, parseLedger, refreshLast, serializeLedger, settle, updateClose } from '../src/pick-ledger.ts';
 import { buildRecord, gameLeans, LEAN_BUCKETS, MIN_PLAY_SHARE, type Lean, type LedgerFile, type PicksFile } from '../src/picks.ts';
-import type { PropCalibrationArtifact, PropCalibrationGroup } from '../src/prop-calibration.ts';
+import { chicagoDate } from '../src/date.ts';
+import { mapIsCurrent, MAP_MAX_AGE_DAYS, type PropCalibrationArtifact, type PropCalibrationGroup } from '../src/prop-calibration.ts';
 import { fnv1a } from '../src/rng.ts';
 import { ITERATIONS, simulate } from '../src/simulate.ts';
 import type { CompletedEvent } from '../src/parse-summary.ts';
@@ -102,7 +103,10 @@ export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: nu
       .map((line) => [line.athlete_id, line.market as PropMarket, line.line, line.over_odds, line.under_odds, line.priced_at]);
   }
 
-  const sameCard = previous !== null && previous.generated_at === cardAt && previous.model_hash === (card.model_hash ?? null);
+  const summary = calibrationSummary(input.calibration);
+  // A refitted or withdrawn map changes every comparison, even on the same card.
+  const sameMaps = JSON.stringify(previous?.calibration ?? null) === JSON.stringify(summary ?? null);
+  const sameCard = previous !== null && previous.generated_at === cardAt && previous.model_hash === (card.model_hash ?? null) && sameMaps;
   const leans: Lean[] = [];
   let simulated = 0;
   let opened = 0;
@@ -130,13 +134,13 @@ export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: nu
     simulated += 1;
     // A replayed day is history rebuilt after the fact. Nothing logged live is ever added to it.
     if (ledger.source === 'live') {
-      const rows = openRows(game, rate, draws, posted, cardAt, card.model_hash);
+      const rows = openRows(game, rate, draws, posted, cardAt, card.model_hash, card.model_version);
       opened += mergeOpen(ledger, rows);
       // A line logged on an earlier card keeps that opening and takes this card's comparison as its latest.
       refreshed += refreshLast(ledger, rows);
       if (ledger.rows.length) ledgers.set(game.date, ledger);
     }
-    for (const lean of gameLeans(game, rate, draws, posted, input.calibration, card.model_hash)) {
+    for (const lean of gameLeans(game, rate, draws, posted, input.calibration, card.model_version)) {
       if (lean.claimed >= LEAN_BUCKETS[1] && lean.play >= MIN_PLAY_SHARE) leans.push(trimLean(lean));
     }
   }
@@ -159,7 +163,6 @@ export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: nu
     leans,
     record: buildRecord([...ledgers.values()].sort((a, b) => a.date.localeCompare(b.date)), input.calibration),
   };
-  const summary = calibrationSummary(input.calibration);
   if (summary) picks.calibration = summary;
   // Nothing new to say: keep the earlier stamp so an idle run does not rewrite the file.
   if (previous && JSON.stringify({ ...picks, built_at: '' }) === JSON.stringify({ ...previous, built_at: '' })) picks.built_at = previous.built_at;
@@ -176,12 +179,20 @@ function calibrationSummary(map: ReadonlyMap<PropCalibrationGroup, PropCalibrati
   if (!map?.size) return undefined;
   const summary: NonNullable<PicksFile['calibration']> = {};
   for (const [group, artifact] of map) {
-    summary[group] = { method: artifact.method, fitted_through: artifact.fitted_through, ece: artifact.metrics_validated.eceWidth10, status: artifact.status };
+    summary[group] = {
+      method: artifact.method,
+      fitted_through: artifact.fitted_through,
+      validated_through: artifact.validated_through,
+      ece: artifact.metrics_validated.eceWidth10,
+      status: artifact.status,
+      w: artifact.w,
+    };
   }
   return summary;
 }
 
-function loadCalibration(root: string, modelHash: string | null): Map<PropCalibrationGroup, PropCalibrationArtifact> {
+/** Maps of the card's simulation family that are fitted and were checked within the last week. */
+export function loadCalibration(root: string, family: string | null | undefined, today: string): Map<PropCalibrationGroup, PropCalibrationArtifact> {
   const map = new Map<PropCalibrationGroup, PropCalibrationArtifact>();
   for (const group of CALIBRATION_GROUPS) {
     const path = join(root, 'data/prop-calibration', `${group}.json`);
@@ -193,8 +204,9 @@ function loadCalibration(root: string, modelHash: string | null): Map<PropCalibr
       console.warn(`skip ${group}: unreadable prop calibration`);
       continue;
     }
-    if (artifact.status !== 'fitted' || artifact.model_version !== modelHash) {
-      console.warn(`skip ${group}: ${artifact.status !== 'fitted' ? 'status is not fitted' : 'model_version does not match the card'}`);
+    if (!mapIsCurrent(artifact, family, today)) {
+      const why = artifact.status !== 'fitted' ? 'status is not fitted' : artifact.model_version !== family ? 'fitted for another simulation family' : `held-out block ended more than ${MAP_MAX_AGE_DAYS} days ago`;
+      console.warn(`skip ${group}: ${why}`);
       continue;
     }
     map.set(group, artifact);
@@ -235,7 +247,7 @@ async function main(): Promise<void> {
   } catch {
     previous = null;
   }
-  const calibration = loadCalibration(root, card.model_hash ?? null);
+  const calibration = loadCalibration(root, card.model_version, chicagoDate(now));
   const result = buildPicks({
     slate,
     card,

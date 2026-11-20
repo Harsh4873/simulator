@@ -485,3 +485,39 @@ test('buildRecord without a map counts every settled lean as uncalibrated and li
   };
   assert.equal(listed(lean, shut), false);
 });
+
+test('a logged snapshot carries the simulation family, so a later card cannot relabel it', () => {
+  const draws = new Map<string, PlayerSample>(rate.players.map((player) => [player.athlete_id, sample([20, 20, 20, 10, 10])]));
+  const lines = new Map<string, BookLine>();
+  lines.set(`${game.event_id}:${first.athlete_id}:pts`, { event_id: game.event_id, athlete_id: first.athlete_id, market: 'pts', line: 17.5, over_odds: -115, under_odds: -105, priced_at: '2026-11-02T20:00:00Z', book: 'DraftKings' });
+  const pre = { ...game, start_time: '2026-11-03T00:00:00Z' };
+  const [stamped] = openRows(pre, rate, draws, lines, '2026-11-02T22:00:00Z', 'hash-a', 'fam-a');
+  assert.equal(stamped.open.v, 'fam-a');
+  assert.equal(stamped.model_hash, 'hash-a');
+  const ledger = emptyLedger('2026-11-02');
+  mergeOpen(ledger, [stamped]);
+  const [later] = openRows(pre, rate, draws, lines, '2026-11-02T23:00:00Z', 'hash-b', 'fam-b');
+  assert.equal(refreshLast(ledger, [later]), 1);
+  assert.equal(ledger.rows[0].open.v, 'fam-a');
+  assert.equal(ledger.rows[0].last?.v, 'fam-b');
+  const parsed = parseLedger(serializeLedger(ledger));
+  assert.equal(parsed.rows[0].last?.v, 'fam-b');
+  assert.throws(() => parseLedger(serializeLedger({ ...ledger, rows: [{ ...ledger.rows[0], open: { ...ledger.rows[0].open, v: '' } }] })), /family/);
+});
+
+test('a calibrated quote shows the raw share, the mapped chance, and the blend it was weighed with', () => {
+  const draws = sample(Array.from({ length: 2000 }, (_, i) => (i % 10 < 7 ? 20 : 10)));
+  // Temperature 2 on the over: 70% maps to about 60.4%, and 0.2 of that is weighed with a 50% no-vig price.
+  const calibration = { apply: (p: number) => 1 / (1 + Math.exp(-Math.log(p / (1 - p)) / 2)), w: 0.2, noVig: null };
+  const quote = quoteProp(draws, 'pts', 'over', 17.5, -110, -110, calibration)!;
+  assert.ok(quote.calibrated);
+  assert.equal(quote.calibrated.raw, 0.7);
+  assert.ok(Math.abs(quote.calibrated.mapped - 0.6044) < 0.001);
+  assert.ok(Math.abs(quote.modelProbability! - (0.2 * quote.calibrated.mapped + 0.8 * 0.5)) < 1e-9);
+  assert.equal(quoteProp(draws, 'pts', 'over', 17.5, -110, -110)!.calibrated, undefined);
+  // A one-sided price has no no-vig chance to blend with, so the raw share stands.
+  assert.equal(quoteProp(draws, 'pts', 'over', 17.5, -110, null, calibration)!.calibrated, undefined);
+  const lean = decideVerdict({ ...quote, edge: 0.05, expectedReturn: 0.05, standardError: 0.001 }, { available: true, missingShooting: false, thinSample: false, onCard: true, propCalibration: calibration }, 'pts')!;
+  assert.equal(lean.verdict, 'LEAN');
+  assert.match(lean.text, /calibrated chance/);
+});

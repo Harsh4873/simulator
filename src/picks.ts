@@ -1,6 +1,6 @@
 import { bookKey, breakEven, fairOver, type BookLine } from './book-lines.ts';
 import { chicagoDate } from './date.ts';
-import { applyCalibration, blendWithMarket, groupOf, type PropCalibrationGroup, type PropCalibrationTable } from './prop-calibration.ts';
+import { applyCalibration, blendWithMarket, groupOf, snapshotFamily, type DriftLevel, type PropCalibrationGroup, type PropCalibrationTable } from './prop-calibration.ts';
 import { americanBreakEven, noVigFromBreakEven, profitPerStake, PROP_POLICY, valueAt, type PlayerSample, type PropMarket } from './props.ts';
 import type { RateGame, SlateGame } from './types.ts';
 
@@ -53,6 +53,8 @@ export interface Lean {
   modelRaw?: number;
   /** Null when no fitted map applies. */
   calibrationMethod?: string | null;
+  /** Drift of the map that applied. Red keeps the lean off the list. */
+  drift?: DriftLevel;
   projection: number;
   minutes: number;
   play: number;
@@ -106,8 +108,7 @@ export interface SideTotals {
   through: string | null;
 }
 
-/** One posted line a simulation was first compared with, and what happened. `p` is the model chance of the over. */
-/** One comparison of the model with a posted line, fixed at the card that made it. */
+/** One comparison of the model with a posted line, fixed at the card that made it. `p` is the raw model chance of the over. */
 export interface LedgerSnapshot {
   at: string;
   priced_at: string;
@@ -117,6 +118,8 @@ export interface LedgerSnapshot {
   p: number;
   play: number;
   min: number;
+  /** Simulation family (`RateCard.model_version`) that made `p`. Older snapshots omit it; see LEGACY_LEDGER_FAMILY. */
+  v?: string;
 }
 
 export interface LedgerRow {
@@ -161,7 +164,7 @@ export interface PicksFile {
   leans: Lean[];
   record: PickRecord;
   /** Map that was live for this card, when one applied. Old files omit it. */
-  calibration?: Partial<Record<PropCalibrationGroup, { method: string; fitted_through: string; ece: number; status: 'fitted' | 'rejected' }>>;
+  calibration?: Partial<Record<PropCalibrationGroup, { method: string; fitted_through: string; validated_through?: string; ece: number; status: 'fitted' | 'rejected'; w?: number }>>;
 }
 
 /** Over share among the draws the player played, pushes excluded. Null when nothing is decided. */
@@ -219,7 +222,7 @@ function finalOver(
   tip: string,
   modelVersion: string | null | undefined,
   calibration?: PropCalibrationTable,
-): { p: number; method: string | null } {
+): { p: number; method: string | null; drift?: DriftLevel } {
   if (!calibration || !modelVersion) return { p, method: null };
   const group = groupOf(market);
   const card = group ? calibration.get(group) : undefined;
@@ -228,7 +231,7 @@ function finalOver(
   const under = americanBreakEven(underOdds);
   const noVig = over !== null && under !== null ? noVigFromBreakEven(over, under) : null;
   if (noVig === null) return { p, method: null };
-  return { p: blendWithMarket(applyCalibration(card.params, p), noVig, card.w), method: card.method };
+  return { p: blendWithMarket(applyCalibration(card.params, p), noVig, card.w), method: card.method, ...(card.drift ? { drift: card.drift } : {}) };
 }
 
 /** Every posted line in one game that the simulation can be compared with. Ruled-out and placeholder players are skipped. */
@@ -271,6 +274,7 @@ export function gameLeans(
       claimed: lean.claimed,
       modelRaw: share.over,
       calibrationMethod: adjusted.method,
+      ...(adjusted.drift ? { drift: adjusted.drift } : {}),
       projection: summary.projection,
       minutes: summary.minutes,
       play: summary.play,
@@ -304,7 +308,8 @@ export function gradeRow(row: LedgerRow, date: string, live: boolean, calibratio
   if (!Number.isFinite(actual) || actual === snap.line) return null;
   const parsed = Date.parse(row.tip);
   const tip = Number.isFinite(parsed) ? chicagoDate(new Date(parsed)) : date;
-  const adjusted = finalOver(snap.p, row.m, snap.over, snap.under, tip, row.model_hash, calibration);
+  // A map grades only snapshots its own family made, and only games that tipped after its fit block.
+  const adjusted = finalOver(snap.p, row.m, snap.over, snap.under, tip, snapshotFamily(snap), calibration);
   const lean = leanSide(adjusted.p, { over_odds: snap.over, under_odds: snap.under });
   const odds = lean.side === 'over' ? snap.over : snap.under;
   return {
@@ -483,8 +488,12 @@ export function liveTierFor(record: PickRecord | null | undefined, side: LeanSid
   return record.tiersLive.find((tier) => tier.side === side && tier.lo === lo) ?? null;
 }
 
-/** A lean is listed only while live graded leans of its side and strength have been beating the posted price. */
+/**
+ * A lean is listed only while live graded leans of its side and strength have been beating the posted price, and
+ * never while the calibration map for its stat group is red on games it was not fitted on.
+ */
 export function listed(lean: Lean, record: PickRecord | null | undefined): boolean {
+  if (lean.drift === 'red') return false;
   const tier = liveTierFor(record, lean.side, lean.claimed);
   return Boolean(tier && lean.claimed >= 0 && lean.claimed < EXTREME_CLAIM && lean.play >= MIN_PLAY_SHARE && tier.pooled >= MIN_TIER_LEANS && tier.edge >= MIN_MEASURED_EDGE);
 }
