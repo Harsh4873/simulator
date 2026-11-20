@@ -4,7 +4,9 @@ Today's NBA games in America/Chicago. Simulate draws 10,000 independent games in
 
 This is a simulator, not a betting ticket.
 
-The esports switch lists Dota 2, League of Legends, and CS2 players with the mean of each counting stat the feed returned from that player's earlier games.
+The NFL switch shows today's and yesterday's games, then the rest of the week, with each team's record and an Elo win chance from completed scores. The Elo's K, home advantage and margin rule are chosen on earlier games, and the latest 30% of games score it. No market line is used.
+
+The esports switch lists Dota 2, League of Legends, and CS2 players with the mean of each counting stat from that player's earlier games. A finished game also shows its winner and what each player did in it, on the mean's scale. An upcoming CS2 match lists the five players on each side who played most recently.
 
 Lineups lets you rule any player in or out for one game before simulating. Your calls stay in your browser and never change the published card.
 

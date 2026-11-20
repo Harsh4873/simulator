@@ -13,6 +13,8 @@ export interface EsportsProp {
   stat: EsportsStat;
   /** Unrounded mean. Null when fewer than MIN_GAMES earlier values are present. */
   mean: number | null;
+  /** The player's value in this game once it is played, on the same scale as the mean (per map for CS2). */
+  actual?: number | null;
 }
 
 export interface EsportsPlayer {
@@ -21,12 +23,20 @@ export interface EsportsPlayer {
   props: EsportsProp[];
 }
 
+export type EsportsStatus = 'upcoming' | 'live' | 'finished';
+
 export interface EsportsMatch {
   id: string;
   start_time: string;
   teams: [string, string];
   competition: string | null;
   players: EsportsPlayer[];
+  /** Older files omit the result fields. */
+  status?: EsportsStatus;
+  /** One of `teams` once the match is decided. */
+  winner?: string | null;
+  /** Maps won by each of `teams` (CS2 series). Null for a single game. */
+  score?: [number, number] | null;
 }
 
 export interface EsportsTitle {
@@ -178,10 +188,13 @@ export function esportsDocument(titles: readonly EsportsTitle[], now: Date): Esp
         start_time: match.start_time,
         teams: [match.teams[0], match.teams[1]],
         competition: match.competition,
+        ...(match.status ? { status: match.status } : {}),
+        ...(match.winner !== undefined ? { winner: match.winner } : {}),
+        ...(match.score !== undefined ? { score: match.score } : {}),
         players: match.players.map((player) => ({
           name: player.name,
           team: player.team,
-          props: player.props.map((prop) => ({ stat: prop.stat, mean: prop.mean })),
+          props: player.props.map((prop) => ({ stat: prop.stat, mean: prop.mean, ...(prop.actual !== undefined ? { actual: prop.actual } : {}) })),
         })),
       })),
     })),
@@ -194,7 +207,33 @@ function propOf(value: unknown): EsportsProp | null {
   const stat = text(row.stat);
   if (!stat || !STATS.has(stat)) return null;
   if (row.mean !== null && finite(row.mean) === null) return null;
-  return { stat: stat as EsportsStat, mean: row.mean === null ? null : finite(row.mean) };
+  const prop: EsportsProp = { stat: stat as EsportsStat, mean: row.mean === null ? null : finite(row.mean) };
+  if (row.actual === undefined) return prop;
+  if (row.actual !== null && (finite(row.actual) === null || (row.actual as number) < 0)) return null;
+  return { ...prop, actual: row.actual === null ? null : finite(row.actual) };
+}
+
+const STATUSES = new Set<EsportsStatus>(['upcoming', 'live', 'finished']);
+
+/** Result fields are optional. When present they must name a team in the match and count maps as whole numbers. */
+function resultOf(row: Record<string, unknown>, teams: [string, string]): Pick<EsportsMatch, 'status' | 'winner' | 'score'> | null {
+  const out: Pick<EsportsMatch, 'status' | 'winner' | 'score'> = {};
+  if (row.status !== undefined) {
+    if (typeof row.status !== 'string' || !STATUSES.has(row.status as EsportsStatus)) return null;
+    out.status = row.status as EsportsStatus;
+  }
+  if (row.winner !== undefined) {
+    if (row.winner !== null && (typeof row.winner !== 'string' || !teams.includes(row.winner))) return null;
+    out.winner = row.winner;
+  }
+  if (row.score !== undefined) {
+    if (row.score !== null) {
+      const score = row.score;
+      if (!Array.isArray(score) || score.length !== 2 || !score.every((value) => Number.isInteger(value) && value >= 0 && value <= 9)) return null;
+      out.score = [score[0] as number, score[1] as number];
+    } else out.score = null;
+  }
+  return out;
 }
 
 function playerOf(value: unknown): EsportsPlayer | null {
@@ -231,7 +270,9 @@ function matchOf(value: unknown): EsportsMatch | null {
     if (!player) return null;
     players.push(player);
   }
-  return { id, start_time: new Date(start).toISOString(), teams: [left, right], competition, players };
+  const result = resultOf(row, [left, right]);
+  if (!result) return null;
+  return { id, start_time: new Date(start).toISOString(), teams: [left, right], competition, ...result, players };
 }
 
 function titleOf(value: unknown): EsportsTitle | null {
@@ -307,18 +348,43 @@ function whenLabel(iso: string, now: Date): string {
   return formatTip(iso);
 }
 
-function renderPlayer(player: EsportsPlayer): string {
+/** The played value under a mean: whole counts as they are, CS2 per-map values to one decimal. */
+function actualText(actual: number, perMap: boolean): string {
+  const shown = Number.isInteger(actual) ? String(actual) : actual.toFixed(1);
+  return perMap ? `${shown} a map` : shown;
+}
+
+function renderPlayer(player: EsportsPlayer, perMap: boolean): string {
   const tiles = player.props.map((prop) => {
     const shown = formatStat(prop.mean);
-    return `<div class="tile"><p class="tile-label">${escapeHtml(STAT_LABEL[prop.stat])}</p><p class="tile-value">${escapeHtml(shown)}</p></div>`;
+    const played =
+      typeof prop.actual === 'number' && Number.isFinite(prop.actual)
+        ? `<p class="tile-sub" data-actual>Played ${escapeHtml(actualText(prop.actual, perMap))}</p>`
+        : '';
+    return `<div class="tile"><p class="tile-label">${escapeHtml(STAT_LABEL[prop.stat])}</p><p class="tile-value">${escapeHtml(shown)}</p>${played}</div>`;
   }).join('');
   return `<div class="panel-section"><p class="who-name">${escapeHtml(player.name)}</p><p class="who-team">${escapeHtml(player.team)}</p><div class="tiles">${tiles}</div></div>`;
 }
 
-function renderMatch(match: EsportsMatch, now: Date): string {
+/** "Final · Team A won 2-1", "Live · 1-0", "Upcoming". A file without result fields shows nothing extra. */
+export function resultText(match: Pick<EsportsMatch, 'status' | 'winner' | 'score' | 'teams'>): string | null {
+  if (!match.status) return null;
+  const score = match.score ? `${match.score[0]}-${match.score[1]}` : null;
+  if (match.status === 'upcoming') return 'Upcoming';
+  if (match.status === 'live') return score ? `Live · ${match.teams[0]} ${score} ${match.teams[1]}` : 'Live';
+  if (match.winner) return score ? `Final · ${match.winner} won ${match.winner === match.teams[0] ? score : `${match.score![1]}-${match.score![0]}`}` : `Final · ${match.winner} won`;
+  return score ? `Final · ${match.teams[0]} ${score} ${match.teams[1]}` : 'Final';
+}
+
+function renderMatch(match: EsportsMatch, now: Date, perMap: boolean): string {
   const where = match.competition ? `<p class="where">${escapeHtml(match.competition)}</p>` : '';
-  const players = match.players.map((player) => renderPlayer(player)).join('');
-  return `<article class="game-card"><h2 class="matchup">${escapeHtml(match.teams[0])} <span class="at">vs</span> ${escapeHtml(match.teams[1])}</h2>${where}<p class="status">${escapeHtml(whenLabel(match.start_time, now))}</p>${players}</article>`;
+  const result = resultText(match);
+  const resultHtml = result ? `<p class="status" data-result>${escapeHtml(result)}</p>` : '';
+  // Players of each side together, in the order the teams are listed.
+  const ordered = [...match.players].sort((a, b) => Number(a.team !== match.teams[0]) - Number(b.team !== match.teams[0]));
+  const players = ordered.map((player) => renderPlayer(player, perMap)).join('');
+  const means = match.status === 'finished' ? '<p class="note">Big numbers are means from earlier games. "Played" is this game.</p>' : '';
+  return `<article class="game-card"><h2 class="matchup">${escapeHtml(match.teams[0])} <span class="at">vs</span> ${escapeHtml(match.teams[1])}</h2>${where}<p class="status">${escapeHtml(whenLabel(match.start_time, now))}</p>${resultHtml}${means}${players}</article>`;
 }
 
 export function renderEsports(doc: EsportsDocument, now: Date): string {
@@ -326,7 +392,7 @@ export function renderEsports(doc: EsportsDocument, now: Date): string {
   const built = `Published ${formatTip(doc.generated_at)} · ${sources}`;
   const head = `<div class="slate-head"><p class="slate-meta">Esports</p><p class="status captured">${escapeHtml(built)}</p><p class="note">${escapeHtml(doc.model.note)}</p></div>`;
   const sections = doc.titles.map((title) => {
-    const cards = title.matches.map((match) => renderMatch(match, now)).join('');
+    const cards = title.matches.map((match) => renderMatch(match, now, title.title === 'CS2')).join('');
     return `<section class="slate-day"><h2 class="slate-title">${escapeHtml(title.title)}</h2><div class="slate">${cards}</div></section>`;
   }).join('');
   return `${head}${sections}`;

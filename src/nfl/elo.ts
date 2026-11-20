@@ -1,7 +1,17 @@
-/** Score-only Elo. K is fixed. Home advantage is fit on earlier games. No market line is an input. */
+/**
+ * Score-based Elo. K, home advantage and whether the margin scales an update are chosen on earlier games; the latest
+ * 30% of games are left out of that choice and only scored. No market line is an input.
+ */
 export const ELO_K = 20;
 export const ELO_START = 1500;
+export const ELO_MODEL_NAME = 'nfl-elo-v2';
 const HFA_GRID = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+const K_GRID = [10, 15, 20, 25, 30, 35, 40, 50, 60];
+/** Every team starts the season at 1500, so the first 35% of games only warm the ratings up and are not scored. */
+const WARMUP_FRACTION = 0.35;
+const SELECT_THROUGH_FRACTION = 0.7;
+const MIN_SELECT_GAMES = 24;
+const MIN_HOLDOUT_GAMES = 24;
 
 export interface EloGame {
   id: string;
@@ -13,8 +23,14 @@ export interface EloGame {
   neutral: boolean;
 }
 
-export interface EloFit {
+export interface EloSettings {
+  k: number;
   hfa: number;
+  /** Scale each update by the winning margin, damped when the favourite won. */
+  margin: boolean;
+}
+
+export interface EloFit extends EloSettings {
   holdout_games: number;
   holdout_brier: number;
   pregame_home_win: Map<string, number>;
@@ -26,20 +42,38 @@ export function expectedHomeWin(home: number, away: number, hfa: number): number
   return 1 / (1 + 10 ** exponent);
 }
 
-export function applyElo(home: number, away: number, hfa: number, homeScore: number, awayScore: number): { home: number; away: number; expected: number } {
+/**
+ * ln(margin + 1) × 2.2 / (winner's rating edge × 0.001 + 2.2). A blowout moves ratings more than a field goal, and a
+ * favourite's win counts for less, so ratings do not run away. A tie is 1.
+ */
+export function marginMultiplier(margin: number, winnerEdge: number): number {
+  if (margin === 0) return 1;
+  return Math.log(Math.abs(margin) + 1) * (2.2 / Math.max(0.5, winnerEdge * 0.001 + 2.2));
+}
+
+export function applyElo(
+  home: number,
+  away: number,
+  hfa: number,
+  homeScore: number,
+  awayScore: number,
+  k = ELO_K,
+  margin = false,
+): { home: number; away: number; expected: number } {
   const expected = expectedHomeWin(home, away, hfa);
   const actual = homeScore > awayScore ? 1 : homeScore < awayScore ? 0 : 0.5;
-  const delta = ELO_K * (actual - expected);
+  const edge = actual === 1 ? home + hfa - away : actual === 0 ? away - home - hfa : 0;
+  const delta = k * (margin ? marginMultiplier(homeScore - awayScore, edge) : 1) * (actual - expected);
   return { home: home + delta, away: away - delta, expected };
 }
 
-function replay(games: readonly EloGame[], hfa: number): { expected: number[]; ratings: Map<string, number> } {
+function replay(games: readonly EloGame[], settings: EloSettings): { expected: number[]; ratings: Map<string, number> } {
   const ratings = new Map<string, number>();
   const expected: number[] = [];
   for (const game of games) {
     const home = ratings.get(game.home) ?? ELO_START;
     const away = ratings.get(game.away) ?? ELO_START;
-    const next = applyElo(home, away, game.neutral ? 0 : hfa, game.home_score, game.away_score);
+    const next = applyElo(home, away, game.neutral ? 0 : settings.hfa, game.home_score, game.away_score, settings.k, settings.margin);
     expected.push(next.expected);
     ratings.set(game.home, next.home);
     ratings.set(game.away, next.away);
@@ -47,48 +81,54 @@ function replay(games: readonly EloGame[], hfa: number): { expected: number[]; r
   return { expected, ratings };
 }
 
-function logLoss(games: readonly EloGame[], hfa: number): number {
-  const { expected } = replay(games, hfa);
+function outcome(game: EloGame): number {
+  return game.home_score > game.away_score ? 1 : game.home_score < game.away_score ? 0 : 0.5;
+}
+
+function meanLogLoss(games: readonly EloGame[], expected: readonly number[], from: number, to: number): number {
   let loss = 0;
-  for (let i = 0; i < games.length; i += 1) {
-    const game = games[i]!;
-    const outcome = game.home_score > game.away_score ? 1 : game.home_score < game.away_score ? 0 : 0.5;
+  for (let i = from; i < to; i += 1) {
+    const result = outcome(games[i]!);
     const p = Math.min(0.999, Math.max(0.001, expected[i]!));
-    loss += -(outcome * Math.log(p) + (1 - outcome) * Math.log(1 - p));
+    loss += -(result * Math.log(p) + (1 - result) * Math.log(1 - p));
   }
-  return loss;
+  return loss / Math.max(1, to - from);
 }
 
 /**
- * Fits home advantage on the first 70% of completed games and scores Brier on the rest.
- * Returns null when the holdout is too small to test.
+ * Ratings run from the first game. K, home advantage and the margin rule are chosen by log loss on games between the
+ * 35% and 70% marks, after the warm-up. The last 30% is scored with Brier and played no part in the choice.
+ * Returns null while either block is too small to test.
  */
 export function fitElo(games: readonly EloGame[]): EloFit | null {
   const ordered = [...games].sort((a, b) => a.start_time.localeCompare(b.start_time) || a.id.localeCompare(b.id));
-  const trainCount = Math.floor(ordered.length * 0.7);
+  const warmCount = Math.floor(ordered.length * WARMUP_FRACTION);
+  const trainCount = Math.floor(ordered.length * SELECT_THROUGH_FRACTION);
   const holdoutGames = ordered.length - trainCount;
-  if (trainCount < 40 || holdoutGames < 24) return null;
+  if (trainCount - warmCount < MIN_SELECT_GAMES || holdoutGames < MIN_HOLDOUT_GAMES) return null;
   const train = ordered.slice(0, trainCount);
-  let hfa = HFA_GRID[0]!;
-  let best = Infinity;
-  for (const candidate of HFA_GRID) {
-    const loss = logLoss(train, candidate);
-    if (loss < best) {
-      best = loss;
-      hfa = candidate;
+  let best: EloSettings = { k: ELO_K, hfa: HFA_GRID[0]!, margin: false };
+  let bestLoss = Infinity;
+  for (const margin of [false, true]) {
+    for (const k of K_GRID) {
+      for (const hfa of HFA_GRID) {
+        const loss = meanLogLoss(train, replay(train, { k, hfa, margin }).expected, warmCount, trainCount);
+        if (loss < bestLoss) {
+          bestLoss = loss;
+          best = { k, hfa, margin };
+        }
+      }
     }
   }
-  const { expected, ratings } = replay(ordered, hfa);
+  const { expected, ratings } = replay(ordered, best);
   let brier = 0;
   for (let i = trainCount; i < ordered.length; i += 1) {
-    const game = ordered[i]!;
-    const outcome = game.home_score > game.away_score ? 1 : game.home_score < game.away_score ? 0 : 0.5;
-    const gap = expected[i]! - outcome;
+    const gap = expected[i]! - outcome(ordered[i]!);
     brier += gap * gap;
   }
   const pregame = new Map<string, number>();
   ordered.forEach((game, index) => pregame.set(game.id, expected[index]!));
-  return { hfa, holdout_games: holdoutGames, holdout_brier: brier / holdoutGames, pregame_home_win: pregame, ratings };
+  return { ...best, holdout_games: holdoutGames, holdout_brier: brier / holdoutGames, pregame_home_win: pregame, ratings };
 }
 
 export function projectHomeWin(fit: EloFit, home: string, away: string, neutral: boolean): number {

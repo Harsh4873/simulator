@@ -107,7 +107,56 @@ test('the feed page shows the schedule, an unfitted projection, and no line', ()
   assert.match(stale, /not the current Chicago window/);
   const empty = slate(now);
   empty.games = [];
-  assert.match(renderFeedSlate(empty, now), /No NFL matches in this window/);
+  assert.match(renderFeedSlate(empty, now), /No NFL games today or yesterday\.<\/p>/);
+});
+
+test('the rest of the week shows under its own days, with records, after an empty window', () => {
+  const now = new Date('2026-11-20T20:00:00Z');
+  const week = slate(now);
+  const game = week.games[0]!;
+  week.games = [];
+  week.later = [
+    { ...game, id: 'mon', start_time: '2026-11-24T01:15:00Z' },
+    { ...game, id: 'sun', start_time: '2026-11-22T18:00:00Z', away: { ...game.away, record: '1-8' }, home: { ...game.home, record: '5-3-1' } },
+    // Already today in Chicago: not "later".
+    { ...game, id: 'today', start_time: '2026-11-20T23:00:00Z', away: { ...game.away, name: 'Earlier Team' } },
+  ];
+  const html = renderFeedSlate(parseFeedSlate(JSON.stringify(week), 'nfl')!, now);
+  assert.match(html, /No NFL games today or yesterday\. The rest of this week is below\./);
+  assert.ok(html.indexOf('Sunday, Nov 22') < html.indexOf('Monday, Nov 23'), html);
+  assert.match(html, /data-record>1-8</);
+  assert.match(html, /data-record>5-3-1</);
+  assert.doesNotMatch(html, /Earlier Team/);
+  // A record that is not wins-losses(-ties) fails the file; a file without records still parses.
+  const bad = JSON.parse(JSON.stringify(week)) as FeedSlate;
+  bad.later[1]!.away.record = '1 and 8';
+  assert.equal(parseFeedSlate(JSON.stringify(bad), 'nfl'), null);
+  assert.ok(parseFeedSlate(JSON.stringify(slate(now)), 'nfl'));
+});
+
+test('a finished esports game shows its result and each player\'s played value under the mean', () => {
+  const now = new Date();
+  const doc = JSON.parse(esportsFixture(now)) as { titles: { matches: Record<string, unknown>[] }[] };
+  const match = doc.titles[0]!.matches[0]!;
+  Object.assign(match, { status: 'finished', winner: 'BIG', score: [1, 2] });
+  (match.players as { props: Record<string, unknown>[] }[])[0]!.props[0]!.actual = 21.5;
+  const parsed = parseEsportsDocument(JSON.stringify(doc));
+  assert.ok(parsed);
+  const html = renderEsports(parsed, now);
+  assert.match(html, /Final · BIG won 2-1/);
+  assert.match(html, /Played 21\.5 a map/);
+  assert.match(html, /18\.2/);
+  const wrongWinner = JSON.parse(JSON.stringify(doc));
+  wrongWinner.titles[0].matches[0].winner = 'Somebody Else';
+  assert.equal(parseEsportsDocument(JSON.stringify(wrongWinner)), null);
+  const badScore = JSON.parse(JSON.stringify(doc));
+  badScore.titles[0].matches[0].score = [1.5, 2];
+  assert.equal(parseEsportsDocument(JSON.stringify(badScore)), null);
+  const badActual = JSON.parse(JSON.stringify(doc));
+  badActual.titles[0].matches[0].players[0].props[0].actual = -1;
+  assert.equal(parseEsportsDocument(JSON.stringify(badActual)), null);
+  // Files from before the result fields still parse and show no result line.
+  assert.doesNotMatch(renderEsports(parseEsportsDocument(esportsFixture(now))!, now), /data-result/);
 });
 
 test('the esports fixture is a player-mean document', () => {

@@ -10,8 +10,10 @@ import {
   meanOf,
   parseEsportsDocument,
   renderEsports,
+  resultText,
   type EsportsTitle,
 } from '../src/esports/props.ts';
+import { csResult, likelyLineup } from '../scripts/build-esports-slate.ts';
 
 test('the mean uses earlier games and leaves the displayed game out', () => {
   const earlier = Array.from({ length: MIN_GAMES }, (_, index) => ({ id: `m${index}`, start: index + 1, value: 2 }));
@@ -95,4 +97,22 @@ test('a price or a win chance is rejected', () => {
     priced.titles[0]![key] = key === 'away_win' || key === 'home_win' ? 0.5 : -110;
     assert.equal(parseEsportsDocument(JSON.stringify(priced)), null, key);
   }
+});
+
+test('a CS2 lineup is the five who played most recently, and a result names the winner by team id', () => {
+  const roster = ['coach', 'a', 'b', 'c', 'd', 'e', 'bench'].map((slug) => ({ slug, name: slug }));
+  const last: Record<string, number> = { a: 50, b: 40, c: 30, d: 20, e: 10, bench: 1, coach: Number.NEGATIVE_INFINITY };
+  assert.deepEqual(likelyLineup(roster, (slug) => last[slug]!).map((player) => player.slug), ['a', 'b', 'c', 'd', 'e']);
+  assert.equal(likelyLineup(roster.slice(0, 3), (slug) => last[slug]!).length, 3);
+  const teams: [{ name: string; slug: string; id: number | null }, { name: string; slug: string; id: number | null }] = [
+    { name: 'GamerLegion', slug: 'gl', id: 7 },
+    { name: 'BIG', slug: 'big', id: 9 },
+  ];
+  assert.deepEqual(csResult({ status: 'finished', teams, score: [1, 2], winnerId: 9 }), { status: 'finished', winner: 'BIG', score: [1, 2] });
+  assert.deepEqual(csResult({ status: 'current', teams, score: [1, 0], winnerId: null }), { status: 'live', winner: null, score: [1, 0] });
+  assert.deepEqual(csResult({ status: 'upcoming', teams, score: null, winnerId: null }), { status: 'upcoming', winner: null, score: null });
+  assert.equal(csResult({ status: 'finished', teams, score: [2, 0], winnerId: 12 }).winner, null);
+  assert.equal(resultText({ status: 'finished', teams: ['GamerLegion', 'BIG'], winner: 'GamerLegion', score: [2, 0] }), 'Final · GamerLegion won 2-0');
+  assert.equal(resultText({ status: 'live', teams: ['GamerLegion', 'BIG'], winner: null, score: [1, 1] }), 'Live · GamerLegion 1-1 BIG');
+  assert.equal(resultText({ teams: ['GamerLegion', 'BIG'] }), null);
 });

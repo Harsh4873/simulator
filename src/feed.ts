@@ -12,6 +12,8 @@ export interface FeedSide {
   logo_url: string | null;
   color: string | null;
   alternate_color: string | null;
+  /** Overall win-loss(-tie) record as the scoreboard lists it. Older files omit it. */
+  record?: string | null;
 }
 
 /** A chance computed from results. Never a price, spread, or total. */
@@ -61,6 +63,7 @@ const KINDS = new Set<FeedProjection['kind']>(['game', 'series', 'map']);
 const BANNED_KEY = /^(odds|spread|moneyline|price|total|decimal|vig|book|line)$/i;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const HEX = /^#[0-9a-f]{6}$/i;
+const RECORD = /^\d{1,2}-\d{1,2}(-\d{1,2})?$/;
 
 function record(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
@@ -97,7 +100,9 @@ function sideOf(value: unknown): FeedSide | null {
   if (row.color !== null && color === null) return null;
   const alternate = typeof row.alternate_color === 'string' && HEX.test(row.alternate_color) ? row.alternate_color : null;
   if (row.alternate_color !== null && alternate === null) return null;
-  return { name, abbreviation, score, logo_url: logo, color, alternate_color: alternate };
+  if (!('record' in row) || row.record === undefined) return { name, abbreviation, score, logo_url: logo, color, alternate_color: alternate };
+  if (row.record !== null && (typeof row.record !== 'string' || !RECORD.test(row.record))) return null;
+  return { name, abbreviation, score, logo_url: logo, color, alternate_color: alternate, record: row.record };
 }
 
 function projectionOf(value: unknown): FeedProjection | null | undefined {
@@ -206,7 +211,8 @@ function logoMarkup(side: FeedSide): string {
 
 function sideMarkup(side: FeedSide, role: 'Away' | 'Home' | null): string {
   const roleHtml = role ? `<span class="side-role">${role}</span>` : '';
-  return `<span class="side">${logoMarkup(side)}<span class="side-copy">${roleHtml}<span class="abbr">${escapeHtml(side.abbreviation)}</span><span class="name">${escapeHtml(side.name)}</span></span></span>`;
+  const recordHtml = side.record ? `<span class="side-role" data-record>${escapeHtml(side.record)}</span>` : '';
+  return `<span class="side">${logoMarkup(side)}<span class="side-copy">${roleHtml}<span class="abbr">${escapeHtml(side.abbreviation)}</span><span class="name">${escapeHtml(side.name)}</span>${recordHtml}</span></span>`;
 }
 
 function chip(status: FeedStatus): string {
@@ -281,7 +287,22 @@ export function renderFeedSlate(slate: FeedSlate, now: Date): string {
   }
   const days = [...byDate.keys()].sort((a, b) => b.localeCompare(a));
   const windowHtml = days.map((day) => section(dayTitle(day, today), byDate.get(day) ?? [])).join('');
-  const empty = slate.games.length === 0 ? `<p class="state">No ${sportName} matches in this window.</p>` : windowHtml;
-  const later = slate.later.length ? section('Outside this window', slate.later) : '';
+  const upcoming = slate.later.filter((game) => chicagoDate(new Date(game.start_time)) > today);
+  const empty =
+    slate.games.length > 0
+      ? windowHtml
+      : `<p class="state">No ${sportName} games today or yesterday.${upcoming.length ? ' The rest of this week is below.' : ''}</p>`;
+  const laterDays = new Map<string, FeedGame[]>();
+  for (const game of [...upcoming].sort((a, b) => a.start_time.localeCompare(b.start_time))) {
+    const day = chicagoDate(new Date(game.start_time));
+    laterDays.set(day, [...(laterDays.get(day) ?? []), game]);
+  }
+  const later = [...laterDays.entries()].map(([day, games]) => section(laterTitle(day), games)).join('');
   return `${stale}${head}${empty}${later}`;
+}
+
+/** "Sunday, Nov 22" for a Chicago date. */
+function laterTitle(day: string): string {
+  const noon = new Date(`${day}T18:00:00Z`);
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'long', month: 'short', day: 'numeric' }).format(noon);
 }

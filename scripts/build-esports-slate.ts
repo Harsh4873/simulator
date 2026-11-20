@@ -36,6 +36,7 @@ const CARGO_FIELDS = [
   'ScoreboardGames.Team2',
   'ScoreboardGames.Tournament',
   'ScoreboardGames.DateTime_UTC',
+  'ScoreboardGames.Winner',
 ].join(',');
 const STAMP = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
@@ -147,6 +148,8 @@ interface ProGame {
   radiant: string;
   dire: string;
   league: string;
+  /** OpenDota lists finished pro games only. */
+  radiantWin: boolean | null;
 }
 
 function realPro(row: Record<string, unknown>): ProGame | null {
@@ -158,7 +161,14 @@ function realPro(row: Record<string, unknown>): ProGame | null {
   if (typeof id !== 'number' || !Number.isFinite(id) || typeof start !== 'number' || !(start > 0)) return null;
   if (!radiant || !dire || !league) return null;
   const startMs = start * 1000;
-  return { id, startMs, start_time: new Date(startMs).toISOString(), radiant, dire, league };
+  const radiantWin = typeof row.radiant_win === 'boolean' ? row.radiant_win : null;
+  return { id, startMs, start_time: new Date(startMs).toISOString(), radiant, dire, league, radiantWin };
+}
+
+/** The winning side's name, when the game says who won and the two names differ. */
+function sideWinner(teams: [string, string], firstWon: boolean | null): string | null {
+  if (firstWon === null || teams[0] === teams[1]) return null;
+  return firstWon ? teams[0] : teams[1];
 }
 
 interface DotaHist {
@@ -192,11 +202,18 @@ function readDotaHistory(payload: unknown): DotaHist[] {
   return rows;
 }
 
-function dotaProps(history: readonly DotaHist[], listed: ReadonlySet<number>, matchId: number, startMs: number): EsportsProp[] {
+function dotaProps(
+  history: readonly DotaHist[],
+  listed: ReadonlySet<number>,
+  matchId: number,
+  startMs: number,
+  played: Record<(typeof DOTA_STATS)[number], number | null>,
+): EsportsProp[] {
   const kept = history.filter((row) => listed.has(row.matchId));
   return DOTA_STATS.map((stat) => ({
     stat,
     mean: earlierMean(kept.map((row) => ({ id: String(row.matchId), start: row.start, value: row[stat] })), String(matchId), startMs),
+    actual: played[stat],
   }));
 }
 
@@ -236,14 +253,15 @@ async function buildDota(now: Date): Promise<EsportsTitle | null> {
     }
     const body = record(detail);
     const roster = body && Array.isArray(body.players) ? body.players : [];
-    const players: { accountId: number | null; name: string; team: string }[] = [];
+    const players: { accountId: number | null; name: string; team: string; played: Record<(typeof DOTA_STATS)[number], number | null> }[] = [];
     for (const item of roster) {
       const player = record(item);
       if (!player || typeof player.player_slot !== 'number' || !Number.isFinite(player.player_slot)) continue;
       const name = text(player.name) ?? text(player.personaname);
       if (!name) continue;
       const accountId = typeof player.account_id === 'number' && Number.isInteger(player.account_id) && player.account_id > 0 ? player.account_id : null;
-      players.push({ accountId, name, team: player.player_slot < 128 ? game.radiant : game.dire });
+      const played = { kills: countOf(player.kills), deaths: countOf(player.deaths), assists: countOf(player.assists) };
+      players.push({ accountId, name, team: player.player_slot < 128 ? game.radiant : game.dire, played });
     }
     if (players.length === 0) continue;
     const built: EsportsPlayer[] = [];
@@ -262,13 +280,18 @@ async function buildDota(now: Date): Promise<EsportsTitle | null> {
           historyCache.set(player.accountId, history);
         }
       }
-      built.push({ name: player.name, team: player.team, props: dotaProps(history, listed, game.id, game.startMs) });
+      built.push({ name: player.name, team: player.team, props: dotaProps(history, listed, game.id, game.startMs, player.played) });
     }
+    const teams: [string, string] = [game.radiant, game.dire];
+    const radiantWin = body && typeof body.radiant_win === 'boolean' ? body.radiant_win : game.radiantWin;
     matches.push({
       id: String(game.id),
       start_time: game.start_time,
-      teams: [game.radiant, game.dire],
+      teams,
       competition: game.league,
+      status: 'finished',
+      winner: sideWinner(teams, radiantWin),
+      score: null,
       players: built,
     });
   }
@@ -290,6 +313,8 @@ interface LolFlat {
   deaths: number | null;
   assists: number | null;
   cs: number | null;
+  /** 1 when Team1 won the game, 2 when Team2 did. */
+  winner: 1 | 2 | null;
 }
 
 function cargoFailed(body: unknown): boolean {
@@ -356,6 +381,7 @@ async function cargoRows(where: string): Promise<LolFlat[] | null> {
       deaths: cargoCount(fields.Deaths),
       assists: cargoCount(fields.Assists),
       cs: cargoCount(fields.CS),
+      winner: cargoCount(fields.Winner) === 1 ? 1 : cargoCount(fields.Winner) === 2 ? 2 : null,
     });
   }
   return parsed;
@@ -379,6 +405,7 @@ interface LolGame {
   startMs: number;
   teams: [string, string];
   competition: string | null;
+  winner: 1 | 2 | null;
   players: { name: string; team: string }[];
 }
 
@@ -387,7 +414,7 @@ function groupLol(rows: readonly LolFlat[]): LolGame[] {
   for (const row of rows) {
     let game = games.get(row.gameId);
     if (!game) {
-      game = { id: row.gameId, start_time: row.start_time, startMs: row.startMs, teams: [row.team1, row.team2], competition: row.tournament, players: [] };
+      game = { id: row.gameId, start_time: row.start_time, startMs: row.startMs, teams: [row.team1, row.team2], competition: row.tournament, winner: row.winner, players: [] };
       games.set(row.gameId, game);
     }
     if (game.players.some((player) => player.name === row.player)) continue;
@@ -396,15 +423,17 @@ function groupLol(rows: readonly LolFlat[]): LolGame[] {
   return [...games.values()];
 }
 
+function lolValue(row: LolFlat, stat: (typeof LOL_STATS)[number]): number | null {
+  return stat === 'kills' ? row.kills : stat === 'deaths' ? row.deaths : stat === 'assists' ? row.assists : row.cs;
+}
+
 function lolProps(player: string, game: LolGame, rows: readonly LolFlat[]): EsportsProp[] {
   const history = rows.filter((row) => row.player === player);
+  const played = history.find((row) => row.gameId === game.id) ?? null;
   return LOL_STATS.map((stat) => ({
     stat,
-    mean: earlierMean(history.map((row) => ({
-      id: row.gameId,
-      start: row.startMs,
-      value: stat === 'kills' ? row.kills : stat === 'deaths' ? row.deaths : stat === 'assists' ? row.assists : row.cs,
-    })), game.id, game.startMs),
+    mean: earlierMean(history.map((row) => ({ id: row.gameId, start: row.startMs, value: lolValue(row, stat) })), game.id, game.startMs),
+    actual: played ? lolValue(played, stat) : null,
   }));
 }
 
@@ -417,6 +446,33 @@ function chicagoNextStart(now: Date): string {
     }
   }
   return `${tomorrow} 06:00:00`;
+}
+
+/** Players per history query: about 40 recent games each stays under the 500-row Cargo limit. */
+const LOL_HISTORY_CHUNK = 10;
+
+/** A Cargo string literal, or null for a name that cannot be quoted safely. */
+function cargoQuoted(name: string): string | null {
+  return /^[^'"\\;]+$/.test(name) ? `'${name}'` : null;
+}
+
+/**
+ * Each shown player's own games. The latest rows across every league reach back only a few days, so a player in a
+ * smaller league would otherwise have no earlier games to average.
+ */
+async function lolPlayerHistory(players: readonly string[]): Promise<LolFlat[]> {
+  const quoted = [...new Set(players)].map(cargoQuoted).filter((name): name is string => name !== null);
+  const rows: LolFlat[] = [];
+  for (let index = 0; index < quoted.length; index += LOL_HISTORY_CHUNK) {
+    const names = quoted.slice(index, index + LOL_HISTORY_CHUNK).join(',');
+    const chunk = await cargoRows(`ScoreboardPlayers.Link IN (${names}) AND ScoreboardGames.DateTime_UTC >= '2025-01-01 00:00:00'`);
+    if (chunk === null) {
+      console.error('esports League of Legends player history was not loaded for one batch');
+      continue;
+    }
+    rows.push(...chunk);
+  }
+  return rows;
 }
 
 async function buildLol(now: Date): Promise<EsportsTitle | null> {
@@ -432,14 +488,31 @@ async function buildLol(now: Date): Promise<EsportsTitle | null> {
     rows = dedupeLol([...first, ...second]);
   }
   const shown = selectForTitle(groupLol(rows), now, null);
+  const history = dedupeLol([...rows, ...(await lolPlayerHistory(shown.flatMap((game) => game.players.map((player) => player.name))))]);
   const matches: EsportsMatch[] = [];
   for (const game of shown) {
-    const players = game.players.map((player) => ({ name: player.name, team: player.team, props: lolProps(player.name, game, rows) }));
+    const players = game.players.map((player) => ({ name: player.name, team: player.team, props: lolProps(player.name, game, history) }));
     if (players.length === 0) continue;
-    matches.push({ id: game.id, start_time: game.start_time, teams: game.teams, competition: game.competition, players });
+    // Leaguepedia scoreboards are filed after a game ends.
+    matches.push({
+      id: game.id,
+      start_time: game.start_time,
+      teams: game.teams,
+      competition: game.competition,
+      status: 'finished',
+      winner: game.winner === null ? null : sideWinner(game.teams, game.winner === 1),
+      score: null,
+      players,
+    });
   }
   if (matches.length === 0) return null;
   return { title: 'League of Legends', source: 'Leaguepedia', matches };
+}
+
+interface CsTeam {
+  name: string;
+  slug: string;
+  id: number | null;
 }
 
 interface CsMatch {
@@ -447,17 +520,41 @@ interface CsMatch {
   start_time: string;
   startMs: number;
   status: 'finished' | 'upcoming' | 'current';
-  teams: [{ name: string; slug: string }, { name: string; slug: string }];
+  teams: [CsTeam, CsTeam];
   competition: string | null;
+  /** Maps won by team1 and team2, when the feed has both. */
+  score: [number, number] | null;
+  winnerId: number | null;
 }
 
-function csTeam(value: unknown): { name: string; slug: string } | null {
+function csTeam(value: unknown, fallbackId: unknown): CsTeam | null {
   const row = record(value);
   if (!row) return null;
   const name = realName(row.name);
   const slug = text(row.slug);
   if (!name || !slug) return null;
-  return { name, slug };
+  const rawId = typeof row.id === 'number' ? row.id : fallbackId;
+  return { name, slug, id: typeof rawId === 'number' && Number.isInteger(rawId) ? rawId : null };
+}
+
+const mapCount = (value: unknown): number | null => (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 9 ? value : null);
+
+/** Esports status from BO3's. A finished series names its winner by team id. */
+export function csResult(match: Pick<CsMatch, 'status' | 'teams' | 'score' | 'winnerId'>): Pick<EsportsMatch, 'status' | 'winner' | 'score'> {
+  const status = match.status === 'current' ? 'live' : match.status;
+  if (status === 'upcoming') return { status, winner: null, score: null };
+  const winner = match.winnerId === null ? null : match.teams.find((team) => team.id === match.winnerId)?.name ?? null;
+  return { status, winner: status === 'finished' && match.teams[0].name !== match.teams[1].name ? winner : null, score: match.score };
+}
+
+/**
+ * Up to five players a side for a match that has not finished: a team page lists its whole active roster, so the five
+ * who played most recently stand in for the lineup. A finished match keeps the players whose history includes it.
+ */
+export function likelyLineup<T extends { slug: string; name: string }>(roster: readonly T[], lastPlayed: (slug: string) => number): T[] {
+  return [...roster]
+    .sort((a, b) => lastPlayed(b.slug) - lastPlayed(a.slug) || a.name.localeCompare(b.name))
+    .slice(0, 5);
 }
 
 function readCsMatch(value: unknown): CsMatch | null {
@@ -470,10 +567,12 @@ function readCsMatch(value: unknown): CsMatch | null {
   if (!start || !Number.isFinite(startMs)) return null;
   const id = row.id;
   if (typeof id !== 'number' && typeof id !== 'string') return null;
-  const left = csTeam(row.team1);
-  const right = csTeam(row.team2);
+  const left = csTeam(row.team1, row.team1_id);
+  const right = csTeam(row.team2, row.team2_id);
   if (!left || !right) return null;
   const tournament = record(row.tournament);
+  const first = mapCount(row.team1_score);
+  const second = mapCount(row.team2_score);
   return {
     id: String(id),
     start_time: new Date(startMs).toISOString(),
@@ -481,6 +580,8 @@ function readCsMatch(value: unknown): CsMatch | null {
     status,
     teams: [left, right],
     competition: tournament ? text(tournament.name) : null,
+    score: status !== 'upcoming' && first !== null && second !== null ? [first, second] : null,
+    winnerId: typeof row.winner_team_id === 'number' && Number.isInteger(row.winner_team_id) ? row.winner_team_id : null,
   };
 }
 
@@ -594,15 +695,18 @@ async function csHistory(slug: string): Promise<CsHist[]> {
   }
 }
 
+function csTotal(row: CsHist, stat: (typeof CS2_STATS)[number]): number | null {
+  return stat === 'kills' ? row.kills : stat === 'headshots' ? row.headshots : stat === 'deaths' ? row.deaths : row.assists;
+}
+
 function csProps(history: readonly CsHist[], matchId: string, startMs: number): EsportsProp[] {
+  const played = history.find((row) => row.id === matchId) ?? null;
   return CS2_STATS.map((stat) => {
-    const rows: SeriesRow[] = history.map((row) => ({
-      id: row.id,
-      start: row.start,
-      maps: row.maps,
-      total: stat === 'kills' ? row.kills : stat === 'headshots' ? row.headshots : stat === 'deaths' ? row.deaths : row.assists,
-    }));
-    return { stat, mean: cs2PerMapMean(rows, matchId, startMs) };
+    const rows: SeriesRow[] = history.map((row) => ({ id: row.id, start: row.start, maps: row.maps, total: csTotal(row, stat) }));
+    // This series on the mean's scale: its total over the maps played.
+    const total = played ? csTotal(played, stat) : null;
+    const actual = played && played.maps > 0 && total !== null ? Number((total / played.maps).toFixed(2)) : null;
+    return { stat, mean: cs2PerMapMean(rows, matchId, startMs), actual };
   });
 }
 
@@ -638,12 +742,19 @@ async function buildCs(now: Date): Promise<EsportsTitle | null> {
     const players: EsportsPlayer[] = [];
     const seen = new Set<string>();
     for (const team of match.teams) {
-      for (const player of rosters.get(team.slug) ?? []) {
-        if (seen.has(player.slug)) continue;
-        const history = histories.get(player.slug) ?? [];
-        if (match.status === 'finished' && !history.some((row) => row.id === match.id)) continue;
+      const roster = (rosters.get(team.slug) ?? []).filter((player) => !seen.has(player.slug));
+      const lineup =
+        match.status === 'finished'
+          ? roster.filter((player) => (histories.get(player.slug) ?? []).some((row) => row.id === match.id))
+          : likelyLineup(roster, (slug) => {
+              // Only series before this one count toward who is in the lineup.
+              const before = (histories.get(slug) ?? []).filter((row) => row.start < match.startMs).map((row) => row.start);
+              return before.length ? Math.max(...before) : Number.NEGATIVE_INFINITY;
+            });
+      for (const player of lineup) {
         seen.add(player.slug);
-        players.push({ name: player.name, team: team.name, props: csProps(history, match.id, match.startMs) });
+        const props = csProps(histories.get(player.slug) ?? [], match.id, match.startMs);
+        players.push({ name: player.name, team: team.name, props: match.status === 'finished' ? props : props.map(({ stat, mean }) => ({ stat, mean })) });
       }
     }
     if (players.length === 0) continue;
@@ -652,6 +763,7 @@ async function buildCs(now: Date): Promise<EsportsTitle | null> {
       start_time: match.start_time,
       teams: [match.teams[0].name, match.teams[1].name],
       competition: match.competition,
+      ...csResult(match),
       players,
     });
   }
