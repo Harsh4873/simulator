@@ -481,11 +481,21 @@ function renderGame(game: FeedGame): string {
     <h2 class="matchup">${sideMarkup(game.away, leftRole)}<span class="at">${between}</span>${sideMarkup(game.home, rightRole)}</h2>
     ${whereHtml}
     <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
-    ${game.status === 'scheduled' && game.sim ? '' : `<p class="status">${escapeHtml(statusLine(game))}</p>`}
+    <p class="status">${escapeHtml(statusLine(game))}</p>
     ${competition}
-    ${game.sim ? simMarkup(game, game.sim) : `${game.projection ? `<p class="status" data-projection>${escapeHtml(game.projection.summary)}</p>` : ''}<p class="note">${escapeHtml(game.projection_note)}</p>`}
-    ${game.sim?.plan ? `<div class="card-actions"><button type="button" data-nfl-simulate="${escapeHtml(game.id)}">Simulate</button></div>` : ''}
+    ${cardBody(game)}
   </article>`;
+}
+
+/**
+ * A game with a published plan reads like an NBA card: the matchup, then Simulate, which opens the box score. An older
+ * file without a plan keeps its projection on the card, and a game with no simulation keeps its note.
+ */
+function cardBody(game: FeedGame): string {
+  if (game.sim?.plan) return `<div class="card-actions"><button type="button" data-nfl-simulate="${escapeHtml(game.id)}">Simulate</button></div>`;
+  if (game.sim) return simMarkup(game, game.sim);
+  const projection = game.projection ? `<p class="status" data-projection>${escapeHtml(game.projection.summary)}</p>` : '';
+  return `${projection}<p class="note">${escapeHtml(game.projection_note)}</p>`;
 }
 
 const STAT_LABEL: Record<FeedStat, string> = {

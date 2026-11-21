@@ -38,6 +38,7 @@ import {
   projectionBoardHtml,
   renderProjections,
   searchHitsHtml,
+  slateBoardHtml,
   viewerLine,
   type ProjectionView,
 } from '../src/projections.ts';
@@ -757,13 +758,30 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     assert.equal(document.querySelector('#desk')?.getAttribute('data-mode'), 'projections');
     // The published lean is on the page before any game is simulated here, with its measured record beside it.
     const sides = () => document.querySelector('[data-model-sides]')?.textContent ?? '';
-    assert.match(sides(), /Leans against the posted lines/);
+    assert.match(sides(), /Top leans/);
     assert.ok(sides().includes(star.name));
     assert.ok(sides().includes(`Under ${starLine} PTS -110`));
     assert.match(sides(), /Leans this strong: \+\d+\.\d pp against the price, 300 graded/);
     assert.match(sides(), /No over lean clears the bar right now/);
     assert.match(sides(), /Record: 300 graded leans/);
     assert.equal(workers, 0);
+    // The board opens on every game at once. With a posted line on the slate it lists the players who have one, as a
+    // card with his photo, the posted line and its book, before any game has been drawn here.
+    assert.equal(document.querySelector('button[data-projection-all]')?.getAttribute('aria-pressed'), 'true');
+    const starCard = () => document.querySelector<HTMLButtonElement>(`[data-projection-board] button[data-projection-player="${star.athlete_id}"]`);
+    assert.ok(starCard(), 'the star with a posted line is on the every-game board');
+    assert.equal(document.querySelectorAll('[data-projection-board] .pick-card').length, 1);
+    assert.ok(starCard()!.querySelector('.avatar img'), 'each card carries the headshot');
+    assert.equal(starCard()!.querySelector('.line-posted')?.textContent, String(starLine));
+    assert.match(document.querySelector('[data-projection-board]')?.textContent ?? '', /still loading (its|their) 10,000 simulations/);
+    // Picking a game shows that game's whole roster, and All games brings the every-game board back.
+    document.querySelector<HTMLButtonElement>(`button[data-projection-game="${domSlate.games[1]!.event_id}"]`)?.click();
+    await flush();
+    assert.equal(document.querySelector(`button[data-projection-game="${domSlate.games[1]!.event_id}"]`)?.getAttribute('aria-pressed'), 'true');
+    assert.ok(document.querySelectorAll('[data-projection-board] .pick-card').length > 10);
+    document.querySelector<HTMLButtonElement>('button[data-projection-all]')?.click();
+    assert.equal(document.querySelector('button[data-projection-all]')?.getAttribute('aria-pressed'), 'true');
+    const drawn = workers;
     const searchInput = document.querySelector<HTMLInputElement>('[data-projection-search]');
     assert.ok(searchInput);
     searchInput.value = star.name.split(' ')[0]!;
@@ -777,7 +795,7 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     await flush();
 
     // Search hits auto-closed, 1 worker ran, and the game rail shows 10k ready
-    assert.equal(workers, 1);
+    assert.equal(workers, drawn + 1);
     assert.equal(document.querySelector('.sim-screen'), null);
     assert.ok(document.querySelector('.ready-dot'));
     assert.equal(document.querySelector('[data-projection-hits]')?.innerHTML, '');
@@ -807,7 +825,13 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     assert.ok(usePosted);
     usePosted.click();
     assert.equal(formValue('[data-prop-line]'), String(starLine));
-    assert.equal(workers, 1);
+    assert.equal(workers, drawn + 1);
+
+    // Back to board closes the player and returns to his card; the card opens him again.
+    document.querySelector<HTMLButtonElement>('[data-projection-close]')?.click();
+    assert.equal(document.querySelector('.projection-detail'), null, 'Back to board closes the player');
+    starCard()!.click();
+    assert.match(document.querySelector('.who-name')?.textContent ?? '', new RegExp(star.name.split(' ')[0]!));
 
     // Switch market to DD -> line locks at 0.5 and defense header shows PRA
     document.querySelector<HTMLButtonElement>('[data-projection-market="dd"]')?.click();
@@ -842,7 +866,7 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     assert.ok(rerun, 'changing lineups invalidates cache and shows rerun button');
     rerun.click();
     await flush();
-    assert.equal(workers, 2);
+    assert.equal(workers, drawn + 2);
   } finally {
     delete (globalThis as Record<string, unknown>).location;
     globals.setInterval = timer;
@@ -924,13 +948,14 @@ test('board and lean accuracy fixes: posted lines, no self-placed hooks, measure
   const [roleA, roleB] = role;
   const form: PropFormState = { market: 'pts', side: 'over', line: '29.5', style: 'american', odds: '-110', opposite: '' };
   const bare = projectionBoardHtml(game, sim, form, game.event_id, top.athlete_id);
-  assert.match(bare, /<th>Line<\/th>/);
-  assert.match(bare, /<td>29\.5<\/td>/);
+  assert.match(bare, /<span class="pick-label">Your line<\/span><span class="pick-value">29\.5<\/span>/);
   assert.equal((bare.match(/class="line-posted"/g) ?? []).length, 0);
   assert.match(bare, /No posted line is in for this stat/);
   // Without a posted line a role player has a projection and no line, over, under or edge.
-  const roleRow = bare.split('<tr').find((row) => row.includes(`data-projection-player="${roleA.athlete_id}"`))!;
-  assert.deepEqual([...roleRow.matchAll(/<td>([^<]*)<\/td>/g)].map((m) => m[1]).slice(1), ['', '', '', '']);
+  const roleRow = bare.split('<li').find((row) => row.includes(`data-projection-player="${roleA.athlete_id}"`))!;
+  assert.match(roleRow, /<span class="pick-stat pick-proj"><span class="pick-label">Projection<\/span><span class="pick-value">\d+\.\d<\/span>/);
+  assert.match(roleRow, /<span class="pick-label">No line<\/span>/);
+  assert.equal(/pick-odds|pick-edge/.test(roleRow), false);
   const meanOf = (id: string) => playedMean(playedValues(sim.playerDraws.get(id)!, 'pts')) ?? 0;
   // One line far under a projection and one far over it, so each side has a clear leader.
   const lines = new Map<string, BookLine>();
@@ -945,7 +970,7 @@ test('board and lean accuracy fixes: posted lines, no self-placed hooks, measure
   assert.match(overHtml, /Lines are the posted DraftKings over\/under for this stat/);
   assert.match(overHtml, /<small class="line-price">-125<\/small>/);
   assert.match(overHtml, /Over \+\d+\.\d pp|Over -\d+\.\d pp|Under \+\d+\.\d pp|Under -\d+\.\d pp/);
-  const firstOf = (html: string) => html.match(/<th scope="row"><button[^>]*>([^<]+)<\/button>/)?.[1];
+  const firstOf = (html: string) => html.match(/<span class="pick-name">([^<]+)<\/span>/)?.[1];
   assert.equal(firstOf(overHtml), roleA.name);
   assert.equal(firstOf(projectionBoardHtml(game, sim, open, game.event_id, null, undefined, 'under', lines)), roleB.name);
 
@@ -1142,4 +1167,48 @@ test('IndexedDB simulation cache hydrates matching generations and purges stale 
     if (prevIdb === undefined) delete (globalThis as Record<string, unknown>).indexedDB;
     else Object.defineProperty(globalThis, 'indexedDB', { configurable: true, value: prevIdb });
   }
+});
+
+test('the every-game board lists the rotation as cards, fills each game in as its draws arrive, and sorts across games', () => {
+  const now = new Date('2026-11-02T20:00:00Z');
+  const open = structuredClone(slate);
+  for (const item of open.games) {
+    item.status_state = 'pre';
+    item.completed = false;
+  }
+  const form: PropFormState = { market: 'pts', side: 'over', line: '', style: 'american', odds: '', opposite: '' };
+  const base: ProjectionView = { slate: open, card, now, query: '', eventId: null, athleteId: null, form, simulation: null, drawing: false, overrides: {}, scope: 'all' };
+  const rotation = card.games
+    .filter((rate) => open.games.some((item) => item.event_id === rate.event_id))
+    .flatMap((rate) => rate.players)
+    .filter((player) => !player.replacement_level && player.minutes_weight !== 0 && player.minutes_mean >= 15);
+  const waiting = slateBoardHtml(base);
+  // No posted line anywhere: every rotation player is a card, waiting on his game's draws.
+  assert.equal((waiting.match(/class="pick-card/g) ?? []).length, rotation.length);
+  assert.match(waiting, /No posted line is in for points yet/);
+  assert.match(waiting, new RegExp(`${open.games.length} games are still loading`));
+  assert.equal(waiting.includes('pick-spark'), false);
+  // A long board shows its first cards and offers the rest.
+  const capped = slateBoardHtml({ ...base, boardLimit: 5 });
+  assert.equal((capped.match(/class="pick-card/g) ?? []).length, 5);
+  assert.match(capped, new RegExp(`data-board-more>Show all ${rotation.length} players<`));
+  // One game's draws arrive: its players get a projection and a chart, and they sort ahead of the rest.
+  const drawn = simulate(game, seed, draws);
+  const filled = slateBoardHtml({ ...base, simulations: new Map([[game.event_id, drawn]]) });
+  assert.match(filled, /pick-spark/);
+  assert.match(filled, new RegExp(`${open.games.length - 1} games are still loading`));
+  const first = /data-projection-player="([^"]+)" data-projection-event="([^"]+)"/.exec(filled);
+  assert.equal(first?.[2], game.event_id);
+  const top = game.players
+    .filter((player) => !player.replacement_level && player.minutes_weight !== 0 && player.minutes_mean >= 15)
+    .map((player) => ({ id: player.athlete_id, mean: playedMean(playedValues(drawn.playerDraws.get(player.athlete_id)!, 'pts')) ?? -1 }))
+    .sort((a, b) => b.mean - a.mean)[0]!;
+  assert.equal(first?.[1], top.id);
+  // A posted line narrows the board to the players who have one, priced, with the model chance on each side.
+  const posted: BookLine = { event_id: game.event_id, athlete_id: top.id, market: 'pts', line: 20.5, over_odds: -115, under_odds: -105, priced_at: '2026-11-02T19:00:00Z', book: 'DraftKings' };
+  const priced = slateBoardHtml({ ...base, simulations: new Map([[game.event_id, drawn]]), lines: new Map([[`${game.event_id}:${top.id}:pts`, posted]]) });
+  assert.equal((priced.match(/class="pick-card/g) ?? []).length, 1);
+  assert.match(priced, /<span class="line-posted"[^>]*>20\.5<\/span>/);
+  assert.match(priced, /<small class="line-price">-115<\/small>/);
+  assert.match(priced, /<span class="pick-side-name">Over<\/span><span class="pick-pct">\d+(\.\d)?%<\/span>/);
 });

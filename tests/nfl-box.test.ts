@@ -110,6 +110,9 @@ test('a card with a plan gets the Simulate button and leaves the player detail t
   const planned = renderFeedSlate(parseFeedSlate(JSON.stringify(slateWith(plannedGame(now), now)), 'nfl')!, now);
   assert.match(planned, /<div class="card-actions"><button type="button" data-nfl-simulate="g1">Simulate<\/button><\/div>/);
   assert.doesNotMatch(planned, /<summary>Player projections<\/summary>/);
+  // The card reads like an NBA card: the matchup, its status, then Simulate. The projection waits in the box score.
+  assert.match(planned, /<p class="status">scheduled<\/p>/);
+  assert.doesNotMatch(planned, /feed-proj-score|class="nfl-sim"/);
   const older = slateWith(plannedGame(now), now);
   delete older.games[0]!.sim!.plan;
   older.games[0]!.sim!.players = [{ id: 'p', name: 'Some Player', side: 'home', position: 'WR', status: null, play: 1, stats: { rec: { mean: 3, p10: 1, p50: 3, p90: 5 } }, td: 0.2 }];
@@ -176,7 +179,44 @@ test('Simulate on an NFL card opens its box score in place of the games, and Bac
     assert.match(box.innerHTML, /<h3 class="stat-group-label">Receiving<\/h3>/);
     assert.equal(document.querySelector('.sim-screen'), null, 'the clock closes once the draws are done');
     assert.equal((focused as Element | null)?.hasAttribute('data-nfl-back'), true);
+
+    // A player's name opens his sheet beside the box score, as an NBA name does.
+    const frame = document.querySelector<HTMLElement>('[data-region="player"]')!;
+    assert.equal(frame.hidden, true);
+    const receiver = document.querySelector<HTMLButtonElement>('button[data-nfl-athlete="AAA-wr0"]');
+    assert.ok(receiver, 'each row name is a button');
+    receiver.click();
+    assert.equal(frame.hidden, false);
+    assert.match(frame.querySelector('.who-name')?.textContent ?? '', /AAA Receiver 0/);
+    assert.match(frame.innerHTML, /Expected line/);
+    assert.ok(frame.querySelector('[data-block="nfl-panel-charts"] svg'), 'the forecast draws his distribution');
+    frame.querySelector<HTMLButtonElement>('[data-panel-tab="props"]')!.click();
+    assert.equal(frame.querySelector<HTMLElement>('[data-panel-view="props"]')!.hidden, false);
+    assert.match(frame.querySelector('[data-nfl-prop-results]')?.textContent ?? '', /Over [\d.]+\s*[\d.]+%/);
+    const line = frame.querySelector<HTMLInputElement>('[data-nfl-prop-line]')!;
+    line.value = '0.5';
+    line.dispatchEvent(new window.Event('input', { bubbles: true }));
+    assert.match(frame.querySelector('[data-nfl-prop-results]')?.textContent ?? '', /Over 0\.5/);
+    const odds = frame.querySelector<HTMLInputElement>('[data-nfl-prop-odds]')!;
+    odds.value = '-110';
+    odds.dispatchEvent(new window.Event('input', { bubbles: true }));
+    assert.match(frame.querySelector('[data-nfl-prop-results]')?.textContent ?? '', /Break-even\s*52\.4%/);
+    frame.querySelector<HTMLButtonElement>('button[data-nfl-market="td"]')!.click();
+    assert.match(frame.querySelector('[data-nfl-prop-results]')?.textContent ?? '', /Scores\s*[\d.]+%/);
+    frame.querySelector<HTMLButtonElement>('[data-close]')!.click();
+    assert.equal(frame.hidden, true);
+    assert.equal((focused as Element | null)?.getAttribute('data-nfl-athlete'), 'AAA-wr0');
+
+    // The line check reads a total against the same games.
+    const total = document.querySelector<HTMLInputElement>('#boxscore input[data-game-line="total"]')!;
+    total.value = '40.5';
+    total.dispatchEvent(new window.Event('input', { bubbles: true }));
+    assert.match(document.querySelector('#boxscore [data-line-result="total"]')?.textContent ?? '', /Above \d+\.\d%; below \d+\.\d%/);
+
+    receiver.click();
+    assert.equal(frame.hidden, false);
     document.querySelector<HTMLButtonElement>('[data-nfl-back]')!.click();
+    assert.equal(frame.hidden, true, 'leaving the box score closes the sheet');
     await settle();
     assert.equal(stage.hidden, true);
     assert.equal(games.hidden, false);

@@ -94,6 +94,13 @@ export function playerHeadshotUrl(player: { athlete_id?: string | null; headshot
   return `${ESPN_CDN}i/headshots/nba/players/full/${athleteId}.png`;
 }
 
+/** ESPN's NFL headshot for a numeric athlete id. The page falls back to initials when the image does not load. */
+export function nflHeadshotUrl(athleteId: string | null | undefined): string | null {
+  const id = (athleteId ?? '').trim();
+  if (!/^\d+$/.test(id)) return null;
+  return `${ESPN_CDN}i/headshots/nfl/players/full/${id}.png`;
+}
+
 type Rgb = [number, number, number];
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 const FALLBACK_AWAY = '#4da6ff';

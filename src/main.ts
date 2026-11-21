@@ -44,11 +44,12 @@ import {
   openLeanEvents,
   playedValues,
   postedLineHtml,
-  projectionBoardHtml,
+  boardInnerHtml,
   projectionChartHtml,
   renderProjections,
   searchHitsHtml,
   viewerLine,
+  type BoardScope,
   type BoardSort,
   type HistorySplit,
   type ProjectionView,
@@ -59,7 +60,8 @@ import { fetchPublishedIndex, fetchPublishedSimulation, type PublishedExpectatio
 import { hydrateSimulationCache, persistSimulationEntry } from './simulation-cache.ts';
 import { parseEsportsDocument, renderEsports } from './esports/props.ts';
 import { parseFeedSlate, renderFeedSlate, type FeedGame, type FeedSlate } from './feed.ts';
-import { playNflGame, renderNflBox, type NflBoxResult } from './nfl/box.ts';
+import { nflGameLineValues, playNflGame, renderNflBox, type NflBoxResult } from './nfl/box.ts';
+import { defaultNflForm, defaultNflLine, findNflPlayer, isNflMarket, nflMarketValues, renderNflPlayerPanel, renderNflPropResults, type NflPanelTab, type NflPropForm } from './nfl/panel.ts';
 import { escapeHtml, renderSlate } from './slate.ts';
 import { ITERATIONS, type Simulation } from './simulate.ts';
 import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
@@ -109,6 +111,11 @@ let projectionEvent: string | null = null;
 let projectionAthlete: string | null = null;
 let projectionHistorySplit: HistorySplit = 'all';
 let projectionBoardSort: BoardSort = 'projection';
+/** The board covers every game still to play until a game is picked. */
+let projectionScope: BoardScope = 'all';
+/** The every-game board shows its first cards until the viewer asks for the rest. */
+const BOARD_LIMIT = 40;
+let projectionBoardExpanded = false;
 let projectionSelectedBar: number | null = null;
 let projectionSupportMode: SupportMode = 'avg';
 let projectionTeammate: string | null = null;
@@ -140,6 +147,11 @@ let feedToken = 0;
 let nflSlate: FeedSlate | null = null;
 const nflBoxes = new Map<string, NflBoxResult>();
 let nflRunning = false;
+/** The NFL box score on screen, and the player whose sheet is open beside it. */
+let nflView: { game: FeedGame; box: NflBoxResult } | null = null;
+let nflPanelPlayer: string | null = null;
+let nflPanelTab: NflPanelTab = 'forecast';
+let nflForm: NflPropForm | null = null;
 let nbaFailed = false;
 
 function storedLineups(): string | null {
@@ -210,9 +222,8 @@ function paintFreshness(): void {
   pill.title = full;
 }
 
-/** On a phone the detail and the board sit below the list that was tapped, so bring the one just opened into view. */
+/** The detail opens above the board and the board sits below the leans, so bring the one just opened into view. */
 function reveal(selector: string): void {
-  if (!window.matchMedia('(max-width: 1020px)').matches) return;
   const target = projectionsRoot?.querySelector<HTMLElement>(selector);
   if (target && typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: 'start', behavior: 'auto' });
 }
@@ -296,6 +307,16 @@ function cachedSimulation(eventId: string): Simulation | null {
   return simulationCache.get(simulationKey(eventId, editsFor(eventId))) ?? null;
 }
 
+function cachedSimulations(): Map<string, Simulation> {
+  const ready = new Map<string, Simulation>();
+  if (!slate || !card) return ready;
+  for (const g of slate.games) {
+    const result = cachedSimulation(g.event_id);
+    if (result) ready.set(g.event_id, result);
+  }
+  return ready;
+}
+
 function readyEventIdSet(): Set<string> {
   const ready = new Set<string>();
   if (!slate || !card) return ready;
@@ -364,7 +385,18 @@ function projectionView(): ProjectionView | null {
     record: picks?.record ?? null,
     book: picks?.book ?? null,
     propCalibration: panelCalibration(projectionEvent ? slate.games.find((item) => item.event_id === projectionEvent)?.date ?? null : null),
+    scope: projectionScope === 'game' && projectionEvent ? 'game' : 'all',
+    simulations: cachedSimulations(),
+    boardLimit: projectionBoardExpanded ? null : BOARD_LIMIT,
   };
+}
+
+/** Repaints only the board, as a game's draws arrive or the line changes, so the rest of the page keeps its place. */
+function paintBoardCards(): void {
+  const board = projectionsRoot?.querySelector<HTMLElement>('[data-projection-board]');
+  const viewModel = projectionView();
+  if (!board || !viewModel) return;
+  board.innerHTML = boardInnerHtml(viewModel);
 }
 
 function panelCalibration(tipDate: string | null | undefined): PropPanelCalibration | null {
@@ -503,8 +535,7 @@ function paintProjectionFigures(): void {
   if (chances) chances.innerHTML = modelChanceHtml(sample, form.market, form.line);
   const chart = projectionsRoot.querySelector<HTMLElement>('[data-projection-chart]');
   if (chart) chart.innerHTML = projectionChartHtml(sample, form.market, form.line);
-  const board = projectionsRoot.querySelector<HTMLElement>('[data-projection-board]');
-  if (board && rate) board.innerHTML = projectionBoardHtml(rate, simulation, form, projectionEvent, projectionAthlete, card.projection_context, projectionBoardSort, bookLines, panelCalibration(game?.date));
+  paintBoardCards();
   const postedEl = projectionsRoot.querySelector<HTMLElement>('[data-posted]');
   if (postedEl) postedEl.innerHTML = postedLineHtml(postedLine(projectionEvent, projectionAthlete, form.market), form);
   const measuredEl = projectionsRoot.querySelector<HTMLElement>('[data-measured]');
@@ -577,6 +608,7 @@ function prefetched(eventId: string, key: string, result: Simulation): void {
       btn.insertAdjacentHTML('beforeend', '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>');
     }
     paintModelSides();
+    if (projectionScope === 'all') paintBoardCards();
   }
   scheduleNextPrefetch();
 }
@@ -1107,6 +1139,7 @@ function onDeskClick(event: Event): void {
     closeNflBox();
     return;
   }
+  if (nflView && onNflPanelClick(target)) return;
   if (target.closest('[data-retry]')) {
     const selected = currentSport();
     if (selected === 'nba') {
@@ -1297,6 +1330,29 @@ function onDeskClick(event: Event): void {
     void simulateProjection(eventId);
     return;
   }
+  if (target.closest('button[data-board-more]')) {
+    projectionBoardExpanded = true;
+    paintBoardCards();
+    return;
+  }
+  if (target.closest('button[data-projection-all]')) {
+    projectionScope = 'all';
+    projectionAthlete = null;
+    paintProjection();
+    projectionsRoot?.querySelector<HTMLButtonElement>('button[data-projection-all]')?.focus();
+    return;
+  }
+  if (target.closest('button[data-projection-close]')) {
+    const closed = projectionAthlete;
+    projectionAthlete = null;
+    paintProjection();
+    const tile = closed ? projectionsRoot?.querySelector<HTMLButtonElement>(`[data-projection-board] button[data-projection-player="${CSS.escape(closed)}"]`) : null;
+    if (tile) {
+      if (typeof tile.scrollIntoView === 'function') tile.scrollIntoView({ block: 'center', behavior: 'auto' });
+      tile.focus();
+    }
+    return;
+  }
   const projectionGame = target.closest('button[data-projection-game]');
   if (projectionGame instanceof HTMLButtonElement) {
     const eventId = projectionGame.dataset.projectionGame ?? '';
@@ -1304,6 +1360,7 @@ function onDeskClick(event: Event): void {
     projectionQuery = '';
     projectionEvent = eventId;
     projectionAthlete = null;
+    projectionScope = 'game';
     paintProjection();
     reveal('.projection-board');
     if (!cachedSimulation(eventId) && !(running && drawingEvent === eventId)) {
@@ -1411,6 +1468,24 @@ function paintPropResults(): void {
 }
 
 function onPropEdit(event: Event): void {
+  if (event.target instanceof HTMLInputElement && event.target.matches('[data-game-line]') && nflView && event.target.closest('[data-nfl-event]')) {
+    const kind = event.target.dataset.gameLine === 'margin' ? 'margin' : 'total';
+    const result = boxRoot?.querySelector(`[data-line-result="${kind}"]`);
+    if (!result) return;
+    const line = Number(event.target.value);
+    if (!event.target.value || !Number.isFinite(line)) {
+      result.textContent = 'Enter a line.';
+      return;
+    }
+    const p = lineProbability(nflGameLineValues(nflView.box, kind), line);
+    result.textContent = `Above ${(p.over * 100).toFixed(1)}%; below ${(p.under * 100).toFixed(1)}%; push ${(p.push * 100).toFixed(1)}%.`;
+    return;
+  }
+  if (event.target instanceof Element && event.target.closest('[data-nfl-prop-form]')) {
+    readNflForm();
+    paintNflPropResults();
+    return;
+  }
   if(event.target instanceof HTMLInputElement&&event.target.matches('[data-game-line]')&&view){
     const kind=event.target.dataset.gameLine,values=kind==='total'?view.result.combinedTotals:marginsOf(view.result);
     const result=document.querySelector(`[data-line-result="${kind}"]`);
@@ -1509,6 +1584,9 @@ function onKey(event: KeyboardEvent): void {
     next?.focus();
     return;
   }
+  if(event.target instanceof Element && event.target.matches('[data-panel-tab]') && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key) && nflView && nflPanelPlayer){
+    event.preventDefault();nflPanelTab=event.key==='Home'?'forecast':event.key==='End'?'props':nflPanelTab==='forecast'?'props':'forecast';syncNflPanel();document.getElementById(`${nflPanelTab}-tab`)?.focus();return;
+  }
   if(event.target instanceof Element && event.target.matches('[data-panel-tab]') && ['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){
     event.preventDefault();panelTab=event.key==='Home'?'forecast':event.key==='End'?'props':panelTab==='forecast'?'props':'forecast';syncPanel();document.getElementById(`${panelTab}-tab`)?.focus();return;
   }
@@ -1520,6 +1598,10 @@ function onKey(event: KeyboardEvent): void {
       paintProjectionFigures();
       projectionsRoot?.querySelector<HTMLElement>(`[data-history-bar="${idx}"]`)?.focus();
     }
+    return;
+  }
+  if (event.key === 'Escape' && nflView && nflPanelPlayer !== null) {
+    closeNflPanel();
     return;
   }
   if (event.key !== 'Escape' || panelAthlete === null) return;
@@ -1537,7 +1619,7 @@ function bind(): void {
   desk.addEventListener('change', onPropEdit);
   desk.addEventListener('submit', (event) => {
     const target = event.target;
-    if (target instanceof Element && target.closest('[data-prop-form]')) event.preventDefault();
+    if (target instanceof Element && target.closest('[data-prop-form], [data-nfl-prop-form]')) event.preventDefault();
   });
   desk.addEventListener('error', onImageError, true);
   document.addEventListener('keydown', onKey);
@@ -1681,6 +1763,8 @@ function restoreNbaChrome(): void {
 }
 
 function parkNbaViews(): void {
+  nflView = null;
+  nflPanelPlayer = null;
   stopPrefetch();
   simulationEpoch += 1;
   running = false;
@@ -1745,6 +1829,9 @@ function nflGame(id: string): FeedGame | null {
 
 function showNflBox(game: FeedGame, box: NflBoxResult): void {
   if (!boxRoot) return;
+  nflView = { game, box };
+  nflPanelPlayer = null;
+  syncNflPanel();
   boxRoot.innerHTML = renderNflBox(game, box, new Date());
   applyHiddenSections(boxRoot);
   const games = gamesFrame();
@@ -1791,11 +1878,114 @@ async function onNflSimulate(button: HTMLButtonElement): Promise<void> {
 
 function closeNflBox(): void {
   const id = boxRoot?.querySelector<HTMLElement>('[data-nfl-event]')?.dataset.nflEvent ?? '';
+  nflPanelPlayer = null;
+  syncNflPanel();
+  nflView = null;
   if (stageFrame) stageFrame.hidden = true;
   const games = gamesFrame();
   if (games) games.hidden = false;
   boxRoot?.replaceChildren();
   if (id) slateRoot?.querySelector<HTMLButtonElement>(`[data-nfl-simulate="${CSS.escape(id)}"]`)?.focus();
+}
+
+/** Handles a click inside the NFL box score or its player sheet. True when the click was the panel's. */
+function onNflPanelClick(target: Element): boolean {
+  const player = target.closest('button[data-nfl-athlete]');
+  if (player instanceof HTMLButtonElement) {
+    const id = player.dataset.nflAthlete ?? '';
+    if (!id || !nflView) return true;
+    if (nflPanelPlayer === id) {
+      closeNflPanel();
+      return true;
+    }
+    const found = findNflPlayer(nflView.game, id);
+    nflPanelPlayer = found ? id : null;
+    nflForm = found ? defaultNflForm(nflView.box, found.player) : null;
+    syncNflPanel();
+    if (nflPanelPlayer) document.getElementById(`${nflPanelTab}-tab`)?.focus();
+    return true;
+  }
+  if (!nflPanelPlayer || !target.closest('[data-nfl-panel], .panel-fallback')) return false;
+  if (target.closest('[data-close]')) {
+    closeNflPanel();
+    return true;
+  }
+  const tab = target.closest('[data-panel-tab]');
+  if (tab instanceof HTMLButtonElement) {
+    nflPanelTab = tab.dataset.panelTab === 'props' ? 'props' : 'forecast';
+    syncNflPanel();
+    document.getElementById(`${nflPanelTab}-tab`)?.focus();
+    return true;
+  }
+  const market = target.closest('button[data-nfl-market]');
+  if (market instanceof HTMLButtonElement && nflView) {
+    const value = market.dataset.nflMarket ?? '';
+    const found = findNflPlayer(nflView.game, nflPanelPlayer);
+    if (!isNflMarket(value) || !found) return true;
+    nflForm = { ...defaultNflForm(nflView.box, found.player, value), side: nflForm?.side ?? 'over', odds: nflForm?.odds ?? '' };
+    syncNflPanel();
+    playerFrame?.querySelector<HTMLButtonElement>(`button[data-nfl-market="${CSS.escape(value)}"]`)?.focus();
+    return true;
+  }
+  const nudge = target.closest('button[data-nfl-nudge]');
+  if (nudge instanceof HTMLButtonElement && nflView && nflForm) {
+    const found = findNflPlayer(nflView.game, nflPanelPlayer);
+    if (!found) return true;
+    const step = nudge.dataset.nflNudge ?? '';
+    let line: string;
+    if (step === 'median') line = defaultNflLine(nflMarketValues(nflView.box, found.player, nflForm.market), nflForm.market);
+    else {
+      const current = Number(nflForm.line);
+      const base = nflForm.line.trim() === '' || !Number.isFinite(current) ? 0 : current;
+      line = String(Math.max(nflForm.market === 'rush_yds' ? -10 : 0, Math.round((base + Number(step)) * 2) / 2));
+    }
+    nflForm = { ...nflForm, line };
+    const input = playerFrame?.querySelector<HTMLInputElement>('[data-nfl-prop-line]');
+    if (input) input.value = line;
+    paintNflPropResults();
+    return true;
+  }
+  return false;
+}
+
+function readNflForm(): void {
+  if (!nflForm) return;
+  const line = playerFrame?.querySelector<HTMLInputElement>('[data-nfl-prop-line]');
+  const odds = playerFrame?.querySelector<HTMLInputElement>('[data-nfl-prop-odds]');
+  const side = playerFrame?.querySelector<HTMLInputElement>('[data-nfl-prop-side]:checked');
+  nflForm = { ...nflForm, line: line?.value ?? nflForm.line, odds: odds?.value ?? nflForm.odds, side: side?.value === 'under' ? 'under' : 'over' };
+}
+
+function paintNflPropResults(): void {
+  if (!nflView || !nflPanelPlayer || !nflForm) return;
+  const found = findNflPlayer(nflView.game, nflPanelPlayer);
+  const results = playerFrame?.querySelector<HTMLElement>('[data-nfl-prop-results]');
+  if (!found || !results) return;
+  results.innerHTML = renderNflPropResults(nflView.box, found.player, nflForm);
+}
+
+/** Opens, refreshes or closes the NFL player sheet in the same frame the NBA sheet uses. */
+function syncNflPanel(): void {
+  if (!desk || !panelBody) return;
+  if (!nflView || nflPanelPlayer === null) {
+    desk.classList.remove('panel-open');
+    if (playerFrame) playerFrame.hidden = true;
+    panelBody.replaceChildren();
+    return;
+  }
+  const found = findNflPlayer(nflView.game, nflPanelPlayer);
+  if (found && (!nflForm || !nflMarketValues(nflView.box, found.player, nflForm.market).length && nflForm.market !== 'td')) nflForm = defaultNflForm(nflView.box, found.player);
+  if (playerFrame) playerFrame.hidden = false;
+  desk.classList.add('panel-open');
+  panelBody.innerHTML = renderNflPlayerPanel(nflView.game, nflView.box, nflPanelPlayer, nflPanelTab, nflForm ?? { market: 'rec_yds', side: 'over', line: '', odds: '' });
+  applyHiddenSections(panelBody);
+}
+
+function closeNflPanel(): void {
+  const id = nflPanelPlayer;
+  nflPanelPlayer = null;
+  syncNflPanel();
+  if (id) boxRoot?.querySelector<HTMLButtonElement>(`button[data-nfl-athlete="${CSS.escape(id)}"]`)?.focus();
 }
 
 async function showEsports(): Promise<void> {
@@ -1834,6 +2024,8 @@ function applySport(next: Sport): void {
   if (!changed) return;
   if (next === 'nba') {
     feedToken += 1;
+    nflView = null;
+    nflPanelPlayer = null;
     restoreNbaChrome();
     if (slate && card) {
       const hash = readHash();

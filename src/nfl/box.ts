@@ -1,8 +1,8 @@
 import { histogramSvg } from '../charts.ts';
 import { formatTip } from '../date.ts';
-import { paletteStyle } from '../display.ts';
+import { nflHeadshotUrl, paletteStyle } from '../display.ts';
 import type { FeedGame, FeedPlayerSim, FeedSide, FeedStat } from '../feed.ts';
-import { escapeHtml, viewToggles } from '../slate.ts';
+import { avatarMarkup, escapeHtml, viewToggles } from '../slate.ts';
 import { biasFor, nflSeed, readCalibration, simulateGame, type NflCalibration, type NflStat, type SimulatedGame, type TeamPlan } from './projection.ts';
 
 /**
@@ -172,7 +172,7 @@ function table(title: string, columns: Column[], lead: Column['key'], min: numbe
           return `<td data-col="${column.key}"><span class="stat">${shown}</span><span class="pct">${line.p10}–${line.p90}</span>${did}</td>`;
         })
         .join('');
-      return `<tr><th scope="row"><span class="who-cell">${escapeHtml(player.name)} <span class="side-role">${escapeHtml(player.position)}</span>${statusMark(player)}</span></th>${cells}</tr>`;
+      return `<tr><th scope="row"><span class="who-cell">${avatarMarkup(player.name, player.id, nflHeadshotUrl(player.id))}<button type="button" class="player-btn" data-nfl-athlete="${escapeHtml(player.id)}">${escapeHtml(player.name)}</button><span class="side-role">${escapeHtml(player.position)}</span>${statusMark(player)}</span></th>${cells}</tr>`;
     })
     .join('');
   const totals = columns
@@ -223,6 +223,30 @@ function chartsPanel(game: FeedGame, result: SimulatedGame): string {
   </div>`;
 }
 
+/**
+ * The game's totals or home margins with the card's range scale applied around the median, kept whole, so a line is
+ * read against the same spread the score and the charts show.
+ */
+export function nflGameLineValues(box: NflBoxResult, kind: 'total' | 'margin'): number[] {
+  const raw = kind === 'total' ? box.result.raw.combined : box.result.raw.margins;
+  const spread = box.calibration.spread[kind === 'total' ? 'combined' : 'margin'] ?? 1;
+  if (spread === 1) return Array.from(raw);
+  const median = quantile(sortedOf(raw), 0.5);
+  return Array.from(raw, (value) => Math.round(median + (value - median) * spread));
+}
+
+function linesPanel(box: NflBoxResult): string {
+  const describe = (kind: 'total' | 'margin') => {
+    const values = sortedOf(nflGameLineValues(box, kind));
+    let sum = 0;
+    for (const value of values) sum += value;
+    const mean = values.length ? sum / values.length : 0;
+    const name = kind === 'total' ? 'Total' : 'Home margin';
+    return `<p>${name}: mean ${mean.toFixed(1)}; median ${quantile(values, 0.5).toFixed(1)}; 10–90% ${quantile(values, 0.1).toFixed(1)} to ${quantile(values, 0.9).toFixed(1)}; 5–95% ${quantile(values, 0.05).toFixed(1)} to ${quantile(values, 0.95).toFixed(1)}.</p><label>${kind} line <input type="number" step="0.5" data-game-line="${kind}"></label><p data-line-result="${kind}" role="status">Enter a line.</p>`;
+  };
+  return `<section class="dist-panel" data-block="nfl-box-lines" aria-label="Game distributions"><h3>Check a line</h3><p>Includes overtime. Margin = home points minus away points; a positive margin favors home. Enter a margin threshold (the negative of a home spread).</p>${describe('total')}${describe('margin')}</section>`;
+}
+
 function statusLine(game: FeedGame): string {
   if (game.status === 'final' && game.away.score !== null && game.home.score !== null) return `Final: ${game.away.abbreviation} ${game.away.score}, ${game.home.abbreviation} ${game.home.score}`;
   if (game.status === 'in_progress') return 'In progress';
@@ -238,6 +262,7 @@ export function renderNflBox(game: FeedGame, box: NflBoxResult, now: Date = new 
   const toggles = [
     { id: 'nfl-box-score', label: 'Score' },
     { id: 'nfl-box-charts', label: 'Charts' },
+    { id: 'nfl-box-lines', label: 'Line check' },
     { id: 'nfl-box-players', label: 'Box scores' },
     { id: 'nfl-box-notes', label: 'Notes' },
   ];
@@ -256,6 +281,7 @@ export function renderNflBox(game: FeedGame, box: NflBoxResult, now: Date = new 
       ${keyTiles(game, box, draws)}
       </div>
       ${chartsPanel(game, result)}
+      ${linesPanel(box)}
       <div data-block="nfl-box-players">
       ${teamBox('away', game, plan.away, result, calibration, actual)}
       ${teamBox('home', game, plan.home, result, calibration, actual)}

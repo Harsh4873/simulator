@@ -1,6 +1,6 @@
-import { historyBarsSvg, propBarsSvg, type HistoryBarPoint } from './charts.ts';
-import { formatTip } from './date.ts';
-import { playerHeadshotUrl } from './display.ts';
+import { historyBarsSvg, propBarsSvg, sparkBarsSvg, type HistoryBarPoint } from './charts.ts';
+import { chicagoDate, formatTip } from './date.ts';
+import { playerHeadshotUrl, teamLogoUrl } from './display.ts';
 import { percent, propFormMarkup, renderPropResults, type PropFormState } from './boxscore.ts';
 import { summarizeOverrides, type LineupOverrides } from './lineup-overrides.ts';
 import {
@@ -30,7 +30,7 @@ import { EXTREME_CLAIM, leanSide, liveTierFor, rankLeans, type Lean, type PickRe
 import { quoteCalibrationFor, type PropCalibrationArtifact, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
 import { gradeProp, parseBookPrice, quoteProp, valueAt, type PlayerSample, type PropMarket } from './props.ts';
 import type { Simulation } from './simulate.ts';
-import { escapeHtml, placeLine, playerSideLine, statusLabel, viewToggles } from './slate.ts';
+import { avatarMarkup, escapeHtml, placeLine, playerSideLine, statusLabel, viewToggles } from './slate.ts';
 import type { RateCard, RateGame, RatePlayer, Slate, SlateGame, TeamSide } from './types.ts';
 
 const MARKETS: { value: PropMarket; label: string; short: string }[] = [
@@ -50,6 +50,8 @@ const MARKETS: { value: PropMarket; label: string; short: string }[] = [
 ];
 
 export type HistorySplit = 'all' | 'home' | 'away';
+/** The board shows every game still to play, or one game. */
+export type BoardScope = 'all' | 'game';
 export type BoardSort = 'projection' | 'over' | 'under';
 export type SupportMode = 'avg' | 'med';
 
@@ -84,6 +86,12 @@ export interface ProjectionView {
   record?: PickRecord | null;
   book?: string | null;
   propCalibration?: PropPanelCalibration | null;
+  /** Every game or the selected one. Defaults to the game when one is selected. */
+  scope?: BoardScope;
+  /** Simulations already in this browser, by event, for the every-game board. */
+  simulations?: ReadonlyMap<string, Simulation>;
+  /** How many cards the every-game board shows before its Show all button. Unset shows them all. */
+  boardLimit?: number | null;
 }
 
 export function isPropMarket(value: string): value is PropMarket {
@@ -109,7 +117,19 @@ export function validPropLine(raw: string): number | null {
   return line;
 }
 
+const playedMemo = new WeakMap<PlayerSample, Map<PropMarket, number[]>>();
+
 export function playedValues(sample: PlayerSample, market: PropMarket): number[] {
+  const memo = playedMemo.get(sample);
+  const hit = memo?.get(market);
+  if (hit) return hit;
+  const values = computePlayedValues(sample, market);
+  if (memo) memo.set(market, values);
+  else playedMemo.set(sample, new Map([[market, values]]));
+  return values;
+}
+
+function computePlayedValues(sample: PlayerSample, market: PropMarket): number[] {
   const values: number[] = [];
   for (let index = 0; index < sample.min.length; index += 1) {
     if (!(sample.min[index] > 0)) continue;
@@ -290,19 +310,13 @@ function hitToneClass(rate: number | null): string {
   return 'tone-low';
 }
 
-function compactHitCell(rows: readonly PlayerGameRow[], form: PropFormState, line: number | null, take?: number): string {
-  if (line === null || !rows.length) return '<td class="board-hit-cell">—</td>';
-  const valid = rows.filter((r) => historicalStatValue(r, form.market) !== null);
-  const sample = take === undefined ? valid : valid.slice(-take);
-  const grade = gradeHistoricalSeries(sample, form.market, form.side, line);
-  if (grade.decided === 0) return '<td class="board-hit-cell">—</td>';
-  const pct = Math.round((grade.rate ?? 0) * 100);
-  return `<td class="board-hit-cell"><span class="hit-chip ${hitToneClass(grade.rate)}"><strong>${pct}%</strong><small>${grade.wins}/${grade.decided}</small></span></td>`;
-}
-
 interface BoardRow {
   athleteId: string;
+  eventId: string;
   name: string;
+  teamId: string;
+  position: string;
+  headshot: string | null;
   minutes: number;
   projection: number | null;
   line: number | null;
@@ -315,6 +329,8 @@ interface BoardRow {
   edge: string;
   note: string | null;
   games: PlayerGameRow[];
+  /** His simulated values for the stat in the games he plays, for the card's small chart. */
+  values: readonly number[];
 }
 
 function byRate(key: 'overRate' | 'underRate') {
@@ -326,6 +342,20 @@ function byRate(key: 'overRate' | 'underRate') {
     if (right === null) return -1;
     return right - left || a.name.localeCompare(b.name);
   };
+}
+
+function byProjection(a: BoardRow, b: BoardRow): number {
+  if (a.projection === null && b.projection === null) return b.minutes - a.minutes || a.name.localeCompare(b.name);
+  if (a.projection === null) return 1;
+  if (b.projection === null) return -1;
+  return b.projection - a.projection || a.name.localeCompare(b.name);
+}
+
+function sortRows(rows: BoardRow[], sort: BoardSort, simulated: boolean): BoardRow[] {
+  if (sort === 'over' && simulated) return rows.sort(byRate('overRate'));
+  if (sort === 'under' && simulated) return rows.sort(byRate('underRate'));
+  if (!simulated) return rows.sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name));
+  return rows.sort(byProjection);
 }
 
 export function americanText(odds: number): string {
@@ -383,7 +413,11 @@ function boardRows(
     const games = context ? unpackPlayerGames(context.players[player.athlete_id]?.games) : [];
     return {
       athleteId: player.athlete_id,
+      eventId: game.event_id,
       name: player.name,
+      teamId: player.team_id,
+      position: player.position.trim(),
+      headshot: player.headshot_url ?? null,
       minutes: player.minutes_mean,
       projection,
       line: projection === null && simulation ? null : rowLine,
@@ -395,27 +429,105 @@ function boardRows(
       edge,
       note,
       games,
+      values,
     };
   });
-  if (sort === 'over' && simulation) {
-    rows.sort(byRate('overRate'));
-    return rows;
-  }
-  if (sort === 'under' && simulation) {
-    rows.sort(byRate('underRate'));
-    return rows;
-  }
-  if (!simulation) {
-    rows.sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name));
-    return rows;
-  }
-  rows.sort((a, b) => {
-    if (a.projection === null && b.projection === null) return a.name.localeCompare(b.name);
-    if (a.projection === null) return 1;
-    if (b.projection === null) return -1;
-    return b.projection - a.projection || a.name.localeCompare(b.name);
-  });
-  return rows;
+  return sortRows(rows, sort, Boolean(simulation));
+}
+
+/** Hit rate at the card's line over the last `take` box scores, or over all of them. */
+function hitChip(label: string, rows: readonly PlayerGameRow[], form: PropFormState, line: number | null, take?: number): string {
+  if (line === null || !rows.length) return '';
+  const valid = rows.filter((r) => historicalStatValue(r, form.market) !== null);
+  const sample = take === undefined ? valid : valid.slice(-take);
+  const grade = gradeHistoricalSeries(sample, form.market, form.side, line);
+  if (grade.decided === 0) return '';
+  return `<span class="hit-chip ${hitToneClass(grade.rate)}" title="${escapeHtml(`${form.side === 'under' ? 'Under' : 'Over'} ${line}: ${grade.wins} of ${grade.decided}`)}"><small>${escapeHtml(label)}</small><strong>${grade.wins}/${grade.decided}</strong></span>`;
+}
+
+interface CardSides {
+  team: TeamSide | null;
+  opponent: TeamSide | null;
+  home: boolean;
+  tip: string | null;
+}
+
+function cardSides(slate: Slate | null, eventId: string, teamId: string): CardSides {
+  const game = slate?.games.find((item) => item.event_id === eventId) ?? null;
+  if (!game) return { team: null, opponent: null, home: false, tip: null };
+  const home = game.home.team_id === teamId;
+  return { team: home ? game.home : game.away, opponent: home ? game.away : game.home, home, tip: game.start_time };
+}
+
+function clockText(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' }).format(date);
+}
+
+function logoImg(side: TeamSide | null): string {
+  if (!side) return '';
+  const url = teamLogoUrl(side);
+  const abbr = escapeHtml(sideAbbr(side));
+  return `<span class="logo pick-logo">${url ? `<img referrerpolicy="no-referrer" loading="lazy" alt="" src="${escapeHtml(url)}" width="22" height="22">` : ''}<span class="mono"${url ? ' hidden' : ''}>${abbr}</span></span>`;
+}
+
+/** One player on the board: who, the projection and line, his simulated spread against it, and the chances. */
+function pickCardHtml(row: BoardRow, form: PropFormState, selected: boolean, sides: CardSides, hasHistory: boolean, showMatchup: boolean): string {
+  const id = escapeHtml(row.athleteId);
+  const matchup = sides.team && sides.opponent ? `${sideAbbr(sides.team)} ${sides.home ? 'vs' : '@'} ${sideAbbr(sides.opponent)}` : '';
+  const sub = [row.position, showMatchup ? matchup : '', showMatchup && sides.tip ? clockText(sides.tip) : ''].filter(Boolean).join(' · ');
+  const projection = row.note
+    ? `<span class="pick-value pick-muted">—</span>`
+    : row.projection === null
+      ? '<span class="pick-value pick-muted">…</span>'
+      : `<span class="pick-value">${row.projection.toFixed(1)}</span>`;
+  const lineValue =
+    row.line === null
+      ? '<span class="pick-value pick-muted">—</span>'
+      : row.book
+        ? `<span class="pick-value"><span class="line-posted" title="${escapeHtml(`${row.book.book}, priced ${formatTip(row.book.priced_at)}`)}">${escapeHtml(lineText(row.line))}</span></span>`
+        : `<span class="pick-value">${escapeHtml(lineText(row.line))}</span>`;
+  const lineLabel = row.book ? escapeHtml(row.book.book) : selected && row.line !== null ? 'Your line' : row.line !== null ? 'Line' : 'No line';
+  const price = (odds: number | undefined) => (odds === undefined ? '' : ` <small class="line-price">${escapeHtml(americanText(odds))}</small>`);
+  const leanTo = row.overRate !== null && row.underRate !== null ? (row.overRate > row.underRate ? 'over' : row.underRate > row.overRate ? 'under' : '') : '';
+  const chances =
+    row.over || row.under
+      ? `<span class="pick-odds">
+          <span class="pick-side" data-side="over"${leanTo === 'over' ? ' data-lead' : ''}><span class="pick-side-name">Over</span><span class="pick-pct">${row.over || '—'}</span>${row.over ? price(row.book?.over_odds) : ''}</span>
+          <span class="pick-meter" aria-hidden="true"><span class="pick-meter-fill" style="width:${((row.overRate ?? 0) * 100).toFixed(1)}%"></span></span>
+          <span class="pick-side" data-side="under"${leanTo === 'under' ? ' data-lead' : ''}><span class="pick-side-name">Under</span><span class="pick-pct">${row.under || '—'}</span>${row.under ? price(row.book?.under_odds) : ''}</span>
+        </span>`
+      : '';
+  const spark = row.values.length ? `<span class="pick-spark">${sparkBarsSvg(row.values, row.line, `${row.name}: ${marketLabel(form.market)} in simulated games he played`)}</span>` : '';
+  const hits = hasHistory
+    ? [hitChip('L5', row.games, form, row.line, 5), hitChip('L10', row.games, form, row.line, 10), hitChip('Home', row.games.filter((g) => g.home), form, row.line), hitChip('Away', row.games.filter((g) => !g.home), form, row.line)].join('')
+    : '';
+  const edgeTone = row.edge.includes('+') ? ' edge-up' : row.edge.includes('-') || row.edge.includes('−') ? ' edge-down' : '';
+  return `<li class="pick-card${selected ? ' is-selected' : ''}${row.note ? ' is-out' : ''}"${leanTo ? ` data-lean="${leanTo}"` : ''}>
+      <button type="button" class="pick-hit projection-player" data-projection-player="${id}" data-projection-event="${escapeHtml(row.eventId)}" aria-pressed="${selected ? 'true' : 'false'}">
+        <span class="pick-head">
+          <span class="pick-face">${avatarMarkup(row.name, row.athleteId, row.headshot)}${logoImg(sides.team)}</span>
+          <span class="pick-who"><span class="pick-name">${escapeHtml(row.name)}</span><span class="pick-sub">${escapeHtml(sub)}</span></span>
+        </span>
+        <span class="pick-numbers">
+          <span class="pick-stat pick-proj"><span class="pick-label">Projection</span>${projection}</span>
+          <span class="pick-stat pick-line"><span class="pick-label">${lineLabel}</span>${lineValue}</span>
+        </span>
+        ${row.note ? `<span class="pick-note">${escapeHtml(row.note)}</span>` : spark}
+        ${chances}
+        ${hits ? `<span class="pick-hits">${hits}</span>` : ''}
+        ${row.edge ? `<span class="pick-edge${edgeTone}">${escapeHtml(row.edge)}</span>` : ''}
+      </button>
+    </li>`;
+}
+
+function sortBarHtml(sort: BoardSort): string {
+  return `<div class="mini-tabs board-sort" role="group" aria-label="Order the board">
+      <button type="button" class="mini-tab" data-board-sort="projection" aria-pressed="${sort === 'projection' ? 'true' : 'false'}">Projection</button>
+      <button type="button" class="mini-tab" data-board-sort="over" aria-pressed="${sort === 'over' ? 'true' : 'false'}">Highest over</button>
+      <button type="button" class="mini-tab" data-board-sort="under" aria-pressed="${sort === 'under' ? 'true' : 'false'}">Highest under</button>
+    </div>`;
 }
 
 export function projectionBoardHtml(
@@ -428,6 +540,7 @@ export function projectionBoardHtml(
   sort: BoardSort = 'projection',
   lines?: ReadonlyMap<string, BookLine>,
   calibration?: PropPanelCalibration | null,
+  slate: Slate | null = null,
 ): string {
   const rows = boardRows(game, simulation, form, athleteId, context, sort, lines, calibration);
   const hasHistory = Boolean(context);
@@ -435,35 +548,8 @@ export function projectionBoardHtml(
   const gradedLine = line !== null && !((form.market === 'dd' || form.market === 'td') && line !== 0.5) ? line : null;
   const sideText = form.side === 'under' ? 'Under' : 'Over';
   const posted = rows.filter((row) => row.book !== null);
-  const body = rows
-    .map((row) => {
-      const selected = row.athleteId === athleteId;
-      const projection = row.note ?? (row.projection === null ? '' : row.projection.toFixed(1));
-      const lineCell =
-        row.line === null
-          ? ''
-          : row.book
-            ? `<span class="line-posted" title="${escapeHtml(`${row.book.book}, priced ${formatTip(row.book.priced_at)}`)}">${escapeHtml(lineText(row.line))}</span>`
-            : escapeHtml(lineText(row.line));
-      const price = (odds: number | undefined) => (odds === undefined ? '' : ` <small class="line-price">${escapeHtml(americanText(odds))}</small>`);
-      const historyCols = hasHistory
-        ? `${compactHitCell(row.games, form, row.line, 5)}${compactHitCell(row.games, form, row.line, 10)}${compactHitCell(row.games.filter((gameRow) => gameRow.home), form, row.line)}${compactHitCell(row.games.filter((gameRow) => !gameRow.home), form, row.line)}`
-        : '';
-      return `<tr${selected ? ' class="is-selected"' : ''}>
-        <th scope="row"><button type="button" class="projection-player" data-projection-player="${escapeHtml(row.athleteId)}" data-projection-event="${escapeHtml(eventId)}" aria-pressed="${selected ? 'true' : 'false'}">${escapeHtml(row.name)}</button></th>
-        <td>${escapeHtml(projection)}</td>
-        <td>${lineCell}</td>
-        ${historyCols}
-        <td>${row.over}${row.over ? price(row.book?.over_odds) : ''}</td>
-        <td>${row.under}${row.under ? price(row.book?.under_odds) : ''}</td>
-        <td>${row.edge ? escapeHtml(row.edge) : ''}</td>
-      </tr>`;
-    })
-    .join('');
-  const pickPrompt = !athleteId
-    ? '<p class="panel-lede">Pick any player below to run 10,000 simulations and load their game log, hit windows, and on/off floor splits.</p>'
-    : '';
-  const waiting = simulation ? '' : '<p class="panel-lede">Projection, over, under, and edge stay blank until this game is simulated.</p>';
+  const pickPrompt = !athleteId ? '<p class="board-hint">Tap a player for his full breakdown: the 10,000-game chart, game log, and floor splits.</p>' : '';
+  const waiting = simulation ? '' : '<p class="panel-lede">Projection, over, under, and edge fill in once this game is simulated.</p>';
   const milestone = form.market === 'dd' || form.market === 'td';
   const source = milestone
     ? 'Double-doubles and triple-doubles settle at 0.5. No price is posted for them here.'
@@ -473,18 +559,73 @@ export function projectionBoardHtml(
   const lineBadge = simulation
     ? `<p class="board-grade-note">${gradedLine !== null && athleteId ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}${source}</p>`
     : '';
-  const hitHead = hasHistory
-    ? `<th title="${sideText} hit rate in the last 5 box scores">L5</th><th title="${sideText} hit rate in the last 10 box scores">L10</th><th title="${sideText} hit rate in every stored home game">Home</th><th title="${sideText} hit rate in every stored away game">Away</th>`
-    : '';
-  const sortBar = `<div class="mini-tabs board-sort" role="group" aria-label="Order the board">
-      <button type="button" class="mini-tab" data-board-sort="projection" aria-pressed="${sort === 'projection' ? 'true' : 'false'}">Projection</button>
-      <button type="button" class="mini-tab" data-board-sort="over" aria-pressed="${sort === 'over' ? 'true' : 'false'}">Highest over</button>
-      <button type="button" class="mini-tab" data-board-sort="under" aria-pressed="${sort === 'under' ? 'true' : 'false'}">Highest under</button>
-    </div>`;
-  return `${pickPrompt}${waiting}${sortBar}${lineBadge}<div class="table-scroll"><table>
-      <thead><tr><th>Player</th><th>Projection</th><th>Line</th>${hitHead}<th>Over</th><th>Under</th><th>Edge</th></tr></thead>
-      <tbody>${body}</tbody>
-    </table></div>`;
+  const cards = rows.map((row) => pickCardHtml(row, form, row.athleteId === athleteId, cardSides(slate, eventId, row.teamId), hasHistory, false)).join('');
+  return `${pickPrompt}${waiting}<div class="board-tools">${sortBarHtml(sort)}</div>${lineBadge}<ul class="pick-grid">${cards}</ul>`;
+}
+
+/** Games the every-game board covers: those not yet final, or the whole slate once every game is done. */
+function boardGames(slate: Slate, now: Date): SlateGame[] {
+  const today = chicagoDate(now);
+  const open = slate.games.filter((game) => game.completed !== true && game.status_state !== 'post');
+  if (open.length) return open;
+  const todays = slate.games.filter((game) => game.date === today);
+  return todays.length ? todays : [...slate.games];
+}
+
+/** Rotation players a board without posted lines shows: the ones with real minutes. */
+const BOARD_MINUTES = 15;
+
+/**
+ * Every game still to play on one board, the way a prop board reads: players with a posted line for the stat when
+ * there are any, otherwise the rotation, each with his projection and simulated spread once his game's draws are in.
+ */
+export function slateBoardHtml(view: ProjectionView): string {
+  const games = boardGames(view.slate, view.now);
+  const context = view.card.projection_context;
+  const sort = view.boardSort ?? 'projection';
+  const anyPosted = games.some((game) => view.card.games.find((rate) => rate.event_id === game.event_id)?.players.some((player) => bookLineFor(view.lines, game.event_id, player.athlete_id, view.form.market)));
+  const rows: BoardRow[] = [];
+  let pending = 0;
+  for (const game of games) {
+    const rate = view.card.games.find((item) => item.event_id === game.event_id);
+    if (!rate) continue;
+    const simulation = view.simulations?.get(game.event_id) ?? (view.eventId === game.event_id ? view.simulation : null);
+    if (!simulation) pending += 1;
+    const athleteId = view.eventId === game.event_id ? view.athleteId : null;
+    for (const row of boardRows(rate, simulation ?? null, view.form, athleteId, context, sort, view.lines, view.propCalibration)) {
+      if (row.note && row.athleteId !== view.athleteId) continue;
+      const player = rate.players.find((item) => item.athlete_id === row.athleteId);
+      if (!player || player.replacement_level) continue;
+      const keep = anyPosted ? row.book !== null : player.minutes_weight !== 0 && player.minutes_mean >= BOARD_MINUTES;
+      if (keep || row.athleteId === view.athleteId) rows.push(row);
+    }
+  }
+  sortRows(rows, sort, true);
+  const milestone = view.form.market === 'dd' || view.form.market === 'td';
+  const book = rows.find((row) => row.book)?.book?.book;
+  const note = anyPosted && book
+    ? `Players with a posted ${escapeHtml(book)} line for ${escapeHtml(marketLabel(view.form.market).toLowerCase())}, with the model's chance on each side and the price beside it.`
+    : milestone
+      ? 'Double-doubles and triple-doubles settle at 0.5.'
+      : `No posted line is in for ${escapeHtml(marketLabel(view.form.market).toLowerCase())} yet, so the board shows every rotation player's projection.`;
+  const waiting = pending ? `<p class="board-grade-note" role="status">${pending} ${pending === 1 ? 'game is still loading its' : 'games are still loading their'} 10,000 simulations; those players fill in as they arrive.</p>` : '';
+  const limit = view.boardLimit ?? null;
+  const shown = limit !== null && rows.length > limit ? rows.slice(0, limit) : rows;
+  const chosen = rows.find((row) => row.athleteId === view.athleteId && row.eventId === view.eventId);
+  if (chosen && !shown.includes(chosen)) shown.push(chosen);
+  const more = shown.length < rows.length ? `<button type="button" class="ghost board-more" data-board-more>Show all ${rows.length} players</button>` : '';
+  const cards = shown.map((row) => pickCardHtml(row, view.form, row.athleteId === view.athleteId && row.eventId === view.eventId, cardSides(view.slate, row.eventId, row.teamId), Boolean(context), true)).join('');
+  const empty = rows.length ? '' : '<p class="prop-note">No player on the board yet.</p>';
+  return `<p class="board-hint">Tap a player for his full breakdown: the 10,000-game chart, game log, and floor splits.</p><div class="board-tools">${sortBarHtml(sort)}</div><p class="board-grade-note">${note}</p>${waiting}${empty}<ul class="pick-grid">${cards}</ul>${more}`;
+}
+
+/** What goes inside the board for the view's scope. */
+export function boardInnerHtml(view: ProjectionView): string {
+  const scope = view.scope ?? (view.eventId ? 'game' : 'all');
+  if (scope === 'all') return slateBoardHtml(view);
+  const rate = view.card.games.find((item) => item.event_id === view.eventId) ?? null;
+  if (!rate || !view.eventId) return '';
+  return projectionBoardHtml(rate, view.simulation, view.form, view.eventId, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines, view.propCalibration, view.slate);
 }
 
 export function projectionChartHtml(sample: PlayerSample | null, market: PropMarket, lineRaw: string): string {
@@ -594,15 +735,13 @@ function meanTile(label: string, value: number | undefined, name: string, tone: 
   return `<div class="${cls}"><dt>${label}</dt><dd>${shown}</dd><span class="stat-name">${escapeHtml(name)}</span></div>`;
 }
 
-function playedBlock(simulation: Simulation, athleteId: string, market: PropMarket): string {
+/** The headline of the detail: his projection for the stat and how often he plays in the simulations. */
+function spotlightHtml(simulation: Simulation, athleteId: string, market: PropMarket): string {
   const line = simPlayer(simulation, athleteId);
-  const played = line?.expectation?.played ?? null;
   const sample = simulation.playerDraws.get(athleteId) ?? null;
-  if (!played || !sample) {
-    return '<p class="prop-note">This player does not play in the simulations.</p>';
-  }
-  const share = line?.expectation ? `${(line.expectation.playRate * 100).toFixed(1)}%` : '—';
-  const width = line?.expectation ? Math.max(0, Math.min(100, line.expectation.playRate * 100)).toFixed(1) : '0';
+  if (!line?.expectation?.played || !sample) return '<p class="prop-note">This player does not play in the simulations.</p>';
+  const share = `${(line.expectation.playRate * 100).toFixed(1)}%`;
+  const width = Math.max(0, Math.min(100, line.expectation.playRate * 100)).toFixed(1);
   const values = statMissing(sample, market) ? [] : playedValues(sample, market);
   const mean = playedMean(values);
   const headline = statMissing(sample, market)
@@ -611,8 +750,14 @@ function playedBlock(simulation: Simulation, athleteId: string, market: PropMark
       ? '<p class="prop-note">This player does not play in the simulations.</p>'
       : `<p class="projection-headline"><span class="stat-group-label">${escapeHtml(marketLabel(market))} · 10k projection</span><span class="projection-value">${mean.toFixed(1)}</span></p>`;
   return `${headline}
-    <div class="play-meter"><p class="play-meter-label"><span>Simulated play share</span><span class="play-meter-value">${share}</span></p><span class="play-track" aria-hidden="true"><span class="play-fill" style="width:${width}%"></span></span></div>
-    <p class="panel-lede">Means from the draws this player actually played.</p>
+    <div class="play-meter"><p class="play-meter-label"><span>Simulated play share</span><span class="play-meter-value">${share}</span></p><span class="play-track" aria-hidden="true"><span class="play-fill" style="width:${width}%"></span></span></div>`;
+}
+
+/** His full expected line in the games he plays. */
+function meansHtml(simulation: Simulation, athleteId: string): string {
+  const played = simPlayer(simulation, athleteId)?.expectation?.played ?? null;
+  if (!played) return '';
+  return `<p class="panel-lede">Means from the draws this player actually played.</p>
     <dl class="line line-hero">
       ${meanTile('PTS', played.ptsMean, 'Points when playing', 'hero')}
       ${meanTile('MIN', played.minMean, 'Minutes', 'lead')}
@@ -1198,7 +1343,6 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
   const player = rate.players.find((item) => item.athlete_id === view.athleteId) ?? null;
   if (!player || !view.athleteId) return '';
   const context = view.card.projection_context;
-  const rows = context ? unpackPlayerGames(context.players[player.athlete_id]?.games) : [];
   const team = player.team_id === game.away.team_id ? game.away : game.home;
   const opponent = player.team_id === game.away.team_id ? game.home : game.away;
   const side = player.team_id === game.away.team_id ? 'away' : 'home';
@@ -1217,36 +1361,47 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
   const onOffHtml = context ? onOffPanelHtml(rate, player, view.overrides, context, view.selectedTeammateId) : '';
   const logHtml = context ? gameLogPanelHtml(view, player, form, context) : '';
 
+  const spotlight = view.simulation
+    ? spotlightHtml(view.simulation, player.athlete_id, form.market)
+    : view.drawing
+      ? inlineDrawingHtml(view.drawProgress)
+      : `<div class="projection-unrun"><p class="prop-note" data-projection-status>Not simulated yet.</p><button type="button" data-projection-rerun="${escapeHtml(game.event_id)}">Simulate 10,000 games</button></div>`;
+  const means = view.simulation ? meansHtml(view.simulation, player.athlete_id) : '';
   return `<article class="projection-card projection-detail" data-block="proj-player">
-      <div class="who">
-        ${photoHtml(player.name, url)}
-        <div class="who-copy">
-          <h2 class="who-name">${escapeHtml(player.name)}</h2>
-          <p class="who-team">${escapeHtml(playerSideLine(game, side, sideName(team), sideName(opponent)))}</p>
-          <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
-          <p class="who-pos">${position ? `<span class="chip">${escapeHtml(position)}</span>` : ''}<span class="chip">${escapeHtml(injury)}</span>${call ? `<span class="chip">${escapeHtml(call)}</span>` : ''}</p>
-          ${url ? '' : '<p class="photo-note">Photo is not in the data.</p>'}
+      <div class="detail-top">
+        <div class="who">
+          ${photoHtml(player.name, url)}
+          <div class="who-copy">
+            <h2 class="who-name">${escapeHtml(player.name)}</h2>
+            <p class="who-team">${escapeHtml(playerSideLine(game, side, sideName(team), sideName(opponent)))}</p>
+            <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
+            <p class="who-pos">${position ? `<span class="chip">${escapeHtml(position)}</span>` : ''}<span class="chip">${escapeHtml(injury)}</span>${call ? `<span class="chip">${escapeHtml(call)}</span>` : ''}</p>
+            ${url ? '' : '<p class="photo-note">Photo is not in the data.</p>'}
+          </div>
         </div>
+        <button type="button" class="ghost detail-close" data-projection-close>Back to board</button>
       </div>
-      ${factsHtml(player)}
-      ${teammatesHtml(rate, player, view.overrides)}
-      ${marketPills(form, sample, rows)}
-      ${
-        view.simulation
-          ? playedBlock(view.simulation, player.athlete_id, form.market)
-          : view.drawing
-            ? inlineDrawingHtml(view.drawProgress)
-            : `<div class="projection-unrun"><p class="prop-note" data-projection-status>Not simulated yet.</p><button type="button" data-projection-rerun="${escapeHtml(game.event_id)}">Simulate 10,000 games</button></div>`
-      }
+      <div class="detail-spotlight">
+        <div class="detail-projection">${spotlight}</div>
+        <div class="detail-chances" data-model-chances>${modelChanceHtml(sample, form.market, form.line)}</div>
+      </div>
+      <div class="detail-chart" data-projection-chart>${projectionChartHtml(sample, form.market, form.line)}</div>
       ${lineTools(form, Boolean(sample && playedValues(sample, form.market).length), l10Ready)}
-      <div class="projection-form">
-        <div data-posted>${postedLineHtml(posted, form)}</div>
-        ${propFormMarkup(form)}
-        <div data-model-chances>${modelChanceHtml(sample, form.market, form.line)}</div>
-        <div data-prop-results aria-live="polite">${results}</div>
-        <div data-measured>${measuredNoteHtml(sample, form, view.record, view.propCalibration)}</div>
-        <div data-projection-chart>${projectionChartHtml(sample, form.market, form.line)}</div>
-      </div>
+      <section class="detail-price" aria-label="Check a price">
+        <h3 class="section-kicker">Check a price</h3>
+        <div class="projection-form">
+          <div data-posted>${postedLineHtml(posted, form)}</div>
+          ${propFormMarkup(form)}
+          <div data-prop-results aria-live="polite">${results}</div>
+          <div data-measured>${measuredNoteHtml(sample, form, view.record, view.propCalibration)}</div>
+        </div>
+      </section>
+      <details class="detail-more">
+        <summary>Full line, role and teammates</summary>
+        ${means}
+        ${factsHtml(player)}
+        ${teammatesHtml(rate, player, view.overrides)}
+      </details>
     </article>
     ${historyHtml}
     ${onOffHtml}
@@ -1271,35 +1426,32 @@ export function searchHitsHtml(slate: Slate, card: RateCard, query: string): str
   return hits.join('');
 }
 
-function gamesHtml(view: ProjectionView, game: SlateGame | null, rate: RateGame | null): string {
-  const player = rate?.players.find((item) => item.athlete_id === view.athleteId) ?? null;
-  const form = view.form.market === 'dd' || view.form.market === 'td' ? { ...view.form, line: '0.5' } : view.form;
-  const contextRail =
-    view.card.projection_context && game && player
-      ? defenseAsideHtml(view, game, player, form, view.card.projection_context)
-      : '';
-  const games = view.slate.games
+/** The games across the top: every game at once, or one. A game whose draws are in this browser is marked ready. */
+function gameStripHtml(view: ProjectionView, scope: BoardScope): string {
+  const all = `<button type="button" class="game-chip" data-projection-all aria-pressed="${scope === 'all' ? 'true' : 'false'}"><span class="game-row-head"><span class="abbr">All games</span></span><span class="tip">${view.slate.games.length} on the slate</span></button>`;
+  const chips = view.slate.games
     .map((item) => {
-      const selected = item.event_id === view.eventId;
-      const spread = item.spread_caption ? `<p class="spread">${escapeHtml(item.spread_caption)}</p>` : '';
+      const selected = scope === 'game' && item.event_id === view.eventId;
       const ready = view.readyEventIds?.has(item.event_id) ?? false;
       const status = statusLabel(item, view.now, view.slate.generated_at);
-      return `<button type="button" class="projection-game" data-projection-game="${escapeHtml(item.event_id)}" aria-pressed="${selected ? 'true' : 'false'}">
-          <span class="game-row-head"><span class="abbr">${escapeHtml(`Away ${sideAbbr(item.away)} @ Home ${sideAbbr(item.home)}`)}</span>${ready ? '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>' : ''}</span>
-          <span class="where">${escapeHtml(placeLine(item))}</span>
-          <span class="tip">${escapeHtml(formatTip(item.start_time))}</span>
-          <span class="status">${escapeHtml(status)}</span>
-          ${spread}
+      const when = status === 'not started' ? clockText(item.start_time) : status === 'final' ? 'Final' : status === 'in progress' ? 'Live' : clockText(item.start_time);
+      const title = `Away ${sideAbbr(item.away)} @ Home ${sideAbbr(item.home)} · ${placeLine(item)} · ${formatTip(item.start_time)}`;
+      return `<button type="button" class="game-chip projection-game" data-projection-game="${escapeHtml(item.event_id)}" aria-pressed="${selected ? 'true' : 'false'}" title="${escapeHtml(title)}">
+          <span class="game-row-head"><span class="chip-logos">${logoImg(item.away)}${logoImg(item.home)}</span><span class="abbr">${escapeHtml(`${sideAbbr(item.away)} @ ${sideAbbr(item.home)}`)}</span>${ready ? '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>' : ''}</span>
+          <span class="tip">${escapeHtml(when)}</span>
         </button>`;
     })
     .join('');
-  return `<aside class="projection-aside">
-      ${contextRail}
-      <section class="aside-block aside-games">
-        <h2>Games</h2>
-        <div class="projection-games">${games}</div>
-      </section>
-    </aside>`;
+  return `<nav class="game-strip" aria-label="Games">${all}${chips}</nav>`;
+}
+
+/** The selected player's matchup rail: the opponent's defense at his position and his per-minute rates. */
+function matchupAsideHtml(view: ProjectionView, game: SlateGame | null, rate: RateGame | null): string {
+  const player = rate?.players.find((item) => item.athlete_id === view.athleteId) ?? null;
+  if (!view.card.projection_context || !game || !player) return '';
+  const form = view.form.market === 'dd' || view.form.market === 'td' ? { ...view.form, line: '0.5' } : view.form;
+  const rail = defenseAsideHtml(view, game, player, form, view.card.projection_context);
+  return rail ? `<aside class="projection-aside">${rail}</aside>` : '';
 }
 
 function points(value: number): string {
@@ -1360,9 +1512,15 @@ function leanRowHtml(lean: RankedLean, record: PickRecord | null | undefined): s
     : tier && tier.pooled > 0
       ? `<span class="lean-measured ${tier.edge > 0 ? 'edge-up' : 'edge-down'}">Leans this strong: ${points(tier.edge)} against the price, ${tier.pooled.toLocaleString('en-US')} graded</span>`
       : '<span class="lean-measured">No graded leans of this strength yet</span>';
+  const modelWidth = Math.max(0, Math.min(100, lean.model * 100)).toFixed(1);
+  const needAt = Math.max(0, Math.min(100, lean.need * 100)).toFixed(1);
   return `<li><button type="button" class="lean-row" data-projection-player="${escapeHtml(lean.athlete_id)}" data-projection-event="${escapeHtml(lean.event_id)}" data-lean-market="${escapeHtml(lean.market)}" data-lean-side="${lean.side}">
-      <span class="lean-name">${escapeHtml(lean.name)}</span>
-      <span class="lean-call">${side} ${escapeHtml(lineText(lean.line))} ${escapeHtml(marketShort(lean.market))} <small>${escapeHtml(americanText(odds))}</small></span>
+      <span class="lean-head">
+        <span class="lean-face">${avatarMarkup(lean.name, lean.athlete_id)}</span>
+        <span class="lean-id"><span class="lean-name">${escapeHtml(lean.name)}</span><span class="lean-call">${side} ${escapeHtml(lineText(lean.line))} ${escapeHtml(marketShort(lean.market))} <small>${escapeHtml(americanText(odds))}</small></span></span>
+        <span class="lean-pct" data-side="${lean.side}">${escapeHtml(percent(lean.model))}</span>
+      </span>
+      <span class="lean-meter" aria-hidden="true"><span class="lean-meter-fill" data-side="${lean.side}" style="width:${modelWidth}%"></span><span class="lean-meter-need" style="left:${needAt}%"></span></span>
       <span class="lean-meta">${escapeHtml(lean.matchup)} · projection ${lean.projection.toFixed(1)} in ${lean.minutes.toFixed(0)} min${lean.play < 0.9 ? ` · plays in ${escapeHtml(percent(lean.play))} of simulations, and a sit-out voids the line` : ''}</span>
       <span class="lean-odds">Model ${escapeHtml(percent(lean.model))}${rawSideShare(lean) !== null ? ` calibrated, ${escapeHtml(percent(rawSideShare(lean)!))} in the raw simulation` : ''} · price needs ${escapeHtml(percent(lean.need))}${lean.also ? ` · ${lean.also} more of his lines ${lean.also === 1 ? 'leans' : 'lean'} ${lean.side}` : ''}</span>
       ${measured}
@@ -1472,8 +1630,8 @@ export interface LeanPanelInput {
 
 export function leanPanelInner(input: LeanPanelInput): string {
   const book = input.book?.trim() || 'sportsbook';
-  const head = '<h2>Leans against the posted lines</h2>';
-  const lede = `<p class="section-sub">The simulation's side at the posted ${escapeHtml(book)} over/under lines, for games that have not started. A lean is listed only while graded leans of that side and strength have been beating the posted price. The model percentage is the claim. The measured line under it is how claims like it have settled.</p>${calibrationStatusHtml(input.calibration)}`;
+  const head = '<div class="leans-head"><h2>Top leans</h2><p class="section-sub">The model\'s side at posted lines for games that have not started. The bar is the model chance; the tick is what the price needs.</p></div>';
+  const lede = `<details class="method-note"><summary>How leans are picked</summary><p class="section-sub">The simulation's side at the posted ${escapeHtml(book)} over/under lines, for games that have not started. A lean is listed only while graded leans of that side and strength have been beating the posted price. The model percentage is the claim. The measured line under it is how claims like it have settled.</p>${calibrationStatusHtml(input.calibration)}</details>`;
   if (!input.posted) {
     return `${head}${lede}<p class="prop-note">No posted line is in for this slate yet. They usually arrive late morning Central, and this list fills at the next refresh.</p>${recordHtml(input.record)}`;
   }
@@ -1586,15 +1744,19 @@ export function leanPanelHtml(
 }
 
 export function renderProjections(view: ProjectionView): string {
+  const scope: BoardScope = view.scope ?? (view.eventId ? 'game' : 'all');
   const game = view.slate.games.find((item) => item.event_id === view.eventId) ?? null;
   const rate = view.card.games.find((item) => item.event_id === view.eventId) ?? null;
   const detail = game && rate ? detailHtml(view, game, rate) : '';
-  const boardMeter = view.drawing && !view.athleteId ? inlineDrawingHtml(view.drawProgress) : '';
+  const boardMeter = view.drawing && !view.athleteId && scope === 'game' ? inlineDrawingHtml(view.drawProgress) : '';
+  const stat = marketLabel(view.form.market);
+  const title = scope === 'game' && game ? `${stat} · ${sideAbbr(game.away)} @ ${sideAbbr(game.home)}` : `${stat} · every game`;
+  const injuries = scope === 'game' && game && rate ? injuryReportHtml(rate, game) : '';
   const board =
-    game && rate
-      ? `${boardMeter}<section class="team-box projection-board" data-block="proj-board"><h2>${escapeHtml(marketLabel(view.form.market))} board</h2>${injuryReportHtml(rate, game)}<div data-projection-board>${projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines, view.propCalibration)}</div></section>`
-      : '<p class="state">Search a player, or pick a game. Historical trends load right away, and 10,000 simulations warm in the background.</p>';
-  const aside = gamesHtml(view, game, rate);
+    scope === 'all' || (game && rate)
+      ? `${boardMeter}<section class="team-box projection-board" data-block="proj-board"><div class="board-head"><h2>${escapeHtml(title)}</h2></div><div data-projection-board>${boardInnerHtml({ ...view, scope })}</div>${injuries}</section>`
+      : '<p class="state">Pick a game above, or search a player. Historical trends load right away, and 10,000 simulations warm in the background.</p>';
+  const aside = matchupAsideHtml(view, game, rate);
   const present = `${detail}${board}${aside}`;
   const toggles = (
     [
@@ -1608,18 +1770,28 @@ export function renderProjections(view: ProjectionView): string {
     ] as const
   ).filter((row) => row[0] === 'proj-leans' || present.includes(`data-block="${row[0]}"`))
     .map(([id, label]) => ({ id, label }));
+  const selected = rate?.players.find((item) => item.athlete_id === view.athleteId) ?? null;
+  const sample = selected ? view.simulation?.playerDraws.get(selected.athlete_id) ?? null : null;
+  const history = selected && view.card.projection_context ? unpackPlayerGames(view.card.projection_context.players[selected.athlete_id]?.games) : [];
   return `<div class="projection-page">
       <header class="projection-intro">
-        <h2>Projections</h2>
-        <p class="projection-note">A simulator, not a betting ticket. 10,000 simulated games paired with ESPN box-score history and reconstructed lineup stints. Posted lines and prices are compared after the games are drawn; the simulator does not read them, or the spread under a game.</p>
+        <div class="projection-titles">
+          <h2>Projections</h2>
+          <p class="projection-note">Every player, 10,000 simulated games. Pick a stat, then tap a player for the full breakdown.</p>
+        </div>
+        <details class="method-note"><summary>How this works</summary><p class="note">A simulator, not a betting ticket. 10,000 simulated games paired with ESPN box-score history and reconstructed lineup stints. Posted lines and prices are compared after the games are drawn; the simulator does not read them, or the spread under a game.</p></details>
       </header>
+      ${gameStripHtml(view, scope)}
+      <div class="projection-controls">
+        ${marketPills(view.form, sample, history)}
+        <label class="field projection-search"><span class="field-label">Find a player</span><input data-projection-search type="search" value="${escapeHtml(view.query)}" placeholder="Search a player on the slate" autocomplete="off"></label>
+      </div>
+      <div data-projection-hits class="projection-hits">${searchHitsHtml(view.slate, view.card, view.query)}</div>
       ${viewToggles(toggles)}
-      <div class="projection-layout">
+      <div class="projection-layout${aside ? '' : ' is-wide'}">
         <div class="projection-main">
-          <label class="field projection-search"><span class="field-label">Player</span><input data-projection-search type="search" value="${escapeHtml(view.query)}" placeholder="Search a player on the slate" autocomplete="off"></label>
-          <div data-projection-hits class="projection-hits">${searchHitsHtml(view.slate, view.card, view.query)}</div>
-          <section class="model-sides" data-model-sides data-block="proj-leans" aria-label="Leans against the posted lines">${leanPanelHtml(view)}</section>
           ${detail}
+          <section class="model-sides" data-model-sides data-block="proj-leans" aria-label="Leans against the posted lines">${leanPanelHtml(view)}</section>
           ${board}
         </div>
         ${aside}

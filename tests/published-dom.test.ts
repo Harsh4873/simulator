@@ -91,7 +91,7 @@ test('a game published with the card opens with no worker and no wait, in the bo
     assert.equal(document.querySelector('.sim-screen'), null);
     assert.equal(document.querySelector('.projection-drawing'), null);
     assert.ok(document.querySelector(`button[data-projection-game="${game.event_id}"] .ready-dot`), 'the game is marked ready');
-    const projections = [...document.querySelectorAll('[data-projection-board] tbody tr td:first-of-type')].map((cell) => cell.textContent ?? '');
+    const projections = [...document.querySelectorAll('[data-projection-board] .pick-proj .pick-value')].map((cell) => cell.textContent ?? '');
     assert.ok(projections.some((text) => /^\d+\.\d$/.test(text)), `projections rendered: ${projections.slice(0, 4).join(', ')}`);
 
     // A player opens with his own line and chances, and every stat answers, combined ones and milestones included.

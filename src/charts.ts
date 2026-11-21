@@ -215,3 +215,40 @@ export function historyBarsSvg(
     ${lineOverlay}
   </svg>`;
 }
+
+/**
+ * A small histogram for a board card: the player's simulated values, colored against the line when there is one,
+ * with the line marked. Integers get one bar each while they fit; wider ranges are binned.
+ */
+export function sparkBarsSvg(values: ArrayLike<number>, line: number | null, label: string): string {
+  if (!values.length) return '';
+  const sorted = Float64Array.from(values).sort();
+  const lo = Math.floor(quantile(sorted, 0.01));
+  const hi = Math.ceil(quantile(sorted, 0.99));
+  const span = Math.max(1, hi - lo + 1);
+  const width = span <= 28 ? 1 : Math.ceil(span / 24);
+  const bins = Math.max(1, Math.ceil(span / width));
+  const counts = new Array<number>(bins).fill(0);
+  for (const value of sorted) {
+    const index = Math.floor((Math.round(value) - lo) / width);
+    if (index >= 0 && index < bins) counts[index] += 1;
+  }
+  const W = 200;
+  const H = 44;
+  const base = 40;
+  const peak = Math.max(1, ...counts);
+  const step = W / bins;
+  const graded = line !== null && Number.isFinite(line);
+  const bars = counts
+    .map((count, index) => {
+      const from = lo + index * width;
+      const to = from + width - 1;
+      const side = !graded ? 'plain' : from > (line as number) ? 'over' : to < (line as number) ? 'under' : from === line && to === line ? 'push' : 'plain';
+      const height = count ? Math.max(1.5, (count / peak) * (base - 4)) : 0;
+      return `<rect class="bar ${side}" x="${(index * step + 0.6).toFixed(1)}" y="${(base - height).toFixed(1)}" width="${Math.max(0.8, step - 1.2).toFixed(1)}" height="${height.toFixed(1)}" rx="1"></rect>`;
+    })
+    .join('');
+  const at = graded ? ((((line as number) - lo + 0.5) / (bins * width)) * W) : null;
+  const mark = at !== null && at > 0 && at < W ? `<line class="prop-line" x1="${at.toFixed(1)}" x2="${at.toFixed(1)}" y1="2" y2="${base}"></line>` : '';
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" role="img" aria-label="${chartText(label)}" preserveAspectRatio="none">${bars}${mark}<line class="axis" x1="0" x2="${W}" y1="${base}" y2="${base}"></line></svg>`;
+}
