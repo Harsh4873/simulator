@@ -1,6 +1,7 @@
 import { chicagoDate, formatTip, shiftChicagoDate } from './date.ts';
 import { paletteStyle } from './display.ts';
 import { escapeHtml } from './slate.ts';
+import type { PublishedCalibration, TeamPlan } from './nfl/projection.ts';
 
 export type FeedSport = 'nfl';
 export type FeedStatus = 'scheduled' | 'in_progress' | 'final';
@@ -77,6 +78,15 @@ export interface FeedGameSim {
   combined: FeedBand;
   home_win: number;
   players: FeedPlayerSim[];
+  /** What the page needs to play the game itself: both team plans and the calibration. Older files omit it. */
+  plan?: FeedSimPlan | null;
+}
+
+export interface FeedSimPlan {
+  neutral: boolean;
+  home: TeamPlan;
+  away: TeamPlan;
+  calibration: PublishedCalibration;
 }
 
 /** Walk-forward check of the simulation on earlier weeks of the season. */
@@ -214,6 +224,76 @@ function playerSimOf(value: unknown): FeedPlayerSim | null {
   return { id, name, side: row.side, position, status: row.status === null ? null : text(row.status), play: row.play, stats, td: row.td, ...(actual !== undefined ? { actual } : {}) };
 }
 
+const POSITIONS = new Set(['QB', 'RB', 'WR', 'TE']);
+const within = (value: unknown, lo: number, hi: number): value is number => finiteNumber(value) && value >= lo && value <= hi;
+
+function teamPlanOf(value: unknown): TeamPlan | null {
+  const row = record(value);
+  if (!row || !Array.isArray(row.players) || row.players.length > 30) return null;
+  const abbr = text(row.abbr);
+  if (!abbr || !within(row.points, 0, 70) || !within(row.passAtt, 0, 90) || !within(row.rushAtt, 0, 80) || !within(row.drives, 3, 25) || !chance(row.tdPointShare) || !chance(row.passTdShare)) return null;
+  const players: TeamPlan['players'] = [];
+  for (const item of row.players) {
+    const player = record(item);
+    const id = text(player?.id);
+    const name = text(player?.name);
+    if (!player || !id || !name || typeof player.position !== 'string' || !POSITIONS.has(player.position)) return null;
+    if (player.status !== null && text(player.status) === null) return null;
+    if (!chance(player.play) || !chance(player.targetShare) || !chance(player.catchRate) || !within(player.ypr, 0, 40) || !chance(player.tdPerRec)) return null;
+    if (!chance(player.carryShare) || !within(player.ypc, -10, 20) || !chance(player.tdPerCarry) || !chance(player.intRate) || !within(player.lastPassAtt, 0, 100) || !within(player.weightedPassAtt, 0, 1000)) return null;
+    players.push({
+      id,
+      name,
+      position: player.position as TeamPlan['players'][number]['position'],
+      status: player.status === null ? null : text(player.status),
+      play: player.play,
+      targetShare: player.targetShare,
+      catchRate: player.catchRate,
+      ypr: player.ypr,
+      tdPerRec: player.tdPerRec,
+      carryShare: player.carryShare,
+      ypc: player.ypc,
+      tdPerCarry: player.tdPerCarry,
+      intRate: player.intRate,
+      lastPassAtt: player.lastPassAtt,
+      weightedPassAtt: player.weightedPassAtt,
+    });
+  }
+  return { abbr, points: row.points, passAtt: row.passAtt, rushAtt: row.rushAtt, drives: row.drives, tdPointShare: row.tdPointShare, passTdShare: row.passTdShare, players };
+}
+
+function calibrationOf(value: unknown): PublishedCalibration | null {
+  const row = record(value);
+  const td = record(row?.td);
+  const ranges = record(row?.ranges);
+  const bias = record(row?.bias);
+  if (!row || !td || !ranges || !bias || !within(row.sigma, 0, 2) || !within(row.temperature, 0.1, 5) || !finiteNumber(td.a) || !finiteNumber(td.b)) return null;
+  const rangeOut: PublishedCalibration['ranges'] = {};
+  for (const [key, item] of Object.entries(ranges)) {
+    if ((!STAT_SET.has(key) && key !== 'margin' && key !== 'combined') || !within(item, 0.1, 5)) return null;
+    rangeOut[key as FeedStat] = item;
+  }
+  const biasOut: Record<string, number> = {};
+  for (const [key, item] of Object.entries(bias)) {
+    const [position, stat] = key.split(':');
+    if (!position || !stat || !POSITIONS.has(position) || !STAT_SET.has(stat) || !within(item, 0.2, 5)) return null;
+    biasOut[key] = item;
+  }
+  return { sigma: row.sigma, temperature: row.temperature, td: { a: td.a, b: td.b }, ranges: rangeOut, bias: biasOut };
+}
+
+function planOf(value: unknown): FeedSimPlan | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  const row = record(value);
+  if (!row || typeof row.neutral !== 'boolean') return undefined;
+  const home = teamPlanOf(row.home);
+  const away = teamPlanOf(row.away);
+  const calibration = calibrationOf(row.calibration);
+  if (!home || !away || !calibration) return undefined;
+  return { neutral: row.neutral, home, away, calibration };
+}
+
 function simOf(value: unknown): FeedGameSim | null | undefined {
   if (value === undefined) return undefined;
   if (value === null) return null;
@@ -230,7 +310,9 @@ function simOf(value: unknown): FeedGameSim | null | undefined {
     if (!player) return undefined;
     players.push(player);
   }
-  return { draws: row.draws as number, away_points: away, home_points: home, margin, combined, home_win: row.home_win, players };
+  const plan = planOf(row.plan);
+  if (row.plan !== undefined && plan === undefined) return undefined;
+  return { draws: row.draws as number, away_points: away, home_points: home, margin, combined, home_win: row.home_win, players, ...(plan !== undefined ? { plan } : {}) };
 }
 
 function validationOf(value: unknown): FeedValidation | null | undefined {
@@ -404,6 +486,7 @@ function renderGame(game: FeedGame): string {
     ${game.projection ? `<p class="status" data-projection>${escapeHtml(game.projection.summary)}</p>` : ''}
     ${game.sim ? simMarkup(game, game.sim) : ''}
     <p class="note">${escapeHtml(game.projection_note)}</p>
+    ${game.sim?.plan ? `<div class="card-actions"><button type="button" data-nfl-simulate="${escapeHtml(game.id)}">Simulate</button></div>` : ''}
   </article>`;
 }
 
@@ -467,7 +550,7 @@ function simMarkup(game: FeedGame, sim: FeedGameSim): string {
   return `<div class="nfl-sim" data-sim>
     <p class="status">Projected ${escapeHtml(game.away.abbreviation)} ${escapeHtml(statText('points', sim.away_points.mean))}, ${escapeHtml(game.home.abbreviation)} ${escapeHtml(statText('points', sim.home_points.mean))} · ${escapeHtml(signedMargin(sim, game))}</p>
     <p class="note">Win chance ${escapeHtml(game.away.abbreviation)} ${(awayWin * 100).toFixed(1)}%, ${escapeHtml(game.home.abbreviation)} ${(sim.home_win * 100).toFixed(1)}%. ${escapeHtml(game.home.abbreviation)} margin ${escapeHtml(rangeText('margin', sim.margin))}; both teams ${escapeHtml(rangeText('points', sim.combined))} points, 8 in 10 of ${sim.draws.toLocaleString('en-US')} draws.</p>
-    <details class="nfl-players"><summary>Player projections</summary><p class="note">Big number is the median of the draws he plays in; below it, the 10th to 90th percentile.</p>${team('away')}${team('home')}</details>
+    ${sim.plan ? '' : `<details class="nfl-players"><summary>Player projections</summary><p class="note">Big number is the median of the draws he plays in; below it, the 10th to 90th percentile.</p>${team('away')}${team('home')}</details>`}
   </div>`;
 }
 

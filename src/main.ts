@@ -58,7 +58,8 @@ import { unpackPlayerGames, type DefenseSlot } from './projection-context.ts';
 import { fetchPublishedIndex, fetchPublishedSimulation, type PublishedExpectation } from './published-sim.ts';
 import { hydrateSimulationCache, persistSimulationEntry } from './simulation-cache.ts';
 import { parseEsportsDocument, renderEsports } from './esports/props.ts';
-import { parseFeedSlate, renderFeedSlate } from './feed.ts';
+import { parseFeedSlate, renderFeedSlate, type FeedGame, type FeedSlate } from './feed.ts';
+import { playNflGame, renderNflBox, type NflBoxResult } from './nfl/box.ts';
 import { escapeHtml, renderSlate } from './slate.ts';
 import { ITERATIONS, type Simulation } from './simulate.ts';
 import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
@@ -119,6 +120,8 @@ let projectionAutoPrice = false;
 let picks: PicksFile | null = null;
 /** Descriptive matchup report. Optional: Prices still renders when it is missing or for another card. */
 let matchups: MatchupsFile | null = null;
+/** True while the optional Matchups report is still on its way. */
+let matchupsLoading = false;
 let boardView: BoardSubview = 'shop';
 let bookLines: Map<string, BookLine> = new Map();
 let propCalibration: { table: Map<PropCalibrationGroup, PropCalibrationCard>; artifacts: PropCalibrationArtifact[] } | null = null;
@@ -133,6 +136,10 @@ let drawingEvent: string | null = null;
 let drawingProgress = 0;
 let sport: Sport = 'nba';
 let feedToken = 0;
+/** The NFL file on screen, and each game it has played on this page, by file and game. */
+let nflSlate: FeedSlate | null = null;
+const nflBoxes = new Map<string, NflBoxResult>();
+let nflRunning = false;
 let nbaFailed = false;
 
 function storedLineups(): string | null {
@@ -760,7 +767,7 @@ function paintSimClock(screen: HTMLElement, progress: number): void {
   screen.querySelector('[role="progressbar"]')?.setAttribute('aria-valuenow', String(Math.round(clamped * 100)));
 }
 
-function openSimClock(game: SlateGame): HTMLElement {
+function openSimClock(game: { away: { abbreviation: string; name: string }; home: { abbreviation: string; name: string } }): HTMLElement {
   const away = game.away.abbreviation.trim() || game.away.name.trim();
   const home = game.home.abbreviation.trim() || game.home.name.trim();
   const title = `Away ${away} at Home ${home}`;
@@ -1089,6 +1096,15 @@ function onDeskClick(event: Event): void {
   const sectionToggle = target.closest('button[data-block-toggle]');
   if (sectionToggle instanceof HTMLButtonElement) {
     onSectionToggle(sectionToggle);
+    return;
+  }
+  const nflSimulate = target.closest('button[data-nfl-simulate]');
+  if (nflSimulate instanceof HTMLButtonElement) {
+    if (!nflSimulate.disabled) void onNflSimulate(nflSimulate);
+    return;
+  }
+  if (target.closest('[data-nfl-back]')) {
+    closeNflBox();
     return;
   }
   if (target.closest('[data-retry]')) {
@@ -1541,12 +1557,15 @@ async function loadPropCalibration(): Promise<void> {
 
 async function loadMatchups(): Promise<void> {
   matchups = null;
+  matchupsLoading = true;
   try {
     const response = await fetch(`${DATA_BASE}matchups.json`, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
     if (!response.ok) return;
     matchups = parseMatchupsFile(await response.text());
   } catch {
     matchups = null;
+  } finally {
+    matchupsLoading = false;
   }
 }
 
@@ -1577,10 +1596,13 @@ async function load(): Promise<void> {
       return text;
     },async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join(''));
     slate=loaded.slate;card=loaded.card;health=loaded.health;
-    await loadPicks();
-    await loadMatchups();
-    await loadPropCalibration();
-    await loadPublishedIndex();
+    // The optional files load side by side, so a slow one does not stack its wait on the others.
+    await Promise.all([loadPicks(), loadPropCalibration(), loadPublishedIndex()]);
+    // The Matchups report is large and only the board reads it: the games paint without waiting, and an open
+    // Matchups view repaints when it arrives.
+    void loadMatchups().then(() => {
+      if (currentSport() === 'nba' && desk?.dataset.mode === 'board' && boardView === 'matchups') paintBoard();
+    });
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
     await hydrateSimulationCache(generationKey(), simulationCache);
@@ -1712,8 +1734,68 @@ async function showNfl(): Promise<void> {
     if (desk) desk.dataset.mode = 'sport';
     return;
   }
+  nflSlate = parsed;
   slateRoot.innerHTML = renderFeedSlate(parsed, new Date());
   if (desk) desk.dataset.mode = 'sport';
+}
+
+function nflGame(id: string): FeedGame | null {
+  return nflSlate ? [...nflSlate.games, ...nflSlate.later].find((game) => game.id === id) ?? null : null;
+}
+
+function showNflBox(game: FeedGame, box: NflBoxResult): void {
+  if (!boxRoot) return;
+  boxRoot.innerHTML = renderNflBox(game, box, new Date());
+  applyHiddenSections(boxRoot);
+  const games = gamesFrame();
+  if (games) games.hidden = true;
+  if (stageFrame) stageFrame.hidden = false;
+  window.scrollTo(0, 0);
+  boxRoot.querySelector<HTMLButtonElement>('[data-nfl-back]')?.focus();
+}
+
+/** Plays the game's published plan on the page, as the NBA Simulate does, and opens its box score. */
+async function onNflSimulate(button: HTMLButtonElement): Promise<void> {
+  const id = button.dataset.nflSimulate ?? '';
+  const game = nflGame(id);
+  if (!game || nflRunning || currentSport() !== 'nfl') return;
+  const key = `${nflSlate?.generated_at ?? ''}:${id}`;
+  const cached = nflBoxes.get(key);
+  if (cached) {
+    showNflBox(game, cached);
+    return;
+  }
+  nflRunning = true;
+  button.disabled = true;
+  const screen = openSimClock(game);
+  paintSimClock(screen, 0.15);
+  try {
+    // Let the clock paint before the draws hold the page.
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const box = playNflGame(game);
+    if (!box) throw new Error('This game has no simulation yet. It is added at the next refresh.');
+    paintSimClock(screen, 1);
+    nflBoxes.set(key, box);
+    if (currentSport() === 'nfl') showNflBox(game, box);
+  } catch (error) {
+    const status = document.createElement('p');
+    status.setAttribute('role', 'alert');
+    status.textContent = error instanceof Error ? error.message : 'Simulation failed. Retry.';
+    button.after(status);
+  } finally {
+    closeSimClock(screen);
+    nflRunning = false;
+    if (button.isConnected) button.disabled = false;
+  }
+}
+
+function closeNflBox(): void {
+  const id = boxRoot?.querySelector<HTMLElement>('[data-nfl-event]')?.dataset.nflEvent ?? '';
+  if (stageFrame) stageFrame.hidden = true;
+  const games = gamesFrame();
+  if (games) games.hidden = false;
+  boxRoot?.replaceChildren();
+  if (id) slateRoot?.querySelector<HTMLButtonElement>(`[data-nfl-simulate="${CSS.escape(id)}"]`)?.focus();
 }
 
 async function showEsports(): Promise<void> {
@@ -1806,7 +1888,12 @@ function boardQuotes(): OddsQuote[] {
 
 function paintBoard(): void {
   if (!boardRoot || !slate || !card) return;
-  const body = boardView === 'matchups' ? renderMatchups(matchups, slate, card) : renderOddsBoard(buildOddsScreen(boardQuotes(), new Date()));
+  const body =
+    boardView !== 'matchups'
+      ? renderOddsBoard(buildOddsScreen(boardQuotes(), new Date()))
+      : matchups === null && matchupsLoading
+        ? '<p class="state" role="status">Loading the Matchups report…</p>'
+        : renderMatchups(matchups, slate, card);
   boardRoot.innerHTML = `${boardControlsHtml(boardView)}<div class="board-panel">${body}</div>`;
 }
 

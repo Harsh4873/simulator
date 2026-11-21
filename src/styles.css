@@ -487,7 +487,8 @@ html[data-theme="light"] .pill.tone-out { background: #fde8e7; color: #b42318; }
 
 .card-actions button { margin-top: 0; }
 
-.card-actions button[data-event] { flex: 1 1 auto; }
+.card-actions button[data-event],
+.card-actions button[data-nfl-simulate] { flex: 1 1 auto; }
 
 .card-actions button:disabled { font-weight: 500; font-size: 0.8125rem; text-align: left; border-radius: 12px; }
 

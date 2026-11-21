@@ -4,7 +4,7 @@ Today's NBA games in America/Chicago. Simulate draws 10,000 independent games in
 
 This is a simulator, not a betting ticket.
 
-The NFL switch shows today's and yesterday's games, then the rest of the week, with each team's record. Each game is simulated 10,000 times from this season's box scores and its injury report: a projected score, win chance and margin, and a projection with a 10th-to-90th range for each quarterback, back and receiver. The win chances, ranges and player means are calibrated walk-forward on earlier weeks, which the page reports. No market line is used. Without enough box scores it falls back to a score-only Elo.
+The NFL switch shows today's and yesterday's games, then the rest of the week, with each team's record. Each game is simulated 10,000 times from this season's box scores and its injury report. Simulate plays it on the page, as the NBA Simulate does, and opens its box score: the projected score and win chance, the margin and total charts, and passing, rushing and receiving tables for both sides with each player's 10th-to-90th range. The win chances, ranges and player means are calibrated walk-forward on earlier weeks, which the page reports. No market line is used. Without enough box scores it falls back to a score-only Elo.
 
 The esports switch projects each player: CS2 kills and headshots over maps 1-2 from his kills and headshots per round, Dota 2 and League of Legends kills and assists per game. Each projection has a 10th-to-90th range calibrated on the same players' earlier games, with the plain average beneath it and what he did once the game is played. An upcoming CS2 match lists the five players on each side who played most recently.
 

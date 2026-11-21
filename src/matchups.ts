@@ -234,7 +234,8 @@ function logRows(games: readonly TeamGame[], tonightOpponentId: string, strength
     seen.add(game.event_id);
     const opp = strength.get(game.opponent_id);
     const why: string[] = [];
-    if (inLast) why.push('last 10 before tip');
+    // A young season has fewer than ten games before the tip; the label says how many the window holds.
+    if (inLast) why.push(`last ${last.size} before tip`);
     if (distance != null) why.push(`comparable, rank distance ${distance}`);
     rows.push({
       event_id: game.event_id,

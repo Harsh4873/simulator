@@ -290,7 +290,10 @@ test('eight games are ranked, seven are not, and a tied mean follows the team id
   assert.ok(unranked);
   assert.equal(unranked.opponent_rank, null);
   assert.equal(unranked.opponent_games, 7);
-  assert.match(unranked.why, /last 10 before tip/);
+  // Fewer than ten games before the tip: the label counts the games the window really holds.
+  assert.equal(sample.home.games_before_tip < 10, true);
+  assert.match(unranked.why, new RegExp(`last ${sample.home.games_before_tip} before tip`));
+  assert.doesNotMatch(unranked.why, /last 10 before tip/);
 });
 
 test('games at the tip, after it, in another season, or the game itself stay out', () => {

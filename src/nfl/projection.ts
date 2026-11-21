@@ -1,4 +1,4 @@
-import { binomial, gamma, mulberry32, normal, poisson, type Rng } from '../rng.ts';
+import { binomial, fnv1a, gamma, mulberry32, normal, poisson, type Rng } from '../rng.ts';
 import type { NflBoxGame, NflLine, NflTeamBox } from './boxscore.ts';
 
 /**
@@ -311,7 +311,7 @@ export function playChance(status: string | null): number {
   return 0;
 }
 
-interface PlanPlayer {
+export interface PlanPlayer {
   id: string;
   name: string;
   position: NflPosition;
@@ -330,7 +330,7 @@ interface PlanPlayer {
   weightedPassAtt: number;
 }
 
-interface TeamPlan {
+export interface TeamPlan {
   abbr: string;
   points: number;
   passAtt: number;
@@ -575,7 +575,16 @@ const RELEVANT: Record<NflPosition, NflStat[]> = {
 export interface SimulatedGame {
   projection: GameProjection;
   /** Raw per-draw values for checking against a box score. */
-  raw: { homeWin: number; margins: Float64Array; combined: Float64Array; tally: Map<string, Tally> };
+  raw: {
+    homeWin: number;
+    /** Draws each side won outright, and ties left after overtime. */
+    wins: { away: number; tie: number; home: number };
+    homePoints: Float64Array;
+    awayPoints: Float64Array;
+    margins: Float64Array;
+    combined: Float64Array;
+    tally: Map<string, Tally>;
+  };
 }
 
 /** Plays one game `draws` times from two team plans. */
@@ -594,6 +603,7 @@ export function simulateGame(home: TeamPlan, away: TeamPlan, neutral: boolean, d
   const pace = (home.drives + away.drives) / 2;
   const expectedMargin = home.points - away.points;
   let homeWins = 0;
+  const wins = { away: 0, tie: 0, home: 0 };
   for (let draw = 0; draw < draws; draw += 1) {
     const drives = clamp(Math.round(pace + normal(rng) * 1.1), 7, 15);
     const sigma = calibration.sigma;
@@ -603,12 +613,22 @@ export function simulateGame(home: TeamPlan, away: TeamPlan, neutral: boolean, d
     const a = scoreTeam(away, drives, awayRate, rng);
     homePoints[draw] = h.points;
     awayPoints[draw] = a.points;
-    if (h.points > a.points) homeWins += 1;
-    else if (h.points === a.points) {
+    if (h.points > a.points) {
+      homeWins += 1;
+      wins.home += 1;
+    } else if (h.points < a.points) wins.away += 1;
+    else {
       // Overtime: a little better than a coin for the stronger side, and a tie one time in twenty.
       const u = rng();
-      if (u < 0.95) homeWins += rng() < clamp(0.5 + expectedMargin / 40 + (neutral ? 0 : 0.02), 0.2, 0.8) ? 1 : 0;
-      else homeWins += 0.5;
+      if (u < 0.95) {
+        const homeTakes = rng() < clamp(0.5 + expectedMargin / 40 + (neutral ? 0 : 0.02), 0.2, 0.8);
+        homeWins += homeTakes ? 1 : 0;
+        if (homeTakes) wins.home += 1;
+        else wins.away += 1;
+      } else {
+        homeWins += 0.5;
+        wins.tie += 1;
+      }
     }
     playTeam(home, h.points - a.points, expectedMargin, homeRate, h.offTd, rng, tally, draw);
     playTeam(away, a.points - h.points, -expectedMargin, awayRate, a.offTd, rng, tally, draw);
@@ -653,7 +673,7 @@ export function simulateGame(home: TeamPlan, away: TeamPlan, neutral: boolean, d
       home_win: calibrateWin(homeWins / draws, calibration),
       players,
     },
-    raw: { homeWin: homeWins / draws, margins, combined, tally },
+    raw: { homeWin: homeWins / draws, wins, homePoints, awayPoints, margins, combined, tally },
   };
 }
 
@@ -915,4 +935,58 @@ export function playedRoster(side: NflTeamBox, positions: ReadonlyMap<string, st
     position: positions.get(line.id) ?? (line.pass_att >= 5 ? 'QB' : line.car > line.tgt ? 'RB' : 'WR'),
     status: null,
   }));
+}
+
+/** The calibration as published. `ranges` is `spread`: the feed rejects any key named like a sportsbook term. */
+export interface PublishedCalibration {
+  sigma: number;
+  temperature: number;
+  td: { a: number; b: number };
+  ranges: Partial<Record<NflStat | 'margin' | 'combined', number>>;
+  bias: Record<string, number>;
+}
+
+export function publishCalibration(calibration: NflCalibration): PublishedCalibration {
+  return { sigma: calibration.sigma, temperature: calibration.temperature, td: { ...calibration.td }, ranges: { ...calibration.spread }, bias: { ...calibration.bias } };
+}
+
+export function readCalibration(published: PublishedCalibration): NflCalibration {
+  return { sigma: published.sigma, temperature: published.temperature, td: { ...published.td }, spread: { ...published.ranges }, bias: { ...published.bias } };
+}
+
+const round4 = (value: number) => Math.round(value * 10_000) / 10_000;
+
+/** A plan rounded for publication. Four decimals keep a draw within a hair of the build's. */
+export function publishPlan(plan: TeamPlan): TeamPlan {
+  return {
+    abbr: plan.abbr,
+    points: round4(plan.points),
+    passAtt: round4(plan.passAtt),
+    rushAtt: round4(plan.rushAtt),
+    drives: round4(plan.drives),
+    tdPointShare: round4(plan.tdPointShare),
+    passTdShare: round4(plan.passTdShare),
+    players: plan.players.map((player) => ({
+      id: player.id,
+      name: player.name,
+      position: player.position,
+      status: player.status,
+      play: round4(player.play),
+      targetShare: round4(player.targetShare),
+      catchRate: round4(player.catchRate),
+      ypr: round4(player.ypr),
+      tdPerRec: round4(player.tdPerRec),
+      carryShare: round4(player.carryShare),
+      ypc: round4(player.ypc),
+      tdPerCarry: round4(player.tdPerCarry),
+      intRate: round4(player.intRate),
+      lastPassAtt: round4(player.lastPassAtt),
+      weightedPassAtt: round4(player.weightedPassAtt),
+    })),
+  };
+}
+
+/** The seed the build and the page both use for a game, so the page replays the same 10,000 games the card summarizes. */
+export function nflSeed(gameId: string): number {
+  return fnv1a(`nfl:${gameId}`);
 }

@@ -16,8 +16,7 @@ import {
   parseRoster,
   type EspnGame,
 } from '../src/nfl/espn.ts';
-import { planGame, playedRoster, simulateGame, walkForward, type Band, type GameProjection, type RosterEntry, type WalkForwardResult } from '../src/nfl/projection.ts';
-import { fnv1a } from '../src/rng.ts';
+import { nflSeed, planGame, playedRoster, publishCalibration, publishPlan, simulateGame, walkForward, type Band, type GameProjection, type RosterEntry, type WalkForwardResult } from '../src/nfl/projection.ts';
 
 const SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
 const SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary';
@@ -326,11 +325,16 @@ export async function buildNflSlate(now = new Date()): Promise<void> {
       }
       // A played or live game is projected as it stood at kickoff.
       const asOf = Math.min(now.getTime(), Date.parse(game.start_time));
-      const plans = planGame(boxGames, game.home.abbreviation, game.away.abbreviation, game.neutral_site, asOf, { home, away });
-      const result = simulateGame(plans.home, plans.away, game.neutral_site, SIM_DRAWS, fnv1a(`nfl:${game.id}`), walk.calibration);
+      const built = planGame(boxGames, game.home.abbreviation, game.away.abbreviation, game.neutral_site, asOf, { home, away });
+      // The page replays the published plan with the same seed, so the published numbers come from that same plan.
+      const plans = { home: publishPlan(built.home), away: publishPlan(built.away) };
+      const result = simulateGame(plans.home, plans.away, game.neutral_site, SIM_DRAWS, nflSeed(game.id), walk.calibration);
       const projection = result.projection;
       const homeWin = projection.home_win;
-      const sim = publishedSim(projection, game.status === 'final' ? byId.get(game.id) ?? null : null);
+      const sim: FeedGameSim = {
+        ...publishedSim(projection, game.status === 'final' ? byId.get(game.id) ?? null : null),
+        plan: { neutral: game.neutral_site, home: plans.home, away: plans.away, calibration: publishCalibration(walk.calibration) },
+      };
       return toCard(
         game,
         { kind: 'game', away_win: round3(1 - homeWin), home_win: round3(homeWin), summary: `${game.away.abbreviation} ${percent(1 - homeWin)} · ${game.home.abbreviation} ${percent(homeWin)}` },
