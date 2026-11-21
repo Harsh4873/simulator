@@ -7,7 +7,7 @@ export const ESPORTS_MODEL_NAME = 'esports-player-projections-v1';
 export const LEGACY_ESPORTS_MODEL_NAME = 'esports-player-means-v1';
 
 export const ESPORTS_MODEL_NOTE =
-  `Each projection is that player's own rate from his earlier games, newest weighted most and pulled toward the field when he has few: CS2 kills and headshots per round over maps 1 and 2 (each map 13 to about 30 rounds), Dota 2 and League of Legends per game. The displayed game is never part of its own projection. The ranges are calibrated on the same players' earlier games so 8 in 10 results land inside, and the plain average is shown under each projection. No match winner and no posted line were used.`;
+  `Each projection is that player's own rate from his earlier games, newest weighted most and pulled toward the field when he has few: CS2 kills and headshots per round over maps 1 and 2 (each map 13 to about 30 rounds), Dota 2 and League of Legends per game. The displayed game is never part of its own projection, and a player with no earlier game in the feed gets none. The ranges are calibrated on the same players' earlier games so 8 in 10 results land inside, and the plain average is shown under each projection. No match winner and no posted line were used.`;
 
 export type EsportsStat = (typeof DOTA_STATS)[number] | (typeof LOL_STATS)[number] | (typeof CS2_STATS)[number];
 
@@ -447,7 +447,7 @@ const CHIP_STATE: Record<EsportsStatus, string> = { upcoming: 'pre', live: 'live
  * One match as a table: a row per player under his team, a column per projected stat with the median, the 10th to
  * 90th range and the plain average, and what he did once the game is played.
  */
-function renderMatch(match: EsportsMatch, now: Date, perMap: boolean): string {
+function renderMatch(match: EsportsMatch, now: Date, perMap: boolean, table = true): string {
   const where = match.competition ? `<p class="where">${escapeHtml(match.competition)}</p>` : '';
   const result = resultText(match);
   const chip = result && match.status ? `<span class="chip" data-state="${CHIP_STATE[match.status]}" data-result>${escapeHtml(result)}</span>` : '';
@@ -475,7 +475,7 @@ function renderMatch(match: EsportsMatch, now: Date, perMap: boolean): string {
     <div class="card-top"><span class="chip chip-time">${escapeHtml(whenLabel(match.start_time, now))}</span>${chip}</div>
     <h2 class="esports-matchup">${escapeHtml(match.teams[0])} <span class="at">vs</span> ${escapeHtml(match.teams[1])}</h2>
     ${where}
-    <div class="table-scroll"><table class="esports-table"><thead><tr><th scope="col">Player</th>${head}</tr></thead><tbody>${body}</tbody></table></div>
+    ${table ? `<div class="table-scroll"><table class="esports-table"><thead><tr><th scope="col">Player</th>${head}</tr></thead><tbody>${body}</tbody></table></div>` : ''}
   </article>`;
 }
 
@@ -483,8 +483,10 @@ function renderMatch(match: EsportsMatch, now: Date, perMap: boolean): string {
 function checksMarkup(checks: readonly EsportsCheck[] | undefined): string {
   if (!checks?.length) return '';
   const titles = [...new Set(checks.map((check) => check.title))];
-  const parts = titles.map((title) => {
+  const parts = titles.flatMap((title) => {
     const mine = checks.filter((check) => check.title === title && check.rows > 0);
+    // A title whose feed returned no history this run was not checked; it says so on its own section instead.
+    if (!mine.length) return [];
     const rows = Math.max(...mine.map((check) => check.rows), 0);
     const coverage = mine.map((check) => `${STAT_LABEL[check.stat].toLowerCase()} ${Math.round(check.coverage * 100)}%`).join(', ');
     return `${title}: ${rows.toLocaleString('en-US')} earlier ${title === 'CS2' ? 'series' : 'games'}, inside the range ${coverage}`;
@@ -499,8 +501,11 @@ export function renderEsports(doc: EsportsDocument, now: Date): string {
   const meta = `Esports · ${matches} ${matches === 1 ? 'match' : 'matches'} across ${doc.titles.map((title) => title.title).join(', ')}`;
   const head = `<div class="feed-head"><div class="feed-titles"><p class="slate-meta">${escapeHtml(meta)}</p><p class="status captured">${escapeHtml(built)}</p></div><details class="method-note"><summary>How these projections work</summary><p class="note">${escapeHtml(doc.model.note)}</p>${checksMarkup(doc.model.checks)}</details></div>`;
   const sections = doc.titles.map((title) => {
-    const cards = title.matches.map((match) => renderMatch(match, now, title.title === 'CS2')).join('');
-    return `<section class="slate-day"><h2 class="slate-title">${escapeHtml(title.title)}</h2><div class="slate">${cards}</div></section>`;
+    // When the feed returned no player history this run, every row would read "not fitted": say so once instead.
+    const blank = title.matches.every((match) => match.players.every((player) => player.props.every((prop) => !prop.projection && prop.mean === null)));
+    const note = blank ? `<p class="state" data-no-history>${escapeHtml(title.source)} returned no player history this run, so ${escapeHtml(title.title)} has no projections or averages until the next refresh.</p>` : '';
+    const cards = title.matches.map((match) => renderMatch(match, now, title.title === 'CS2', !blank)).join('');
+    return `<section class="slate-day"><h2 class="slate-title">${escapeHtml(title.title)}</h2>${note}<div class="slate">${cards}</div></section>`;
   }).join('');
   return `${head}${sections}`;
 }

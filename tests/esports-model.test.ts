@@ -120,3 +120,23 @@ test('a CS2 lineup is the five who played most recently, and a result names the 
   assert.equal(resultText({ status: 'upcoming' }), 'Upcoming');
   assert.equal(resultText({}), null);
 });
+
+test('a title whose feed returned no player history says so once instead of rows of "not fitted"', () => {
+  const now = new Date('2026-11-20T18:00:00Z');
+  const blank: EsportsTitle = {
+    title: 'Dota 2',
+    source: 'OpenDota',
+    matches: [{
+      id: 'd1',
+      start_time: '2026-11-20T17:00:00Z',
+      teams: ['Team A', 'Team B'],
+      competition: 'League',
+      status: 'finished',
+      players: [{ name: 'one', team: 'Team A', props: [{ stat: 'kills', mean: null, projection: null }] }],
+    }],
+  };
+  const html = renderEsports(esportsDocument([blank], now, [{ title: 'Dota 2', stat: 'kills', rows: 0, coverage: 0, mae: 0, dispersion: 1.5, bias: 1 }]), now);
+  assert.match(html, /data-no-history>OpenDota returned no player history this run, so Dota 2 has no projections or averages until the next refresh\./);
+  assert.doesNotMatch(html, /<table/);
+  assert.doesNotMatch(html, /0 earlier games/);
+});

@@ -23,6 +23,13 @@ import { fnv1a } from '../src/rng.ts';
 
 const OUT = 'public/data/esports.json';
 const PRO_MATCH_PAGES = 3;
+/**
+ * OpenDota player histories can stall for minutes. Each gets 12 seconds; three failures in a row, or three minutes
+ * in all, stop the rest, and those players show their average without a projection.
+ */
+const DOTA_HISTORY_TIMEOUT_MS = 12_000;
+const DOTA_HISTORY_FAILURES = 3;
+const DOTA_HISTORY_BUDGET_MS = 180_000;
 const SHOWN_MATCH_DETAILS = 6;
 const HISTORY_LIMIT = 100;
 const FALLBACK_MATCHES = 4;
@@ -75,13 +82,13 @@ async function paceDota(): Promise<void> {
   if (wait > 0) await sleep(wait);
 }
 
-async function dotaGet(path: string): Promise<unknown> {
+async function dotaGet(path: string, timeoutMs = 30000): Promise<unknown> {
   const url = `${OPENDOTA_API}${path}`;
   for (let attempt = 0; attempt < 4; attempt += 1) {
     await paceDota();
     const response = await fetch(url, {
       headers: { 'user-agent': ESPORTS_USER_AGENT, accept: 'application/json' },
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (response.status === 429) {
       await sleep(5000);
@@ -266,6 +273,7 @@ async function buildDota(now: Date): Promise<TitleBuild | null> {
   }
   const shown = selectForTitle(games, now, SHOWN_MATCH_DETAILS);
   const historyCache = new Map<number, DotaHist[]>();
+  const histories = { failures: 0, stopped: false, deadline: Date.now() + DOTA_HISTORY_BUDGET_MS };
   const pending: { game: ProGame; match: EsportsMatch; players: { name: string; team: string; accountId: number | null; played: Record<(typeof DOTA_STATS)[number], number | null> }[] }[] = [];
   for (const game of shown) {
     let detail: unknown;
@@ -290,11 +298,21 @@ async function buildDota(now: Date): Promise<TitleBuild | null> {
     if (players.length === 0) continue;
     for (const player of players) {
       if (player.accountId === null || historyCache.has(player.accountId)) continue;
+      if (histories.stopped || Date.now() > histories.deadline) {
+        if (!histories.stopped) console.error('esports Dota 2 player histories stopped: the three-minute budget ran out');
+        histories.stopped = true;
+        continue;
+      }
       try {
-        historyCache.set(player.accountId, readDotaHistory(await dotaGet(`/players/${player.accountId}/matches?limit=${HISTORY_LIMIT}`)));
+        historyCache.set(player.accountId, readDotaHistory(await dotaGet(`/players/${player.accountId}/matches?limit=${HISTORY_LIMIT}`, DOTA_HISTORY_TIMEOUT_MS)));
+        histories.failures = 0;
       } catch (error) {
         console.error(`esports Dota 2 player ${player.accountId} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
-        historyCache.set(player.accountId, []);
+        histories.failures += 1;
+        if (histories.failures >= DOTA_HISTORY_FAILURES) {
+          histories.stopped = true;
+          console.error(`esports Dota 2 player histories stopped after ${DOTA_HISTORY_FAILURES} failures in a row`);
+        }
       }
     }
     const teams: [string, string] = [game.radiant, game.dire];
@@ -321,7 +339,7 @@ async function buildDota(now: Date): Promise<TitleBuild | null> {
             stat,
             mean: earlierMean(history.map((row) => ({ id: String(row.matchId), start: row.start, value: row[stat] })), String(game.id), game.startMs),
             actual: player.played[stat],
-            projection: publishedProjection(projected.band, 'game'),
+            projection: projected.earlier > 0 ? publishedProjection(projected.band, 'game') : null,
           };
         }),
       };
@@ -473,7 +491,7 @@ function lolProps(player: string, game: LolGame, rows: readonly LolFlat[], calib
       stat,
       mean: earlierMean(games, game.id, game.startMs),
       actual: played ? lolValue(played, stat) : null,
-      projection: publishedProjection(projected.band, 'game'),
+      projection: projected.earlier > 0 ? publishedProjection(projected.band, 'game') : null,
     };
   });
 }
@@ -781,7 +799,8 @@ function csProps(history: readonly CsHist[], matchId: string, startMs: number, f
       stat,
       mean: cs2PerMapMean(rows, matchId, startMs),
       ...(finished ? { actual } : {}),
-      projection: publishedProjection(stat === 'kills' ? projected.kills : projected.headshots, 'maps12'),
+      // A player with no earlier series in the feed has no rate of his own to project.
+      projection: projected.earlier > 0 ? publishedProjection(stat === 'kills' ? projected.kills : projected.headshots, 'maps12') : null,
     };
   });
 }
