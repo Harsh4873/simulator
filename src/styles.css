@@ -3746,13 +3746,13 @@ html {
 /* NFL box score rows: photo, name, then the position. */
 .team-box .who-cell .player-btn { text-align: left; }
 
-/* Projections views: Players, Defense, Matchups and Prices. */
+/* Projections views: Players, Defense and Matchups. */
 
 .proj-modes {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
-  max-width: 34rem;
+  max-width: 26rem;
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 999px;

@@ -14,11 +14,29 @@ import {
   type EsportsProp,
   type EsportsTitle,
   type SeriesRow,
+  type EsportsBand,
   type EsportsCheck,
   type EsportsProjection,
   type EsportsStat,
 } from '../src/esports/props.ts';
-import { fitStatCalibration, poolRate, projectCs2, projectGame, type ProjectionBand, type RateRow, type StatCalibration } from '../src/esports/projection.ts';
+import {
+  adjustedRate,
+  countBand,
+  eloRatings,
+  fitOpponentModel,
+  fitRounds,
+  poolRate,
+  priorRate,
+  roundsPerMap,
+  usualOutcome,
+  winChance,
+  type OpponentFit,
+  type OutcomeRow,
+  type ProjectionBand,
+  type Ratings,
+  type ResultRow,
+  type RoundsModel,
+} from '../src/esports/projection.ts';
 import { fnv1a } from '../src/rng.ts';
 
 const OUT = 'public/data/esports.json';
@@ -163,28 +181,74 @@ export interface TitleBuild {
   checks: EsportsCheck[];
 }
 
+function bandOnly(band: ProjectionBand): EsportsBand {
+  return { mean: Math.round(band.mean * 10) / 10, p10: Math.max(0, Math.round(band.p10)), p50: Math.max(0, Math.round(band.p50)), p90: Math.max(0, Math.round(band.p90)) };
+}
+
 function publishedProjection(band: ProjectionBand, scope: EsportsProjection['scope']): EsportsProjection {
-  return { scope, mean: Math.round(band.mean * 10) / 10, p10: Math.max(0, Math.round(band.p10)), p50: Math.max(0, Math.round(band.p50)), p90: Math.max(0, Math.round(band.p90)) };
+  return { scope, ...bandOnly(band) };
 }
 
-function checkOf(title: EsportsTitle['title'], stat: EsportsStat, calibration: StatCalibration): EsportsCheck {
-  return { title, stat, rows: calibration.rows, coverage: Number.isFinite(calibration.coverage) ? calibration.coverage : 0, mae: Number.isFinite(calibration.mae) ? calibration.mae : 0, dispersion: calibration.dispersion, bias: calibration.bias };
+function checkOf(title: EsportsTitle['title'], stat: EsportsStat, fit: OpponentFit): EsportsCheck {
+  const calibration = fit.calibration;
+  console.log(`esports ${title} ${stat}: ${calibration.rows} checked, error ${calibration.mae} with the opponent (sensitivity ${fit.sensitivity}), ${fit.rateMae} rate alone, ${fit.baselineMae} plain ten-game average; ${Math.round((Number.isFinite(calibration.coverage) ? calibration.coverage : 0) * 100)}% inside`);
+  const finite = (value: number) => (Number.isFinite(value) ? value : 0);
+  return {
+    title,
+    stat,
+    rows: calibration.rows,
+    coverage: finite(calibration.coverage),
+    mae: finite(calibration.mae),
+    dispersion: calibration.dispersion,
+    bias: calibration.bias,
+    baseline_mae: finite(fit.baselineMae),
+    opponent: fit.sensitivity > 0,
+  };
 }
 
-/** One game a row: a player's value of one stat, for a per-game projection. */
-function perGame(rows: readonly { id: string; start: number; value: number | null }[]): RateRow[] {
-  return rows.filter((row) => row.value !== null && Number.isFinite(row.value)).map((row) => ({ id: row.id, start: row.start, units: 1, value: row.value as number }));
+/** One of a player's earlier games for a per-game stat: the count, whether his side won, and its chance beforehand. */
+interface GameRow {
+  id: string;
+  start: number;
+  values: Partial<Record<EsportsStat, number | null>>;
+  won: boolean | null;
+  team: string | null;
+  enemy: string | null;
 }
 
-/** Per-game calibration for each projected stat, from every loaded player's earlier games. */
-function gameCalibrations(stats: readonly EsportsStat[], players: readonly (readonly { id: string; start: number; values: Partial<Record<EsportsStat, number | null>> }[])[]) {
-  const out = new Map<EsportsStat, { prior: number; calibration: StatCalibration }>();
-  for (const stat of stats) {
-    const rows = players.map((games) => perGame(games.map((game) => ({ id: game.id, start: game.start, value: game.values[stat] ?? null }))));
-    const prior = poolRate(rows, FALLBACK_RATE[stat] ?? 5);
-    out.set(stat, { prior, calibration: fitStatCalibration(rows, prior, 3) });
+function gameOutcomeRows(rows: readonly GameRow[], stat: EsportsStat, ratings: Ratings): OutcomeRow[] {
+  const out: OutcomeRow[] = [];
+  for (const row of rows) {
+    const value = row.values[stat];
+    if (value === null || value === undefined || !Number.isFinite(value)) continue;
+    out.push({ id: row.id, start: row.start, units: 1, value, outcome: row.won === null ? null : row.won ? 1 : 0, expected: expectedShare(ratings, row.team, row.enemy, row.start) });
   }
   return out;
+}
+
+interface GameFit {
+  prior: number;
+  fit: OpponentFit;
+}
+
+/** Per-game fit for each projected stat, from every loaded player's earlier games. */
+function gameFits(stats: readonly EsportsStat[], players: readonly (readonly GameRow[])[], ratings: Ratings): Map<EsportsStat, GameFit> {
+  const out = new Map<EsportsStat, GameFit>();
+  for (const stat of stats) {
+    const rows = players.map((games) => gameOutcomeRows(games, stat, ratings));
+    const prior = poolRate(rows, FALLBACK_RATE[stat] ?? 5);
+    out.set(stat, { prior, fit: fitOpponentModel(rows, prior, 3) });
+  }
+  return out;
+}
+
+/** A per-game projection: his rate, moved by his side's chance against this opponent compared with its usual. */
+function gameProjection(rows: readonly OutcomeRow[], id: string, start: number, expected: number | null, fit: GameFit, seed: number): EsportsProjection | null {
+  const rate = priorRate(rows, start, id, fit.prior, 3);
+  // A player with no earlier game in the feed has no rate of his own to project.
+  if (rate.n === 0) return null;
+  const mean = adjustedRate(rate.rate, fit.fit.sensitivity, expected, usualOutcome(rows, start, id));
+  return publishedProjection(countBand(mean, 1, fit.fit.calibration, seed), 'game');
 }
 
 interface ProGame {
@@ -223,6 +287,9 @@ interface DotaHist {
   kills: number | null;
   deaths: number | null;
   assists: number | null;
+  /** Below 128 is Radiant. */
+  slot: number | null;
+  radiantWin: boolean | null;
 }
 
 function readDotaHistory(payload: unknown): DotaHist[] {
@@ -243,6 +310,8 @@ function readDotaHistory(payload: unknown): DotaHist[] {
       kills: countOf(row.kills),
       deaths: countOf(row.deaths),
       assists: countOf(row.assists),
+      slot: typeof row.player_slot === 'number' && Number.isInteger(row.player_slot) ? row.player_slot : null,
+      radiantWin: typeof row.radiant_win === 'boolean' ? row.radiant_win : null,
     });
   }
   return rows;
@@ -320,26 +389,42 @@ async function buildDota(now: Date): Promise<TitleBuild | null> {
     pending.push({ game, players, match: { id: String(game.id), start_time: game.start_time, teams, competition: game.league, status: 'finished', winner: sideWinner(teams, radiantWin), score: null, players: [] } });
   }
   if (pending.length === 0) return null;
-  // Only pro games count toward a rate: a player's public games are a different game.
+  // Only pro games count toward a rate: a player's public games are a different game. Teams are rated from the
+  // pro games listed, each counted once.
+  const proById = new Map(games.map((game) => [game.id, game]));
+  const ratings = eloRatings(games.filter((game) => game.radiantWin !== null).map((game) => ({ id: String(game.id), at: game.startMs, a: game.radiant, b: game.dire, score: game.radiantWin ? 1 : 0 })));
   const kept = (accountId: number | null) => (accountId === null ? [] : (historyCache.get(accountId) ?? []).filter((row) => listed.has(row.matchId)));
-  const asGames = (rows: readonly DotaHist[]) => rows.map((row) => ({ id: String(row.matchId), start: row.start, values: { kills: row.kills, assists: row.assists } }));
-  const calibrations = gameCalibrations(PROJECTED['Dota 2'], [...historyCache.keys()].map((id) => asGames(kept(id))));
+  const asGames = (rows: readonly DotaHist[]): GameRow[] =>
+    rows.map((row) => {
+      const pro = proById.get(row.matchId);
+      const radiant = row.slot === null ? null : row.slot < 128;
+      return {
+        id: String(row.matchId),
+        start: row.start,
+        values: { kills: row.kills, assists: row.assists },
+        won: radiant === null || row.radiantWin === null ? null : radiant === row.radiantWin,
+        team: pro && radiant !== null ? (radiant ? pro.radiant : pro.dire) : null,
+        enemy: pro && radiant !== null ? (radiant ? pro.dire : pro.radiant) : null,
+      };
+    });
+  const fits = gameFits(PROJECTED['Dota 2'], [...historyCache.keys()].map((id) => asGames(kept(id))), ratings);
   const matches: EsportsMatch[] = [];
   for (const { game, match, players } of pending) {
     const built: EsportsPlayer[] = players.map((player) => {
       const history = kept(player.accountId);
+      const games = asGames(history);
+      const enemy = player.team === game.radiant ? game.dire : game.radiant;
+      const expected = expectedShare(ratings, player.team, enemy, game.startMs);
       return {
         name: player.name,
         team: player.team,
         props: PROJECTED['Dota 2'].map((stat) => {
-          const fit = calibrations.get(stat)!;
-          const rows = perGame(history.map((row) => ({ id: String(row.matchId), start: row.start, value: row[stat] })));
-          const projected = projectGame(rows, game.startMs, String(game.id), fit.prior, fit.calibration, fnv1a(`dota:${game.id}:${player.name}:${stat}`));
+          const rows = gameOutcomeRows(games, stat, ratings);
           return {
             stat,
             mean: earlierMean(history.map((row) => ({ id: String(row.matchId), start: row.start, value: row[stat] })), String(game.id), game.startMs),
             actual: player.played[stat],
-            projection: projected.earlier > 0 ? publishedProjection(projected.band, 'game') : null,
+            projection: gameProjection(rows, String(game.id), game.startMs, expected, fits.get(stat)!, fnv1a(`dota:${game.id}:${player.name}:${stat}`)),
           };
         }),
       };
@@ -348,7 +433,7 @@ async function buildDota(now: Date): Promise<TitleBuild | null> {
   }
   return {
     title: { title: 'Dota 2', source: 'OpenDota', matches },
-    checks: PROJECTED['Dota 2'].map((stat) => checkOf('Dota 2', stat, calibrations.get(stat)!.calibration)),
+    checks: PROJECTED['Dota 2'].map((stat) => checkOf('Dota 2', stat, fits.get(stat)!.fit)),
   };
 }
 
@@ -480,18 +565,44 @@ function lolValue(row: LolFlat, stat: (typeof LOL_STATS)[number]): number | null
   return stat === 'kills' ? row.kills : stat === 'deaths' ? row.deaths : stat === 'assists' ? row.assists : row.cs;
 }
 
-function lolProps(player: string, game: LolGame, rows: readonly LolFlat[], calibrations: ReturnType<typeof gameCalibrations>): EsportsProp[] {
+/** Each game once, Team1 against Team2, 1 when Team1 won. */
+export function lolResults(rows: readonly LolFlat[]): ResultRow[] {
+  const results = new Map<string, ResultRow>();
+  for (const row of rows) {
+    if (results.has(row.gameId) || row.winner === null) continue;
+    results.set(row.gameId, { id: row.gameId, at: row.startMs, a: row.team1, b: row.team2, score: row.winner === 1 ? 1 : 0 });
+  }
+  return [...results.values()];
+}
+
+/** A player's game: his side, the other side, and whether his side won. A team name that matches neither side is unknown. */
+function lolGameRow(row: LolFlat): GameRow {
+  const first = row.team === row.team1;
+  const second = row.team === row.team2;
+  const known = first || second;
+  return {
+    id: row.gameId,
+    start: row.startMs,
+    values: { kills: row.kills, assists: row.assists },
+    won: !known || row.winner === null ? null : (row.winner === 1) === first,
+    team: known ? row.team : null,
+    enemy: first ? row.team2 : second ? row.team1 : null,
+  };
+}
+
+function lolProps(player: string, team: string, game: LolGame, rows: readonly LolFlat[], fits: Map<EsportsStat, GameFit>, ratings: Ratings): EsportsProp[] {
   const history = rows.filter((row) => row.player === player);
   const played = history.find((row) => row.gameId === game.id) ?? null;
+  const enemy = team === game.teams[0] ? game.teams[1] : team === game.teams[1] ? game.teams[0] : null;
+  const expected = expectedShare(ratings, team, enemy, game.startMs);
   return PROJECTED['League of Legends'].map((stat) => {
-    const fit = calibrations.get(stat)!;
     const games = history.map((row) => ({ id: row.gameId, start: row.startMs, value: lolValue(row, stat) }));
-    const projected = projectGame(perGame(games), game.startMs, game.id, fit.prior, fit.calibration, fnv1a(`lol:${game.id}:${player}:${stat}`));
+    const outcomeRows = gameOutcomeRows(history.map(lolGameRow), stat, ratings);
     return {
       stat,
       mean: earlierMean(games, game.id, game.startMs),
       actual: played ? lolValue(played, stat) : null,
-      projection: projected.earlier > 0 ? publishedProjection(projected.band, 'game') : null,
+      projection: gameProjection(outcomeRows, game.id, game.startMs, expected, fits.get(stat)!, fnv1a(`lol:${game.id}:${player}:${stat}`)),
     };
   });
 }
@@ -550,13 +661,11 @@ async function buildLol(now: Date): Promise<TitleBuild | null> {
   const history = dedupeLol([...rows, ...(await lolPlayerHistory(shown.flatMap((game) => game.players.map((player) => player.name))))]);
   const byPlayer = new Map<string, LolFlat[]>();
   for (const row of history) byPlayer.set(row.player, [...(byPlayer.get(row.player) ?? []), row]);
-  const calibrations = gameCalibrations(
-    PROJECTED['League of Legends'],
-    [...byPlayer.values()].map((games) => games.map((row) => ({ id: row.gameId, start: row.startMs, values: { kills: row.kills, assists: row.assists } }))),
-  );
+  const ratings = eloRatings(lolResults(history));
+  const fits = gameFits(PROJECTED['League of Legends'], [...byPlayer.values()].map((games) => games.map(lolGameRow)), ratings);
   const matches: EsportsMatch[] = [];
   for (const game of shown) {
-    const players = game.players.map((player) => ({ name: player.name, team: player.team, props: lolProps(player.name, game, history, calibrations) }));
+    const players = game.players.map((player) => ({ name: player.name, team: player.team, props: lolProps(player.name, player.team, game, history, fits, ratings) }));
     if (players.length === 0) continue;
     // Leaguepedia scoreboards are filed after a game ends.
     matches.push({
@@ -573,7 +682,7 @@ async function buildLol(now: Date): Promise<TitleBuild | null> {
   if (matches.length === 0) return null;
   return {
     title: { title: 'League of Legends', source: 'Leaguepedia', matches },
-    checks: PROJECTED['League of Legends'].map((stat) => checkOf('League of Legends', stat, calibrations.get(stat)!.calibration)),
+    checks: PROJECTED['League of Legends'].map((stat) => checkOf('League of Legends', stat, fits.get(stat)!.fit)),
   };
 }
 
@@ -593,6 +702,8 @@ interface CsMatch {
   /** Maps won by team1 and team2, when the feed has both. */
   score: [number, number] | null;
   winnerId: number | null;
+  /** Best of 1, 3 or 5, when the feed says. */
+  bestOf: number | null;
 }
 
 function csTeam(value: unknown, fallbackId: unknown): CsTeam | null {
@@ -650,6 +761,7 @@ function readCsMatch(value: unknown): CsMatch | null {
     competition: tournament ? text(tournament.name) : null,
     score: status !== 'upcoming' && first !== null && second !== null ? [first, second] : null,
     winnerId: typeof row.winner_team_id === 'number' && Number.isInteger(row.winner_team_id) ? row.winner_team_id : null,
+    bestOf: typeof row.bo_type === 'number' && [1, 2, 3, 5, 7].includes(row.bo_type) ? row.bo_type : null,
   };
 }
 
@@ -724,6 +836,10 @@ interface CsHist {
   id: string;
   start: number;
   maps: number;
+  /** Maps his side won in the series, when the feed lists them. */
+  mapWins: number | null;
+  teamId: number | null;
+  enemyId: number | null;
   /** Rounds played across the series. */
   rounds: number | null;
   kills: number | null;
@@ -743,9 +859,15 @@ function readCsHistory(payload: unknown): CsHist[] {
     if ((typeof id !== 'number' && typeof id !== 'string') || !Number.isFinite(start)) continue;
     const stats = Array.isArray(row.stats) ? record(row.stats[0]) : null;
     const value = (key: string): number | null => (stats ? countOf(stats[key]) : null);
+    const wins = Array.isArray(row.game_wins) && row.game_wins.every((value) => value === 0 || value === 1) ? row.game_wins.reduce((sum: number, value: number) => sum + value, 0) : null;
+    const teamId = typeof row.team_id === 'number' && Number.isInteger(row.team_id) ? row.team_id : null;
+    const enemyId = typeof row.enemy_team_id === 'number' && Number.isInteger(row.enemy_team_id) ? row.enemy_team_id : null;
     rows.push({
       id: String(id),
       start,
+      mapWins: wins,
+      teamId,
+      enemyId,
       maps: Array.isArray(row.for_game_ids) ? row.for_game_ids.length : 0,
       rounds: typeof row.rounds_count === 'number' && Number.isFinite(row.rounds_count) && row.rounds_count > 0 ? row.rounds_count : null,
       kills: value('kills'),
@@ -770,37 +892,79 @@ function csTotal(row: CsHist, stat: (typeof CS2_STATS)[number]): number | null {
   return stat === 'kills' ? row.kills : stat === 'headshots' ? row.headshots : stat === 'deaths' ? row.deaths : row.assists;
 }
 
-/** Rounds-weighted rows of one stat: a series counts by the rounds it ran. Rows without a round count are left out. */
-export function perRound(history: readonly CsHist[], stat: (typeof CS2_STATS)[number]): RateRow[] {
-  const rows: RateRow[] = [];
+/** Each series once, as a result between the two teams: his side's share of the maps. */
+export function csResults(histories: Iterable<readonly CsHist[]>): ResultRow[] {
+  const results = new Map<string, ResultRow>();
+  for (const rows of histories) {
+    for (const row of rows) {
+      if (results.has(row.id) || row.teamId === null || row.enemyId === null || row.mapWins === null || row.maps < 1) continue;
+      results.set(row.id, { id: row.id, at: row.start, a: String(row.teamId), b: String(row.enemyId), score: row.mapWins / row.maps });
+    }
+  }
+  return [...results.values()];
+}
+
+/** Both teams need two earlier results before their ratings say anything about a matchup. */
+const MIN_RATED = 2;
+
+function expectedShare(ratings: Ratings, team: string | null, enemy: string | null, at: number): number | null {
+  if (team === null || enemy === null) return null;
+  if (ratings.played(team, at) < MIN_RATED || ratings.played(enemy, at) < MIN_RATED) return null;
+  return winChance(ratings.before(team, at), ratings.before(enemy, at));
+}
+
+/** A player's series as outcome rows: per round for the rate, maps for the check, and his side's expected map share. */
+export function csOutcomeRows(history: readonly CsHist[], stat: (typeof CS2_STATS)[number], ratings: Ratings): OutcomeRow[] {
+  const rows: OutcomeRow[] = [];
   for (const row of history) {
     const total = csTotal(row, stat);
-    if (row.rounds === null || total === null) continue;
-    rows.push({ id: row.id, start: row.start, units: row.rounds, value: total });
+    if (row.rounds === null || total === null || row.maps < 1) continue;
+    rows.push({
+      id: row.id,
+      start: row.start,
+      units: row.rounds,
+      value: total,
+      maps: row.maps,
+      outcome: row.mapWins === null ? null : row.mapWins / row.maps,
+      expected: expectedShare(ratings, row.teamId === null ? null : String(row.teamId), row.enemyId === null ? null : String(row.enemyId), row.start),
+    });
   }
   return rows;
 }
 
 interface CsFit {
-  priors: { kpr: number; hspr: number };
-  kills: StatCalibration;
-  headshots: StatCalibration;
+  priors: { kills: number; headshots: number };
+  ratings: Ratings;
+  rounds: RoundsModel;
+  kills: OpponentFit;
+  headshots: OpponentFit;
 }
 
-function csProps(history: readonly CsHist[], matchId: string, startMs: number, fit: CsFit, finished: boolean, seed: string): EsportsProp[] {
-  const played = history.find((row) => row.id === matchId) ?? null;
-  const projected = projectCs2(perRound(history, 'kills'), perRound(history, 'headshots'), startMs, matchId, fit.priors, { kills: fit.kills, headshots: fit.headshots }, fnv1a(seed));
+/**
+ * A player's kills and headshots a map against this opponent: his per-round rate, moved by how his side is expected to
+ * do against this opponent compared with its usual, times the rounds a map that matchup is expected to run. A best of
+ * three or five also gets maps 1 and 2 together, the market's usual count.
+ */
+function csProps(history: readonly CsHist[], match: CsMatch, teamId: number | null, enemyId: number | null, fit: CsFit, finished: boolean, seed: string): EsportsProp[] {
+  const played = history.find((row) => row.id === match.id) ?? null;
+  const expected = expectedShare(fit.ratings, teamId === null ? null : String(teamId), enemyId === null ? null : String(enemyId), match.startMs);
+  const rounds = roundsPerMap(fit.rounds, expected);
   return PROJECTED.CS2.map((stat) => {
     const rows: SeriesRow[] = history.map((row) => ({ id: row.id, start: row.start, maps: row.maps, total: csTotal(row, stat) }));
-    // This series on the average's scale: its total over the maps played.
     const total = played ? csTotal(played, stat) : null;
     const actual = finished && played && played.maps > 0 && total !== null ? Number((total / played.maps).toFixed(2)) : null;
+    const model = stat === 'kills' ? fit.kills : fit.headshots;
+    const outcomeRows = csOutcomeRows(history, stat, fit.ratings);
+    const rate = priorRate(outcomeRows, match.startMs, match.id, fit.priors[stat], 120);
+    const perMap = adjustedRate(rate.rate, model.sensitivity, expected, usualOutcome(outcomeRows, match.startMs, match.id)) * rounds;
+    const map = countBand(perMap, 1, model.calibration, fnv1a(`${seed}:${stat}:map`));
+    const pair = match.bestOf !== null && match.bestOf >= 3 ? countBand(perMap, 2, model.calibration, fnv1a(`${seed}:${stat}:maps12`)) : null;
     return {
       stat,
-      mean: cs2PerMapMean(rows, matchId, startMs),
+      mean: cs2PerMapMean(rows, match.id, match.startMs),
       ...(finished ? { actual } : {}),
       // A player with no earlier series in the feed has no rate of his own to project.
-      projection: projected.earlier > 0 ? publishedProjection(stat === 'kills' ? projected.kills : projected.headshots, 'maps12') : null,
+      projection: rate.n > 0 ? { ...publishedProjection(map, 'map'), ...(pair ? { maps12: bandOnly(pair) } : {}) } : null,
     };
   });
 }
@@ -832,11 +996,23 @@ async function buildCs(now: Date): Promise<TitleBuild | null> {
   const histories = new Map<string, CsHist[]>();
   const historyRows = await mapPool([...needed], 4, async (slug) => ({ slug, rows: await csHistory(slug) }));
   for (const row of historyRows) histories.set(row.slug, row.rows);
-  // Rates and their calibration come from every loaded player's earlier series.
-  const killRows = [...histories.values()].map((rows) => perRound(rows, 'kills'));
-  const hsRows = [...histories.values()].map((rows) => perRound(rows, 'headshots'));
-  const priors = { kpr: poolRate(killRows, 0.68), hspr: poolRate(hsRows, 0.3) };
-  const fit: CsFit = { priors, kills: fitStatCalibration(killRows, priors.kpr, 120), headshots: fitStatCalibration(hsRows, priors.hspr, 120) };
+  // Ratings, rates and their calibration come from every loaded player's earlier series.
+  const ratings = eloRatings(csResults(histories.values()));
+  const seriesRounds = new Map<string, { roundsPerMap: number; expected: number | null }>();
+  for (const rows of histories.values()) {
+    for (const row of rows) {
+      if (seriesRounds.has(row.id) || row.rounds === null || row.maps < 1) continue;
+      seriesRounds.set(row.id, { roundsPerMap: row.rounds / row.maps, expected: expectedShare(ratings, row.teamId === null ? null : String(row.teamId), row.enemyId === null ? null : String(row.enemyId), row.start) });
+    }
+  }
+  const rounds = fitRounds([...seriesRounds.values()]);
+  const killRows = [...histories.values()].map((rows) => csOutcomeRows(rows, 'kills', ratings));
+  const hsRows = [...histories.values()].map((rows) => csOutcomeRows(rows, 'headshots', ratings));
+  const priors = { kills: poolRate(killRows, 0.68), headshots: poolRate(hsRows, 0.3) };
+  // The check multiplies a rate by the rounds the matchup was expected to run, not the rounds it did.
+  const expectedUnits = (row: OutcomeRow) => roundsPerMap(rounds, row.expected) * (row.maps ?? 1);
+  const fit: CsFit = { priors, ratings, rounds, kills: fitOpponentModel(killRows, priors.kills, 120, expectedUnits), headshots: fitOpponentModel(hsRows, priors.headshots, 120, expectedUnits) };
+  console.log(`esports CS2 rounds a map ${rounds.even} even, ${rounds.slope} fewer per unit off even; ${seriesRounds.size} series`);
   const built: EsportsMatch[] = [];
   for (const match of shown) {
     const players: EsportsPlayer[] = [];
@@ -851,9 +1027,10 @@ async function buildCs(now: Date): Promise<TitleBuild | null> {
               const before = (histories.get(slug) ?? []).filter((row) => row.start < match.startMs).map((row) => row.start);
               return before.length ? Math.max(...before) : Number.NEGATIVE_INFINITY;
             });
+      const enemy = match.teams[0] === team ? match.teams[1] : match.teams[0];
       for (const player of lineup) {
         seen.add(player.slug);
-        const props = csProps(histories.get(player.slug) ?? [], match.id, match.startMs, fit, match.status === 'finished', `cs2:${match.id}:${player.slug}`);
+        const props = csProps(histories.get(player.slug) ?? [], match, team.id, enemy.id, fit, match.status === 'finished', `cs2:${match.id}:${player.slug}`);
         players.push({ name: player.name, team: team.name, props });
       }
     }
@@ -864,6 +1041,7 @@ async function buildCs(now: Date): Promise<TitleBuild | null> {
       teams: [match.teams[0].name, match.teams[1].name],
       competition: match.competition,
       ...csResult(match),
+      ...(match.bestOf !== null ? { best_of: match.bestOf } : {}),
       players,
     });
   }

@@ -54,8 +54,8 @@ export type HistorySplit = 'all' | 'home' | 'away';
 /** The board shows every game still to play, or one game. */
 export type BoardScope = 'all' | 'game';
 export type BoardSort = 'projection' | 'over' | 'under' | 'matchup';
-/** Players is the card board; Defense ranks tonight's defenses by position; Matchups and Prices are the team report and the posted prices. */
-export type ProjectionMode = 'players' | 'defense' | 'matchups' | 'prices';
+/** Players is the card board; Defense ranks tonight's defenses by position; Matchups is the team report. */
+export type ProjectionMode = 'players' | 'defense' | 'matchups';
 /** Keeps the cards whose opponent is soft (ranked 21st to 30th in what it allows) or tough (1st to 10th) at the player's position. */
 export type DvpFilter = 'all' | 'soft' | 'tough';
 /** One defense and position picked from the Defense view. */
@@ -103,7 +103,7 @@ export interface ProjectionView {
   /** How many cards the every-game board shows before its Show all button. Unset shows them all. */
   boardLimit?: number | null;
   mode?: ProjectionMode;
-  /** The Matchups or Prices body, rendered from files the view does not carry. */
+  /** The Matchups body, rendered from a file the view does not carry. */
   modeBody?: string;
   dvpFilter?: DvpFilter;
   dvpFocus?: DvpFocus | null;
@@ -115,7 +115,6 @@ export const PROJECTION_MODES: readonly { value: ProjectionMode; label: string }
   { value: 'players', label: 'Players' },
   { value: 'defense', label: 'Defense' },
   { value: 'matchups', label: 'Matchups' },
-  { value: 'prices', label: 'Prices' },
 ];
 
 export function isProjectionMode(value: string): value is ProjectionMode {
@@ -1921,9 +1920,7 @@ function introHtml(mode: ProjectionMode): string {
       ? 'How tonight\'s defenses hold each position. Pick a stat, then tap a number for the players in that matchup.'
       : mode === 'matchups'
         ? 'Each game in words: recent results, opponents, injuries and points allowed by position.'
-        : mode === 'prices'
-          ? 'Every posted line with its price, hold and fair price.'
-          : 'Every player, 10,000 simulated games. Pick a stat, then tap a player for the full breakdown.';
+        : 'Every player, 10,000 simulated games. Pick a stat, then tap a player for the full breakdown.';
   return `<header class="projection-intro">
         <div class="projection-titles">
           <h2>Projections</h2>
@@ -1943,7 +1940,7 @@ export function renderProjections(view: ProjectionView): string {
       ${defenseModeHtml(view)}
     </div>`;
   }
-  if (mode === 'matchups' || mode === 'prices') {
+  if (mode === 'matchups') {
     return `<div class="projection-page" data-proj-view="${mode}">
       ${introHtml(mode)}
       <div class="proj-mode-body">${view.modeBody ?? ''}</div>

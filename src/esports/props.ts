@@ -2,12 +2,13 @@ import { chicagoDate, formatTip, shiftChicagoDate } from '../date.ts';
 import { escapeHtml } from '../slate.ts';
 import { CS2_STATS, DOTA_STATS, LOL_STATS, MIN_GAMES } from './config.ts';
 
-export const ESPORTS_MODEL_NAME = 'esports-player-projections-v1';
-/** Files published before projections carry this name and still parse. */
+export const ESPORTS_MODEL_NAME = 'esports-player-projections-v2';
+/** Files published before the opponent adjustment, and before projections, carry these names and still parse. */
+export const PREVIOUS_ESPORTS_MODEL_NAME = 'esports-player-projections-v1';
 export const LEGACY_ESPORTS_MODEL_NAME = 'esports-player-means-v1';
 
 export const ESPORTS_MODEL_NOTE =
-  `Each projection is that player's own rate from his earlier games, newest weighted most and pulled toward the field when he has few: CS2 kills and headshots per round over maps 1 and 2 (each map 13 to about 30 rounds), Dota 2 and League of Legends per game. The displayed game is never part of its own projection, and a player with no earlier game in the feed gets none. The ranges are calibrated on the same players' earlier games so 8 in 10 results land inside, and the plain average is shown under each projection. No match winner and no posted line were used.`;
+  `Each projection starts from that player's own rate in his earlier games, newest weighted most and pulled toward the field when he has few. It then moves with the opponent: each team is rated from its earlier results, and a player's count rises or falls with how his side is expected to do against this opponent compared with how it usually did. CS2 is per map, per round times the rounds that matchup is expected to run, with maps 1 and 2 together for a best of three. Dota 2 and League of Legends are per game. The displayed game is never part of its own projection. Ranges are calibrated on the same players' earlier games so 8 in 10 results land inside. No posted line or price is used.`;
 
 export type EsportsStat = (typeof DOTA_STATS)[number] | (typeof LOL_STATS)[number] | (typeof CS2_STATS)[number];
 
@@ -21,12 +22,18 @@ export interface EsportsProp {
   projection?: EsportsProjection | null;
 }
 
-export interface EsportsProjection {
-  scope: 'maps12' | 'game';
+export interface EsportsBand {
   mean: number;
   p10: number;
   p50: number;
   p90: number;
+}
+
+export interface EsportsProjection extends EsportsBand {
+  /** CS2 per map (older files: over maps 1-2); Dota 2 and League of Legends per game. */
+  scope: 'map' | 'maps12' | 'game';
+  /** CS2 best of three or five: maps 1 and 2 together. */
+  maps12?: EsportsBand;
 }
 
 /** How a stat's projection did on the same players' earlier games. */
@@ -38,6 +45,10 @@ export interface EsportsCheck {
   mae: number;
   dispersion: number;
   bias: number;
+  /** Error of the player's plain ten-game average on the same games. Older files omit it. */
+  baseline_mae?: number;
+  /** Whether the opponent adjustment beat the rate alone on earlier games and so was used. */
+  opponent?: boolean;
 }
 
 export interface EsportsPlayer {
@@ -60,6 +71,8 @@ export interface EsportsMatch {
   winner?: string | null;
   /** Maps won by each of `teams` (CS2 series). Null for a single game. */
   score?: [number, number] | null;
+  /** Best of 1, 3 or 5, when the feed says. */
+  best_of?: number;
 }
 
 export interface EsportsTitle {
@@ -69,7 +82,7 @@ export interface EsportsTitle {
 }
 
 export interface EsportsModel {
-  name: typeof ESPORTS_MODEL_NAME | typeof LEGACY_ESPORTS_MODEL_NAME;
+  name: typeof ESPORTS_MODEL_NAME | typeof PREVIOUS_ESPORTS_MODEL_NAME | typeof LEGACY_ESPORTS_MODEL_NAME;
   fitted: boolean;
   note: string;
   checks?: EsportsCheck[];
@@ -216,6 +229,7 @@ export function esportsDocument(titles: readonly EsportsTitle[], now: Date, chec
         ...(match.status ? { status: match.status } : {}),
         ...(match.winner !== undefined ? { winner: match.winner } : {}),
         ...(match.score !== undefined ? { score: match.score } : {}),
+        ...(match.best_of !== undefined ? { best_of: match.best_of } : {}),
         players: match.players.map((player) => ({
           name: player.name,
           team: player.team,
@@ -250,16 +264,26 @@ function propOf(value: unknown): EsportsProp | null {
   return prop;
 }
 
-function projectionOf(value: unknown): EsportsProjection | null | undefined {
-  if (value === null) return null;
-  const row = record(value);
-  if (!row || (row.scope !== 'maps12' && row.scope !== 'game')) return undefined;
+function bandOf(row: Record<string, unknown>): EsportsBand | undefined {
   const mean = finite(row.mean);
   const p10 = finite(row.p10);
   const p50 = finite(row.p50);
   const p90 = finite(row.p90);
   if (mean === null || p10 === null || p50 === null || p90 === null || p10 < 0 || !(p10 <= p50 && p50 <= p90)) return undefined;
-  return { scope: row.scope, mean, p10, p50, p90 };
+  return { mean, p10, p50, p90 };
+}
+
+function projectionOf(value: unknown): EsportsProjection | null | undefined {
+  if (value === null) return null;
+  const row = record(value);
+  if (!row || (row.scope !== 'map' && row.scope !== 'maps12' && row.scope !== 'game')) return undefined;
+  const band = bandOf(row);
+  if (!band) return undefined;
+  if (row.maps12 === undefined) return { scope: row.scope, ...band };
+  const pair = record(row.maps12);
+  const maps12 = pair && row.scope === 'map' ? bandOf(pair) : undefined;
+  if (!maps12) return undefined;
+  return { scope: row.scope, ...band, maps12 };
 }
 
 function checkOf(value: unknown): EsportsCheck | null {
@@ -267,7 +291,19 @@ function checkOf(value: unknown): EsportsCheck | null {
   if (!row || typeof row.title !== 'string' || !TITLES.has(row.title as EsportsTitle['title']) || typeof row.stat !== 'string' || !STATS.has(row.stat)) return null;
   const numbers = [row.rows, row.coverage, row.mae, row.dispersion, row.bias];
   if (!numbers.every((item) => finite(item) !== null) || !Number.isInteger(row.rows) || (row.coverage as number) < 0 || (row.coverage as number) > 1) return null;
-  return { title: row.title as EsportsCheck['title'], stat: row.stat as EsportsStat, rows: row.rows as number, coverage: row.coverage as number, mae: row.mae as number, dispersion: row.dispersion as number, bias: row.bias as number };
+  if (row.baseline_mae !== undefined && (finite(row.baseline_mae) === null || (row.baseline_mae as number) < 0)) return null;
+  if (row.opponent !== undefined && typeof row.opponent !== 'boolean') return null;
+  return {
+    title: row.title as EsportsCheck['title'],
+    stat: row.stat as EsportsStat,
+    rows: row.rows as number,
+    coverage: row.coverage as number,
+    mae: row.mae as number,
+    dispersion: row.dispersion as number,
+    bias: row.bias as number,
+    ...(row.baseline_mae !== undefined ? { baseline_mae: row.baseline_mae as number } : {}),
+    ...(row.opponent !== undefined ? { opponent: row.opponent as boolean } : {}),
+  };
 }
 
 const STATUSES = new Set<EsportsStatus>(['upcoming', 'live', 'finished']);
@@ -329,7 +365,9 @@ function matchOf(value: unknown): EsportsMatch | null {
   }
   const result = resultOf(row, [left, right]);
   if (!result) return null;
-  return { id, start_time: new Date(start).toISOString(), teams: [left, right], competition, ...result, players };
+  if (row.best_of !== undefined && !(Number.isInteger(row.best_of) && (row.best_of as number) >= 1 && (row.best_of as number) <= 7)) return null;
+  const bestOf = row.best_of === undefined ? {} : { best_of: row.best_of as number };
+  return { id, start_time: new Date(start).toISOString(), teams: [left, right], competition, ...result, ...bestOf, players };
 }
 
 function titleOf(value: unknown): EsportsTitle | null {
@@ -349,7 +387,7 @@ function titleOf(value: unknown): EsportsTitle | null {
 function modelOf(value: unknown): EsportsModel | null {
   const row = record(value);
   if (!row || (row.fitted !== true && row.fitted !== false)) return null;
-  if (row.name !== ESPORTS_MODEL_NAME && row.name !== LEGACY_ESPORTS_MODEL_NAME) return null;
+  if (row.name !== ESPORTS_MODEL_NAME && row.name !== PREVIOUS_ESPORTS_MODEL_NAME && row.name !== LEGACY_ESPORTS_MODEL_NAME) return null;
   const note = text(row.note);
   if (!note) return null;
   const fitted = row.fitted === true;
@@ -414,25 +452,31 @@ function whenLabel(iso: string, now: Date): string {
 }
 
 /** The played value under a projection: whole counts as they are, CS2 per-map values to one decimal. */
-function actualText(actual: number, perMap: boolean): string {
-  const shown = Number.isInteger(actual) ? String(actual) : actual.toFixed(1);
-  return perMap ? `${shown} a map` : shown;
+function actualText(actual: number): string {
+  return Number.isInteger(actual) ? String(actual) : actual.toFixed(1);
 }
 
-const SCOPE_LABEL: Record<EsportsProjection['scope'], string> = { maps12: 'maps 1-2', game: 'this game' };
+const SCOPE_LABEL: Record<EsportsProjection['scope'], string> = { map: 'a map', maps12: 'maps 1-2', game: 'a game' };
 
+/**
+ * One stat for one player: the projection's median and its 10th to 90th range, maps 1 and 2 together for a CS2 best of
+ * three, and once played what he did, on the projection's own scale. The plain average sits in the cell's title.
+ */
 function projectionCell(prop: EsportsProp | undefined, perMap: boolean): string {
   if (!prop) return '<td>—</td>';
-  const played =
-    typeof prop.actual === 'number' && Number.isFinite(prop.actual)
-      ? `<span class="pct" data-actual>Played ${escapeHtml(actualText(prop.actual, perMap))}</span>`
-      : '';
-  const average = prop.mean === null ? 'avg not fitted' : `avg ${formatStat(prop.mean)}${perMap ? ' a map' : ''}`;
-  if (prop.projection) {
-    const projection = prop.projection;
-    return `<td data-projection><span class="stat">${Math.round(projection.p50)}</span><span class="pct">${Math.round(projection.p10)}–${Math.round(projection.p90)}</span><span class="pct">${escapeHtml(average)}</span>${played}</td>`;
+  const played = typeof prop.actual === 'number' && Number.isFinite(prop.actual) ? prop.actual : null;
+  const average = prop.mean === null ? 'Plain average not fitted yet' : `Plain average ${formatStat(prop.mean)}${perMap ? ' a map' : ''}`;
+  const projection = prop.projection;
+  if (!projection) {
+    const did = played === null ? '' : `<span class="pct" data-actual>Played ${escapeHtml(actualText(played))}</span>`;
+    return `<td title="${escapeHtml(average)}"><span class="stat">${escapeHtml(formatStat(prop.mean))}</span>${did}</td>`;
   }
-  return `<td><span class="stat">${escapeHtml(formatStat(prop.mean))}</span>${played}</td>`;
+  // An older file's CS2 number is over maps 1 and 2 while what he did is a map's average, so it reads against nothing.
+  const comparable = projection.scope !== 'maps12';
+  const result = played === null || !comparable ? '' : played > projection.p50 ? 'over' : played < projection.p50 ? 'under' : 'push';
+  const did = played === null ? '' : `<span class="pct" data-actual${result ? ` data-result="${result}"` : ''}>Played ${escapeHtml(actualText(played))}</span>`;
+  const pair = projection.maps12 ? `<span class="pct" data-maps12>Maps 1–2 ${Math.round(projection.maps12.p50)} · ${Math.round(projection.maps12.p10)}–${Math.round(projection.maps12.p90)}</span>` : '';
+  return `<td data-projection title="${escapeHtml(average)}"><span class="stat">${Math.round(projection.p50)}</span><span class="pct">${Math.round(projection.p10)}–${Math.round(projection.p90)}</span>${pair}${did}</td>`;
 }
 
 /** Upcoming, live or final. Files from before the status field show nothing extra. */
@@ -479,7 +523,7 @@ function renderMatch(match: EsportsMatch, now: Date, perMap: boolean, table = tr
   </article>`;
 }
 
-/** How the projections did on the same players' earlier games, one line per title. */
+/** How the projections did on the same players' earlier games, one line per title, against his plain average. */
 function checksMarkup(checks: readonly EsportsCheck[] | undefined): string {
   if (!checks?.length) return '';
   const titles = [...new Set(checks.map((check) => check.title))];
@@ -488,8 +532,16 @@ function checksMarkup(checks: readonly EsportsCheck[] | undefined): string {
     // A title whose feed returned no history this run was not checked; it says so on its own section instead.
     if (!mine.length) return [];
     const rows = Math.max(...mine.map((check) => check.rows), 0);
-    const coverage = mine.map((check) => `${STAT_LABEL[check.stat].toLowerCase()} ${Math.round(check.coverage * 100)}%`).join(', ');
-    return `${title}: ${rows.toLocaleString('en-US')} earlier ${title === 'CS2' ? 'series' : 'games'}, inside the range ${coverage}`;
+    const stats = mine
+      .map((check) => {
+        const inside = `${Math.round(check.coverage * 100)}% inside the range`;
+        if (!check.baseline_mae || !(check.mae > 0)) return `${STAT_LABEL[check.stat].toLowerCase()} ${inside}`;
+        const change = Math.round((1 - check.mae / check.baseline_mae) * 100);
+        const versus = change > 0 ? `${change}% closer than his plain average` : change < 0 ? `${-change}% further off than his plain average` : 'as close as his plain average';
+        return `${STAT_LABEL[check.stat].toLowerCase()} ${versus}, ${inside}${check.opponent === false ? ', opponent left out because it did not help' : ''}`;
+      })
+      .join('; ');
+    return `${title} (${rows.toLocaleString('en-US')} earlier ${title === 'CS2' ? 'series' : 'games'}): ${stats}`;
   });
   return `<p class="note" data-checks>Checked by projecting each earlier game from the ones before it. ${escapeHtml(parts.join('. '))}.</p>`;
 }

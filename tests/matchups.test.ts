@@ -506,7 +506,7 @@ test('injuries keep unknown, skip a null cap, and defense rows are not a bet', (
   assert.match(renderMatchups(null, slate, card), /The report is not for this card\./);
 });
 
-test('Projections holds the old Board: Prices and Matchups are views, and Matchups does not draw or read lineup edits', async () => {
+test('Projections holds the Matchups report as a view, and it does not draw or read lineup edits', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'sim-matchups-'));
   const { window, document } = parseHTML(readFileSync('index.html', 'utf8'));
   const globals = globalThis as unknown as Record<string, unknown>;
@@ -573,18 +573,14 @@ test('Projections holds the old Board: Prices and Matchups are views, and Matchu
     await build({ entryPoints: ['src/main.ts'], bundle: true, format: 'esm', outfile: join(dir, 'app.mjs'), loader: { '.css': 'empty' }, logLevel: 'silent' });
     await import(pathToFileURL(join(dir, 'app.mjs')).href);
     await flush();
-    // The Board tab is gone: its prices and its Matchups report are views inside Projections.
+    // The Board tab is gone: its Matchups report is a view inside Projections.
     assert.equal(document.querySelector('[data-desk-tab="board"]'), null);
     assert.equal(document.querySelector('#board'), null);
     document.querySelector<HTMLButtonElement>('[data-desk-tab="projections"]')?.click();
     await flush();
     const mode = (value: string) => document.querySelector<HTMLButtonElement>(`#projections [data-proj-mode="${value}"]`);
     assert.equal(mode('players')?.getAttribute('aria-pressed'), 'true');
-    mode('prices')?.click();
-    await flush();
-    assert.equal(mode('prices')?.getAttribute('aria-pressed'), 'true');
-    assert.match(document.querySelector('#projections')?.textContent ?? '', /odds-player/);
-    assert.equal(document.querySelector('#projections [data-verdict]'), null);
+    assert.equal(mode('prices'), null, 'the Prices view is gone');
     assert.equal(document.querySelector('[data-desk-tab="projections"]')?.getAttribute('aria-selected'), 'true');
     assert.equal(document.querySelector('[data-desk-tab="games"]')?.getAttribute('aria-selected'), 'false');
     const drawn = workers;
@@ -594,7 +590,7 @@ test('Projections holds the old Board: Prices and Matchups are views, and Matchu
     assert.equal(workers, drawn);
     assert.equal(reads.includes('simulator.lineups'), false);
     assert.equal(mode('matchups')?.getAttribute('aria-pressed'), 'true');
-    assert.equal(mode('prices')?.getAttribute('aria-pressed'), 'false');
+    assert.equal(mode('players')?.getAttribute('aria-pressed'), 'false');
     assert.equal(document.querySelector('#projections [data-verdict]')?.textContent, 'NO BET');
     assert.equal((document.querySelector('#projections')?.textContent ?? '').includes('odds-player'), false);
     assert.match(document.querySelector('#projections')?.textContent ?? '', /Not a predicted score/);
@@ -603,10 +599,9 @@ test('Projections holds the old Board: Prices and Matchups are views, and Matchu
     mode('defense')?.click();
     await flush();
     assert.match(document.querySelector('#projections')?.textContent ?? '', /Defense numbers are not on this card yet/);
-    mode('prices')?.click();
+    mode('players')?.click();
     await flush();
     assert.equal(workers, drawn);
-    assert.match(document.querySelector('#projections')?.textContent ?? '', /odds-player/);
   } finally {
     globalThis.setInterval = timer;
     rmSync(dir, { recursive: true, force: true });

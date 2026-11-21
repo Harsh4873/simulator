@@ -22,7 +22,6 @@ import { applyLineupOverrides, cleanOverrides, isLineupChoice, LINEUP_STORAGE_KE
 import { healthyCheck } from './generation.ts';
 import { fnv1a } from './rng.ts';
 import type { BookLine } from './book-lines.ts';
-import { buildOddsScreen, renderOddsBoard, type OddsQuote } from './odds-board.ts';
 import { parseMatchupsFile, renderMatchups, type MatchupsFile } from './matchups.ts';
 import { gameLeans, LEAN_BUCKETS, linesByKey, MIN_PLAY_SHARE, parsePicksFile, type Lean, type PicksFile } from './picks.ts';
 import { parsePublishedPropCalibration, type PropCalibrationArtifact, type PropCalibrationCard, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
@@ -119,7 +118,7 @@ let projectionScope: BoardScope = 'all';
 /** The every-game board shows its first cards until the viewer asks for the rest. */
 const BOARD_LIMIT = 40;
 let projectionBoardExpanded = false;
-/** Players, Defense, Matchups or Prices. The old Board tab's two views live here now. */
+/** Players, Defense or Matchups. */
 let projectionMode: ProjectionMode = 'players';
 let dvpFilter: DvpFilter = 'all';
 let dvpFocus: DvpFocus | null = null;
@@ -133,7 +132,7 @@ let projectionAutoLine = false;
 let projectionAutoPrice = false;
 /** Published lines, leans and record. Optional: the page works without it. */
 let picks: PicksFile | null = null;
-/** Descriptive matchup report. Optional: Prices still renders when it is missing or for another card. */
+/** Descriptive matchup report. Optional: the Matchups view says so when it is missing or for another card. */
 let matchups: MatchupsFile | null = null;
 /** True while the optional Matchups report is still on its way. */
 let matchupsLoading = false;
@@ -395,14 +394,11 @@ function projectionView(): ProjectionView | null {
   };
 }
 
-/** The Matchups report or the posted prices, for the two views that read files the projection view does not carry. */
+/** The Matchups report, which reads a file the projection view does not carry. */
 function projectionModeBody(): string {
   if (!slate || !card) return '';
   if (projectionMode === 'matchups') {
     return matchups === null && matchupsLoading ? '<p class="state" role="status">Loading the Matchups report…</p>' : renderMatchups(matchups, slate, card);
-  }
-  if (projectionMode === 'prices') {
-    return renderOddsBoard(buildOddsScreen(boardQuotes(), new Date())) || '<p class="state">No line is posted for this slate yet. Lines usually arrive late morning Central.</p>';
   }
   return '';
 }
@@ -2111,36 +2107,9 @@ function readHash(): string {
   }
 }
 
-function boardQuotes(): OddsQuote[] {
-  const names = new Map<string, string>();
-  for (const game of card?.games ?? []) {
-    for (const player of game.players) {
-      if (player.name && !names.has(player.athlete_id)) names.set(player.athlete_id, player.name);
-    }
-  }
-  const labels = new Map<string, string>();
-  for (const game of slate?.games ?? []) {
-    const away = game.away.abbreviation.trim() || game.away.name.trim();
-    const home = game.home.abbreviation.trim() || game.home.name.trim();
-    if (away && home) labels.set(game.event_id, `${away} at ${home}`);
-  }
-  return [...bookLines.values()].map((line) => ({
-    event: labels.get(line.event_id) ?? line.event_id,
-    player: names.get(line.athlete_id) ?? line.athlete_id,
-    stat: line.market,
-    line: line.line,
-    period: 'full',
-    book: line.book,
-    over: line.over_odds,
-    under: line.under_odds,
-    capturedAt: line.priced_at,
-    status: 'active',
-  }));
-}
-
-/** An old #board link opens Projections on its prices, where the Board's two views now live. */
+/** An old #board link opens Projections on the Matchups report, the Board view that remains. */
 function showLegacyBoard(): void {
-  projectionMode = 'prices';
+  projectionMode = 'matchups';
   showProjections();
 }
 

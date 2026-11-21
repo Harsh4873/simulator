@@ -73,14 +73,15 @@ function title(mean: number | null, start: string): EsportsTitle {
 test('a price or a win chance is rejected', () => {
   const now = new Date('2026-11-20T18:00:00Z');
   const doc = esportsDocument([title(11.25, '2026-11-20T18:00:00Z')], now);
-  assert.equal(doc.model.name, 'esports-player-projections-v1');
+  assert.equal(doc.model.name, 'esports-player-projections-v2');
   assert.ok(parseEsportsDocument(JSON.stringify({ ...doc, model: { ...doc.model, name: 'esports-player-means-v1' } })), 'files from before projections still parse');
+  assert.ok(parseEsportsDocument(JSON.stringify({ ...doc, model: { ...doc.model, name: 'esports-player-projections-v1' } })), 'files from before the opponent adjustment still parse');
   assert.equal(doc.model.fitted, true);
-  assert.match(doc.model.note, /own rate from his earlier games/);
-  assert.match(doc.model.note, /kills and headshots per round over maps 1 and 2/);
+  assert.match(doc.model.note, /own rate in his earlier games/);
+  assert.match(doc.model.note, /each team is rated from its earlier results/);
+  assert.match(doc.model.note, /CS2 is per map/);
   assert.match(doc.model.note, /calibrated/);
   assert.match(doc.model.note, /never part of its own projection/);
-  assert.match(doc.model.note, /match winner/);
   assert.match(doc.model.note, /posted line/);
   const raw = JSON.stringify(doc);
   const parsed = parseEsportsDocument(raw);
@@ -139,4 +140,92 @@ test('a title whose feed returned no player history says so once instead of rows
   assert.match(html, /data-no-history>OpenDota returned no player history this run, so Dota 2 has no projections or averages until the next refresh\./);
   assert.doesNotMatch(html, /<table/);
   assert.doesNotMatch(html, /0 earlier games/);
+});
+
+test('team ratings use only earlier results, count each result once, and favor the side that keeps winning', async () => {
+  const { eloRatings, winChance, ELO_BASE } = await import('../src/esports/projection.ts');
+  const results = Array.from({ length: 12 }, (_, index) => ({ id: `g${index}`, at: index * 10, a: 'Strong', b: index % 2 ? 'Weak' : 'Middle', score: 1 }));
+  const ratings = eloRatings([...results, ...results]);
+  assert.equal(ratings.before('Strong', 0), ELO_BASE, 'nothing before the first result');
+  assert.equal(ratings.played('Strong', 1_000), 12, 'a result listed twice counts once');
+  assert.ok(ratings.before('Strong', 1_000) > ratings.before('Middle', 1_000));
+  assert.ok(ratings.before('Strong', 55) < ratings.before('Strong', 1_000), 'a rating before a time leaves out later results');
+  assert.ok(winChance(ratings.before('Strong', 1_000), ratings.before('Weak', 1_000)) > 0.7);
+  assert.equal(winChance(1500, 1500), 0.5);
+});
+
+test('the opponent adjustment ships only when it beats the rate alone on earlier games', async () => {
+  const { adjustedRate, fitOpponentModel } = await import('../src/esports/projection.ts');
+  assert.equal(adjustedRate(6, 1, null, 0.5), 6, 'no chance, no adjustment');
+  assert.equal(adjustedRate(6, 1, 0.8, 0.5), 6 * 1.3);
+  assert.equal(adjustedRate(6, 1.5, 0, 0.9), 6 * 0.35, 'a floor keeps a count from collapsing');
+  // Each player's count follows his side's chance: favorites score more, underdogs less, around a rate of 6.
+  let seed = 7;
+  const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const players = (dependent: boolean) =>
+    Array.from({ length: 30 }, (_, player) =>
+      Array.from({ length: 24 }, (_, game) => {
+        const expected = 0.15 + 0.7 * random();
+        const won = random() < expected ? 1 : 0;
+        const mean = dependent ? 6 * (1 + 1.2 * (expected - 0.5)) : 6;
+        let count = 0;
+        for (let draw = 0; draw < 12; draw += 1) count += random() < mean / 12 ? 1 : 0;
+        return { id: `p${player}g${game}`, start: game, units: 1, value: count, outcome: won, expected };
+      }),
+    );
+  const helped = fitOpponentModel(players(true), 6, 3);
+  assert.ok(helped.sensitivity > 0, `sensitivity ${helped.sensitivity}`);
+  assert.ok(helped.calibration.mae < helped.rateMae, 'the adjustment beat the rate alone');
+  assert.ok(helped.calibration.mae < helped.baselineMae, 'and the plain ten-game average');
+  assert.ok(helped.calibration.coverage >= 0.8);
+  const ignored = fitOpponentModel(players(false), 6, 3);
+  assert.equal(ignored.sensitivity, 0, 'a count that does not follow the opponent gets no adjustment');
+});
+
+test('CS2 reads a map at a time with maps 1-2 beside it, and a result reads against the projection on its own scale', () => {
+  const now = new Date('2026-11-20T18:00:00Z');
+  const doc = esportsDocument(
+    [
+      {
+        title: 'CS2',
+        source: 'BO3.gg',
+        matches: [
+          {
+            id: 'cs1',
+            start_time: '2026-11-20T15:00:00Z',
+            teams: ['Alpha', 'Beta'],
+            competition: 'Cup',
+            status: 'finished',
+            winner: 'Alpha',
+            score: [2, 0],
+            best_of: 3,
+            players: [
+              { name: 'ace', team: 'Alpha', props: [{ stat: 'kills', mean: 15.2, actual: 18.5, projection: { scope: 'map', mean: 15.6, p10: 10, p50: 15, p90: 21, maps12: { mean: 31.2, p10: 22, p50: 31, p90: 40 } } }] },
+              { name: 'old', team: 'Beta', props: [{ stat: 'kills', mean: 14, actual: 9.5, projection: { scope: 'maps12', mean: 29, p10: 20, p50: 29, p90: 40 } }] },
+            ],
+          },
+        ],
+      },
+    ],
+    now,
+    [{ title: 'CS2', stat: 'kills', rows: 900, coverage: 0.81, mae: 9, dispersion: 1.5, bias: 1, baseline_mae: 10, opponent: true }],
+  );
+  const parsed = parseEsportsDocument(JSON.stringify(doc));
+  assert.ok(parsed);
+  assert.equal(parsed.titles[0]?.matches[0]?.best_of, 3);
+  const html = renderEsports(parsed, now);
+  assert.match(html, /<span class="th-sub">a map<\/span>/);
+  assert.match(html, /data-maps12>Maps 1–2 31 · 22–40</);
+  assert.match(html, /data-actual data-result="over">Played 18\.5</);
+  // An older file's maps 1-2 number does not read against a map's average.
+  assert.match(html, /<span class="pct" data-actual>Played 9\.5</);
+  assert.match(html, /title="Plain average 15\.2 a map"/);
+  assert.match(html, /kills 10% closer than his plain average, 81% inside the range/);
+  // A maps 1-2 band on a per-game number, or a broken band, fails the file.
+  const broken = JSON.parse(JSON.stringify(doc));
+  broken.titles[0].matches[0].players[0].props[0].projection.maps12.p10 = 50;
+  assert.equal(parseEsportsDocument(JSON.stringify(broken)), null);
+  const misplaced = JSON.parse(JSON.stringify(doc));
+  misplaced.titles[0].matches[0].players[0].props[0].projection.scope = 'game';
+  assert.equal(parseEsportsDocument(JSON.stringify(misplaced)), null);
 });
