@@ -480,8 +480,7 @@ function renderGame(game: FeedGame): string {
     <div class="card-top"><span class="chip chip-time">${escapeHtml(tipClock(game.start_time))}</span>${chip(game.status)}</div>
     <h2 class="matchup">${sideMarkup(game.away, leftRole)}<span class="at">${between}</span>${sideMarkup(game.home, rightRole)}</h2>
     ${whereHtml}
-    <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
-    <p class="status">${escapeHtml(statusLine(game))}</p>
+    ${game.status === 'scheduled' ? '' : `<p class="status">${escapeHtml(statusLine(game))}</p>`}
     ${competition}
     ${cardBody(game)}
   </article>`;

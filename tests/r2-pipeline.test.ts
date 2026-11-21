@@ -38,6 +38,21 @@ test('mixed manifests retry coherently and malformed versions fail closed',async
  assert.equal(result.card.generated_at,c.generated_at);assert.equal(attempts,2);
  await assert.rejects(()=>loadGeneration(async name=>name==='slate.json'?slate:name==='rate-card.json'?JSON.stringify({...c,model_version:'unknown'}):null,async s=>hash(s)),/Unsupported/);
 });
+test('a deployment cancelled by a newer one that publishes this commit counts, and one that does not still fails',async()=>{
+ const sha='b'.repeat(40),request='superseded';
+ const mine={display_title:request,id:7,status:'completed',conclusion:'cancelled',created_at:'2026-11-20T22:36:00Z'};
+ const runs=(newer:unknown[])=>async(path:string,body:unknown)=>{
+  if(body)return null;
+  if(path.startsWith('compare/'))return {status:path.endsWith('...'+'c'.repeat(40))?'ahead':'diverged'};
+  return {workflow_runs:path.includes('event=workflow_dispatch')?[mine]:newer};
+ };
+ const later={id:9,html_url:'u',status:'completed',conclusion:'success',created_at:'2026-11-20T22:37:00Z',head_branch:'main',head_sha:'c'.repeat(40)};
+ const done=await deployAndWait({sha,request,api:runs([later])});
+ assert.equal(done.run_id,9);assert.equal(done.superseded,7);
+ await assert.rejects(deployAndWait({sha,request,api:runs([{...later,head_sha:'d'.repeat(40)}])}),/ended cancelled/);
+ await assert.rejects(deployAndWait({sha,request,api:runs([{...later,conclusion:'failure'}])}),/ended cancelled/);
+ await assert.rejects(deployAndWait({sha,request,api:runs([])}),/ended cancelled/);
+});
 test('dispatch failure, failure after dispatch, cancellation, timeout and unchanged-data recovery',async()=>{
  const sha='a'.repeat(40),request='test';
  await assert.rejects(deployAndWait({sha,request,api:async()=>{throw new Error('dispatch failed');}}),/dispatch failed/);

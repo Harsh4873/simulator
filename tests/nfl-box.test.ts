@@ -110,8 +110,8 @@ test('a card with a plan gets the Simulate button and leaves the player detail t
   const planned = renderFeedSlate(parseFeedSlate(JSON.stringify(slateWith(plannedGame(now), now)), 'nfl')!, now);
   assert.match(planned, /<div class="card-actions"><button type="button" data-nfl-simulate="g1">Simulate<\/button><\/div>/);
   assert.doesNotMatch(planned, /<summary>Player projections<\/summary>/);
-  // The card reads like an NBA card: the matchup, its status, then Simulate. The projection waits in the box score.
-  assert.match(planned, /<p class="status">scheduled<\/p>/);
+  // The card reads like an NBA card: the time, the matchup, then Simulate. The projection waits in the box score.
+  assert.doesNotMatch(planned, /<p class="status">/);
   assert.doesNotMatch(planned, /feed-proj-score|class="nfl-sim"/);
   const older = slateWith(plannedGame(now), now);
   delete older.games[0]!.sim!.plan;

@@ -3899,3 +3899,57 @@ html {
   .dvp-table td.dvp-pace { min-width: 3.1rem; padding: 6px 4px; }
   .dvp-vs { display: none; }
 }
+
+/* A quieter surface: a flat page, lighter shadows, and one box per thing. */
+
+:root { --shadow: 0 1px 2px rgba(0, 0, 0, 0.28); }
+html[data-theme="light"] { --shadow: 0 1px 2px rgba(15, 23, 34, 0.07); }
+
+body { background: var(--bg); }
+
+.game-card { box-shadow: none; }
+.game-card::after { display: none; }
+.game-card:hover { transform: none; }
+
+.projection-card,
+.aside-block,
+.model-sides,
+.dvp-page { box-shadow: none; }
+
+/* The board is its cards: no frame around them, and the numbers inside a card sit flat. */
+.projection-board {
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.projection-board .board-head { padding: 4px 0 4px; }
+.pick-stat { padding: 0; border: 0; background: transparent; }
+.pick-numbers { gap: 12px; }
+.pick-grid .pick-hit:hover:not(:disabled) { box-shadow: none; }
+
+.pick-anchor { color: var(--muted); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+
+/* The section toggles stay one tap away instead of a row of buttons over the page. */
+.section-picker { justify-self: start; }
+
+.section-picker > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.section-picker > summary::-webkit-details-marker { display: none; }
+.section-picker > summary::after { content: " ▾"; }
+.section-picker[open] > summary::after { content: " ▴"; }
+.section-picker > summary:hover { color: var(--text); }
+.section-picker .view-toggles { margin: 8px 0 0; }
+
+/* Esports: what a player did reads green over his projection and red under it. */
+.esports-table .pct[data-result="over"] { color: var(--accent); font-weight: 700; }
+.esports-table .pct[data-result="under"] { color: var(--danger); font-weight: 700; }

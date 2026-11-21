@@ -27,9 +27,9 @@ import {
   type TeammateSplit,
 } from './projection-context.ts';
 import { bookKey, type BookLine } from './book-lines.ts';
-import { EXTREME_CLAIM, leanSide, liveTierFor, rankLeans, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
+import { EXTREME_CLAIM, liveTierFor, rankLeans, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
 import { quoteCalibrationFor, type PropCalibrationArtifact, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
-import { gradeProp, parseBookPrice, quoteProp, valueAt, type PlayerSample, type PropMarket } from './props.ts';
+import { americanBreakEven, gradeProp, noVigFromBreakEven, parseBookPrice, quoteProp, valueAt, type PlayerSample, type PropMarket } from './props.ts';
 import type { Simulation } from './simulate.ts';
 import { avatarMarkup, escapeHtml, placeLine, playerSideLine, statusLabel, viewToggles } from './slate.ts';
 import type { RateCard, RateGame, RatePlayer, Slate, SlateGame, TeamSide } from './types.ts';
@@ -367,6 +367,8 @@ interface BoardRow {
   slot: DefenseSlot;
   /** What his opponent allows a game at his position for the stat, and its rank of 30 (30th allows the most). */
   dvp: RankedStat | null;
+  /** At a posted line: the chance anchored on the price, with the simulation and the price alone. */
+  anchor?: AnchoredChance | null;
 }
 
 function byRate(key: 'overRate' | 'underRate') {
@@ -410,6 +412,40 @@ function lineText(line: number): string {
   return Number.isInteger(line) ? line.toFixed(1) : String(line);
 }
 
+/**
+ * How much of the simulation's disagreement with the price shows up in results: the prop calibration's fitted weight
+ * where a stat has a map, and otherwise the share measured on every graded line (about a fifth, 3,370 live lines from
+ * 2026-11-15 to 2026-11-20). The rest of the chance is the price with its vig taken out.
+ */
+export const MARKET_ANCHOR_WEIGHT = 0.2;
+
+export interface AnchoredChance {
+  /** The chance shown: the simulation, mapped where a map exists, weighed against the no-vig price. */
+  over: number;
+  /** The simulation alone, and the price alone with its vig taken out. */
+  raw: number;
+  market: number;
+  /** Chance minus break-even on the better side; at or below zero there is no edge after the vig. */
+  side: 'over' | 'under';
+  edge: number;
+}
+
+/** The over chance at a posted line, anchored on its price, and the side, if any, that still clears its break-even. */
+export function anchoredChance(rawOver: number, book: Pick<BookLine, 'over_odds' | 'under_odds'>, market: PropMarket, calibration: PropPanelCalibration | null | undefined): AnchoredChance | null {
+  const overNeed = americanBreakEven(book.over_odds);
+  const underNeed = americanBreakEven(book.under_odds);
+  if (overNeed === null || underNeed === null || !(rawOver > 0 && rawOver < 1)) return null;
+  const noVig = noVigFromBreakEven(overNeed, underNeed);
+  if (noVig === null) return null;
+  const map = quoteCalibrationFor(calibration, market, 'over');
+  const mapped = map ? map.apply(rawOver) : rawOver;
+  const weight = map ? map.w : MARKET_ANCHOR_WEIGHT;
+  const over = weight * mapped + (1 - weight) * noVig;
+  const overEdge = over - overNeed;
+  const underEdge = 1 - over - underNeed;
+  return overEdge >= underEdge ? { over, raw: rawOver, market: noVig, side: 'over', edge: overEdge } : { over, raw: rawOver, market: noVig, side: 'under', edge: underEdge };
+}
+
 function boardRows(
   game: RateGame,
   simulation: Simulation | null,
@@ -442,17 +478,22 @@ function boardRows(
     let overRate: number | null = null;
     let underRate: number | null = null;
     let edge = '';
+    let anchor: AnchoredChance | null = null;
     if (sample && rowLine !== null && !missing && projection !== null) {
       const pair = chancePair(sample, form.market, rowLine);
       overRate = pair?.over ?? null;
       underRate = pair?.under ?? null;
+      // At a posted line the chance is anchored on its price: on graded lines the simulation alone has been right
+      // about a fifth of the way when it disagreed with the market, so its raw chance overstates every lean.
+      anchor = book && overRate !== null ? anchoredChance(overRate, book, form.market, calibration) : null;
+      if (anchor) {
+        overRate = anchor.over;
+        underRate = 1 - anchor.over;
+      }
       over = overRate === null ? '' : percent(overRate);
       under = underRate === null ? '' : percent(underRate);
       if (selected && form.odds.trim() !== '') edge = edgeText(sample, form.market, form, rowLine, calibration);
-      else if (book && overRate !== null) {
-        const lean = leanSide(overRate, book);
-        edge = `${lean.side === 'over' ? 'Over' : 'Under'} ${signedEdge(lean.claimed)}`;
-      }
+      else if (anchor && anchor.edge > 0) edge = `${anchor.side === 'over' ? 'Over' : 'Under'} ${signedEdge(anchor.edge)}`;
     }
     const games = context ? unpackPlayerGames(context.players[player.athlete_id]?.games) : [];
     const opponentId = player.team_id === game.home_team_id ? game.away_team_id : game.home_team_id;
@@ -480,6 +521,7 @@ function boardRows(
       note,
       games,
       values,
+      anchor,
     };
   });
   return sortRows(rows, sort, Boolean(simulation));
@@ -574,14 +616,25 @@ function pickCardHtml(row: BoardRow, form: PropFormState, selected: boolean, sid
         : `<span class="pick-value">${escapeHtml(lineText(row.line))}</span>`;
   const lineLabel = row.book ? escapeHtml(row.book.book) : selected && row.line !== null ? 'Your line' : row.line !== null ? 'Line' : 'No line';
   const price = (odds: number | undefined) => (odds === undefined ? '' : ` <small class="line-price">${escapeHtml(americanText(odds))}</small>`);
-  const leanTo = row.overRate !== null && row.underRate !== null ? (row.overRate > row.underRate ? 'over' : row.underRate > row.overRate ? 'under' : '') : '';
+  // At a posted line a side lights only when its anchored chance still clears the price; elsewhere the likelier side does.
+  const leanTo = row.anchor
+    ? row.anchor.edge > 0
+      ? row.anchor.side
+      : ''
+    : row.overRate !== null && row.underRate !== null
+      ? row.overRate > row.underRate
+        ? 'over'
+        : row.underRate > row.overRate
+          ? 'under'
+          : ''
+      : '';
   const chances =
     row.over || row.under
       ? `<span class="pick-odds">
           <span class="pick-side" data-side="over"${leanTo === 'over' ? ' data-lead' : ''}><span class="pick-side-name">Over</span><span class="pick-pct">${row.over || '—'}</span>${row.over ? price(row.book?.over_odds) : ''}</span>
           <span class="pick-meter" aria-hidden="true"><span class="pick-meter-fill" style="width:${((row.overRate ?? 0) * 100).toFixed(1)}%"></span></span>
           <span class="pick-side" data-side="under"${leanTo === 'under' ? ' data-lead' : ''}><span class="pick-side-name">Under</span><span class="pick-pct">${row.under || '—'}</span>${row.under ? price(row.book?.under_odds) : ''}</span>
-        </span>`
+        </span>${row.anchor ? `<span class="pick-anchor" title="The chance shown weighs the simulation against the price, the way graded lines have settled">Over: sim ${percent(row.anchor.raw)} · price ${percent(row.anchor.market)}</span>` : ''}`
       : '';
   const spark = row.values.length ? `<span class="pick-spark">${sparkBarsSvg(row.values, row.line, `${row.name}: ${marketLabel(form.market)} in simulated games he played`)}</span>` : '';
   const hits = hasHistory
@@ -647,13 +700,13 @@ export function projectionBoardHtml(
   const gradedLine = line !== null && !((form.market === 'dd' || form.market === 'td') && line !== 0.5) ? line : null;
   const sideText = form.side === 'under' ? 'Under' : 'Over';
   const posted = rows.filter((row) => row.book !== null);
-  const pickPrompt = !athleteId ? '<p class="board-hint">Tap a player for his full breakdown: the 10,000-game chart, game log, and floor splits.</p>' : '';
+  const pickPrompt = !athleteId ? '<p class="board-hint">Tap a player for the full breakdown.</p>' : '';
   const waiting = simulation ? '' : '<p class="panel-lede">Projection, over, under, and edge fill in once this game is simulated.</p>';
   const milestone = form.market === 'dd' || form.market === 'td';
   const source = milestone
     ? 'Double-doubles and triple-doubles settle at 0.5. No price is posted for them here.'
     : posted.length
-      ? `Lines are the posted ${escapeHtml(posted[0].book!.book)} over/under for this stat, with the price beside each model chance. Edge is the model chance of its better side minus that price's break-even. Players with no posted line show the projection only.`
+      ? `Lines are the posted ${escapeHtml(posted[0].book!.book)} over/under for this stat. Each chance weighs the simulation against the price, and a side lights only when it still beats the price.`
       : 'No posted line is in for this stat in this game, so only the projection is shown. Select a player to grade a line of your own.';
   const lineBadge = simulation
     ? `<p class="board-grade-note">${gradedLine !== null && athleteId ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}${source}</p>`
@@ -706,7 +759,7 @@ export function slateBoardHtml(view: ProjectionView): string {
   const milestone = view.form.market === 'dd' || view.form.market === 'td';
   const book = rows.find((row) => row.book)?.book?.book;
   const note = anyPosted && book
-    ? `Players with a posted ${escapeHtml(book)} line for ${escapeHtml(marketLabel(view.form.market).toLowerCase())}, with the model's chance on each side and the price beside it.`
+    ? `Players with a posted ${escapeHtml(book)} line for ${escapeHtml(marketLabel(view.form.market).toLowerCase())}. Each chance weighs the simulation against the price, and a side lights only when it still beats the price.`
     : milestone
       ? 'Double-doubles and triple-doubles settle at 0.5.'
       : `No posted line is in for ${escapeHtml(marketLabel(view.form.market).toLowerCase())} yet, so the board shows every rotation player's projection.`;
@@ -718,7 +771,7 @@ export function slateBoardHtml(view: ProjectionView): string {
   const more = shown.length < rows.length ? `<button type="button" class="ghost board-more" data-board-more>Show all ${rows.length} players</button>` : '';
   const cards = shown.map((row) => pickCardHtml(row, view.form, row.athleteId === view.athleteId && row.eventId === view.eventId, cardSides(view.slate, row.eventId, row.teamId), Boolean(context), true)).join('');
   const empty = rows.length ? '' : filter !== 'all' || focus ? '<p class="prop-note">No player matches the defense filter.</p>' : '<p class="prop-note">No player on the board yet.</p>';
-  return `<p class="board-hint">Tap a player for his full breakdown: the 10,000-game chart, game log, and floor splits.</p><div class="board-tools">${sortBarHtml(sort, Boolean(context))}${defenseToolsHtml(context, filter, focus)}</div><p class="board-grade-note">${note}</p>${waiting}${empty}<ul class="pick-grid">${cards}</ul>${more}`;
+  return `<p class="board-hint">Tap a player for the full breakdown.</p><div class="board-tools">${sortBarHtml(sort, Boolean(context))}${defenseToolsHtml(context, filter, focus)}</div><p class="board-grade-note">${note}</p>${waiting}${empty}<ul class="pick-grid">${cards}</ul>${more}`;
 }
 
 interface DefenseRow {
@@ -1983,7 +2036,7 @@ export function renderProjections(view: ProjectionView): string {
         <label class="field projection-search"><span class="field-label">Find a player</span><input data-projection-search type="search" value="${escapeHtml(view.query)}" placeholder="Search a player on the slate" autocomplete="off"></label>
       </div>
       <div data-projection-hits class="projection-hits">${searchHitsHtml(view.slate, view.card, view.query)}</div>
-      ${viewToggles(toggles)}
+      <details class="section-picker"><summary>Sections</summary>${viewToggles(toggles)}</details>
       <div class="projection-layout${aside ? '' : ' is-wide'}">
         <div class="projection-main">
           ${detail}

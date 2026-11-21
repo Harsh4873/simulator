@@ -12,6 +12,12 @@ async function deployOnce({api,sha,request,health,now,sleep,timeout}){
     const run=matches[0];
     if(run?.status==='completed'){
       if(run.conclusion==='failure')throw new DeploymentFailed(`Deployment ${run.id} ended failure`);
+      if(run.conclusion==='cancelled'){
+        // A newer deployment cancels an older one in the same Pages group. When the newer one publishes a commit that
+        // contains this one, this data is live, so the refresh succeeded.
+        const newer=await supersededBy({api,sha,after:run.created_at,deadline,now,sleep});
+        if(newer)return {sha,run_id:newer.id,url:newer.html_url,superseded:run.id};
+      }
       if(run.conclusion!=='success')throw new Error(`Deployment ${run.id} ended ${run.conclusion}`);
       // The workflow checks out the dispatched immutable source_sha and verifies HEAD before upload.
       return {sha,run_id:run.id,url:run.html_url};
@@ -20,7 +26,29 @@ async function deployOnce({api,sha,request,health,now,sleep,timeout}){
   }
   throw new Error('Timed out waiting for the dispatched deployment');
 }
-/** A failed Pages deployment (often "try again later") is retried with a new correlation id; cancellations and timeouts are not. */
+/** A newer successful deployment whose commit contains `sha`, waiting for one still running, or null. */
+async function supersededBy({api,sha,after,deadline,now,sleep}){
+  const started=Date.parse(after??'');
+  while(now()<deadline){
+    const runs=(await api('actions/workflows/deploy-pages.yml/runs?per_page=30')).workflow_runs??[];
+    const newer=runs.filter(r=>Number.isFinite(started)&&Date.parse(r.created_at)>started&&r.head_branch==='main');
+    let pending=false;
+    for(const r of newer){
+      if(r.status!=='completed'){pending=true;continue;}
+      if(r.conclusion!=='success')continue;
+      if(r.head_sha===sha)return r;
+      const compare=await api(`compare/${sha}...${r.head_sha}`);
+      if(compare?.status==='ahead'||compare?.status==='identical')return r;
+    }
+    if(!pending)return null;
+    await sleep(15000);
+  }
+  return null;
+}
+/**
+ * A failed Pages deployment (often "try again later") is retried with a new correlation id. A cancelled one counts when
+ * a newer deployment published a commit containing it; otherwise cancellations and timeouts are not retried.
+ */
 export async function deployAndWait({api,sha,request,health={},now=Date.now,sleep=ms=>new Promise(r=>setTimeout(r,ms)),timeout=12*60000,attempts=1,retryDelay=30000}){
   if(!/^[a-f0-9]{40}$/.test(sha))throw new Error('Invalid deployment commit');
   for(let attempt=1;;attempt++){

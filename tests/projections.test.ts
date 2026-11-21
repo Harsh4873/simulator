@@ -37,7 +37,9 @@ import {
   playedValues,
   projectionBoardHtml,
   renderProjections,
+  anchoredChance,
   defenseModeHtml,
+  MARKET_ANCHOR_WEIGHT,
   searchHitsHtml,
   slateBoardHtml,
   viewerLine,
@@ -973,7 +975,7 @@ test('board and lean accuracy fixes: posted lines, no self-placed hooks, measure
   assert.equal((bare.match(/class="line-posted"/g) ?? []).length, 0);
   assert.match(bare, /No posted line is in for this stat/);
   // Without a posted line a role player has a projection and no line, over, under or edge.
-  const roleRow = bare.split('<li').find((row) => row.includes(`data-projection-player="${roleA.athlete_id}"`))!;
+  const roleRow = bare.split('<li class="pick-card').find((row) => row.includes(`data-projection-player="${roleA.athlete_id}"`))!;
   assert.match(roleRow, /<span class="pick-stat pick-proj"><span class="pick-label">Projection<\/span><span class="pick-value">\d+\.\d<\/span>/);
   assert.match(roleRow, /<span class="pick-label">No line<\/span>/);
   assert.equal(/pick-odds|pick-edge/.test(roleRow), false);
@@ -1271,7 +1273,7 @@ test('a defense filter keeps soft or tough matchups, a card shows its opponent a
   assert.match(everyone, /data-board-sort="matchup"/);
   // Each card names its opponent's defense at his position: an away guard faces the soft home guard defense.
   const awayGuard = game.players.find((player) => player.team_id === game.away_team_id && player.position_group === 'Guard' && !player.replacement_level)!;
-  const guardCard = everyone.split('<li').find((card) => card.includes(`data-projection-player="${awayGuard.athlete_id}"`))!;
+  const guardCard = everyone.split('<li class="pick-card').find((card) => card.includes(`data-projection-player="${awayGuard.athlete_id}"`))!;
   assert.match(guardCard, /<span class="dvp-chip" data-tone="fav"[^>]*><small>Soft D<\/small><strong>28th<\/strong><\/span>/);
   // Soft keeps away guards (home allows them the most) and home forwards (away allows them the most), and no one else.
   const soft = ids(board('soft'));
@@ -1311,4 +1313,43 @@ test('a defense filter keeps soft or tough matchups, a card shows its opponent a
   assert.equal(bare.includes('data-dvp-filter'), false);
   assert.equal(ids(bare).length, ids(everyone).length);
   assert.match(defenseModeHtml({ ...view, card }), /Defense numbers are not on this card yet/);
+});
+
+test('a card at a posted line shows the chance anchored on its price and lights a side only when it clears the vig', () => {
+  const book = { over_odds: -125, under_odds: 105 };
+  const over = 125 / 225;
+  const under = 100 / 205;
+  const noVig = over / (over + under);
+  // The simulation says 75% over: a fifth of its gap to the price is kept, and the over still clears -125.
+  const strong = anchoredChance(0.75, book, 'pts', null)!;
+  assert.equal(MARKET_ANCHOR_WEIGHT, 0.2);
+  assert.ok(Math.abs(strong.over - (0.2 * 0.75 + 0.8 * noVig)) < 1e-12);
+  assert.equal(strong.side, 'over');
+  assert.ok(strong.edge > 0 && strong.edge < 0.03, `edge ${strong.edge}`);
+  // A milder 60% over keeps too little of its gap to pay the vig on either side.
+  const mild = anchoredChance(0.6, book, 'pts', null)!;
+  assert.ok(mild.edge <= 0);
+  // A fitted map for the stat uses its own weight.
+  const table = new Map([['points', { status: 'fitted', model_version: 'v', fitted_through: '2026-11-01', w: 0.5, params: { method: 'identity' } }]]) as never;
+  const mapped = anchoredChance(0.75, book, 'pts', { table, modelVersion: 'v', tipDate: '2026-11-02' } as never)!;
+  assert.ok(mapped.over > strong.over, 'a heavier fitted weight keeps more of the simulation');
+
+  const sim = simulate(game, seed, draws);
+  const role = game.players.find((player) => {
+    const mean = playedMean(playedValues(sim.playerDraws.get(player.athlete_id)!, 'pts')) ?? 0;
+    return mean > 6 && mean < 14;
+  })!;
+  const mean = playedMean(playedValues(sim.playerDraws.get(role.athlete_id)!, 'pts'))!;
+  const line = (at: number, overOdds: number, underOdds: number): BookLine => ({ event_id: game.event_id, athlete_id: role.athlete_id, market: 'pts', line: at, over_odds: overOdds, under_odds: underOdds, priced_at: '2026-11-02T19:00:00Z', book: 'DraftKings' });
+  const form: PropFormState = { market: 'pts', side: 'over', line: '', style: 'american', odds: '', opposite: '' };
+  const cardOf = (posted: BookLine) => projectionBoardHtml(game, sim, form, game.event_id, null, undefined, 'projection', new Map([[`${game.event_id}:${role.athlete_id}:pts`, posted]])).split('<li class="pick-card').find((html) => html.includes(`data-projection-player="${role.athlete_id}"`))!;
+  // A line far under his projection at a fair price: the over keeps an edge after anchoring, and lights.
+  const far = cardOf(line(Math.max(0.5, Math.floor(mean) - 4.5), -105, -115));
+  assert.match(far, /data-lean="over"/);
+  assert.match(far, /class="pick-edge edge-up">Over \+\d+\.\d pp</);
+  assert.match(far, /class="pick-anchor"[^>]*>Over: sim \d+(\.\d)?% · price \d+(\.\d)?%</);
+  // A line at his projection with a heavy price on each side: no side clears, nothing lights and no edge shows.
+  const even = cardOf(line(Math.floor(mean) + 0.5, -130, -130));
+  assert.doesNotMatch(even, /data-lean=/);
+  assert.doesNotMatch(even, /pick-edge/);
 });

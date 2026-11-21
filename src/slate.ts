@@ -1,6 +1,6 @@
 import type {RefreshHealth} from './generation.ts';
 import { freshnessIssue, validateGame } from './validate-card.ts';
-import { chicagoDate, formatTip, shiftChicagoDate } from './date.ts';
+import { chicagoDate, shiftChicagoDate } from './date.ts';
 import { paletteStyle, playerHeadshotUrl, teamLogoUrl } from './display.ts';
 import type { RateCard, Slate, SlateGame, TeamSide } from './types.ts';
 
@@ -109,7 +109,7 @@ function tipClock(iso: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(date);
 }
 
-function renderCard(game: SlateGame, card: RateCard, now: Date, capturedAt: string | null, edits: number): string {
+function renderCard(game: SlateGame, card: RateCard, now: Date, edits: number): string {
   const rate = card.games.find((item) => item.event_id === game.event_id);
   let ready = false;
   let unavailable = 'Shooting rates are not ready';
@@ -124,8 +124,6 @@ function renderCard(game: SlateGame, card: RateCard, now: Date, capturedAt: stri
     <div class="card-top"><span class="chip chip-time">${escapeHtml(tipClock(game.start_time))}</span>${stateChip(game, now)}</div>
     <h2 class="matchup">${matchupSide(game.away, 'Away')}<span class="at">@</span>${matchupSide(game.home, 'Home')}</h2>
     <p class="where">${escapeHtml(placeLine(game))}</p>
-    <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
-    <p class="status">${escapeHtml(statusLabel(game, now, capturedAt))}</p>
     ${season}
     ${spread}
     ${thin}
@@ -173,7 +171,7 @@ export function renderSlate(slate: Slate, card: RateCard, now: Date, health:Refr
   }
   const sections = [...byDate.keys()].sort((a, b) => b.localeCompare(a)).map((day) => {
     const games = byDate.get(day) ?? [];
-    const cards = games.map((game) => renderCard(game, card, now, slate.generated_at, edits[game.event_id] ?? 0)).join('');
+    const cards = games.map((game) => renderCard(game, card, now, edits[game.event_id] ?? 0)).join('');
     return `<section class="slate-day"><h2 class="slate-title">${escapeHtml(dayTitle(day, today))}</h2><div class="slate">${cards}</div></section>`;
   }).join('');
   return `${slateSummary(slate, card, now)}${sections}`;
