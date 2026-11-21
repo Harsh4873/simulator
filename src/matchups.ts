@@ -575,7 +575,7 @@ function teamHtml(title: string, team: MatchupTeam, profile: TeamProfile | undef
   const history = team.games_before_tip === 0
     ? '<p class="matchup-empty">No completed regular-season games before tip.</p>'
     : `<p>Rank ${team.rank == null ? 'unranked' : team.rank}. Mean margin ${signed(team.mean_margin)} over ${team.games_before_tip} games before tip.</p>
-      <p class="matchup-form" data-form="${escapeHtml(team.form.tag)}">${escapeHtml(team.form.tag)}. Mean margin ${signed(team.form.mean_margin)}. Window ${team.form.games} games, ${team.form.losses} losses, ${team.form.close_losses_to_strong} close losses to a strong opponent.</p>
+      <p class="matchup-form" data-form="${escapeHtml(team.form.tag)}"><span class="matchup-tag" data-tag="${escapeHtml(team.form.tag)}">${escapeHtml(FORM_LABEL[team.form.tag])}</span> Mean margin ${signed(team.form.mean_margin)}. Window ${team.form.games} games, ${team.form.losses} losses, ${team.form.close_losses_to_strong} close losses to a strong opponent.</p>
       ${tableHtml(team.rows)}`;
   return `<section class="matchup-team">
     <h3>${escapeHtml(title)}</h3>
@@ -586,6 +586,24 @@ function teamHtml(title: string, team: MatchupTeam, profile: TeamProfile | undef
   </section>`;
 }
 
+/** Plain words for a form tag. A team with no tag gets no pill. */
+const FORM_LABEL: Record<FormTag, string> = {
+  'short-sample': 'Short sample',
+  'close-losses-to-strong': 'Close losses to strong teams',
+  'margin-collapse': 'Margins collapsing',
+  'no-tag': 'No form tag',
+};
+
+function tagPill(team: string, tag: FormTag): string {
+  if (tag === 'no-tag') return '';
+  return `<span class="matchup-tag" data-tag="${escapeHtml(tag)}">${escapeHtml(team)}: ${escapeHtml(FORM_LABEL[tag])}</span>`;
+}
+
+/**
+ * One game as a fold: the summary row says who plays, when, each side's form tag and the verdict, and opening it shows
+ * both teams' recent games, the injury report and the positional points allowed. What every game shares (the league
+ * level, the defense sample and what the report leaves out) is said once above the list.
+ */
 function gameHtml(slateGame: SlateGame, report: MatchupGame | undefined, rate: RateGame | null, card: RateCard): string {
   if (!report) return `<article class="matchup-game"><p class="matchup-miss">The report is not for this card.</p></article>`;
   const version = card.model_version;
@@ -593,33 +611,49 @@ function gameHtml(slateGame: SlateGame, report: MatchupGame | undefined, rate: R
   const defense = card.projection_context;
   const awayEntry = defense?.teams[slateGame.away.team_id];
   const homeEntry = defense?.teams[slateGame.home.team_id];
-  const league = context ? `<p>League efficiency ${fixed(context.league_efficiency, 3)} points per possession.</p>` : '<p>League efficiency is not on the card.</p>';
-  const season = defense ? `<p>Defense sample ${escapeHtml(defense.defense_season_label)}.</p>` : '<p>No projection context on the card.</p>';
-  const thin = rate?.thin_rotation ? '<p>Thin rotation.</p>' : '';
+  const thin = rate?.thin_rotation ? '<p class="matchup-flag">Thin rotation.</p>' : '';
   const awayName = slateGame.away.abbreviation.trim() || slateGame.away.name.trim() || slateGame.away.team_id;
   const homeName = slateGame.home.abbreviation.trim() || slateGame.home.name.trim() || slateGame.home.team_id;
-  return `<article class="matchup-game">
-    <h2>${escapeHtml(awayName)} at ${escapeHtml(homeName)}</h2>
-    <p>${escapeHtml(formatTip(slateGame.start_time))}</p>
-    <p class="matchup-verdict" data-verdict="${VERDICT}">${VERDICT}</p>
-    <p class="matchup-note">The simulator is unvalidated. Calibrated is false. This report is descriptive.</p>
-    ${league}
-    ${season}
-    ${thin}
-    <div class="matchup-sides">
-      ${teamHtml(awayName, report.away, context?.away, awayEntry, version)}
-      ${teamHtml(homeName, report.home, context?.home, homeEntry, version)}
-    </div>
-    <section>
-      <h3>Injuries</h3>
-      ${injuryHtml(rate?.players ?? [])}
-    </section>
-    <section>
-      <h3>Points allowed</h3>
-      ${defenseHtml(rate, card)}
-    </section>
-    <p class="matchup-omission">No simulated winner, score, margin, total, or win chance. No posted spread, total, moneyline, or price. No blowout rate.</p>
+  const tags = [tagPill(awayName, report.away.form.tag), tagPill(homeName, report.home.form.tag)].join('');
+  return `<article class="matchup-game" data-event="${escapeHtml(slateGame.event_id)}">
+    <details class="matchup-fold">
+      <summary class="matchup-summary">
+        <span class="matchup-heading"><h2>${escapeHtml(awayName)} at ${escapeHtml(homeName)}</h2><span class="matchup-time">${escapeHtml(formatTip(slateGame.start_time))}</span></span>
+        ${tags ? `<span class="matchup-tags">${tags}</span>` : ''}
+        <span class="matchup-verdict" data-verdict="${VERDICT}">${VERDICT}</span>
+      </summary>
+      <div class="matchup-body">
+        ${thin}
+        <div class="matchup-sides">
+          ${teamHtml(awayName, report.away, context?.away, awayEntry, version)}
+          ${teamHtml(homeName, report.home, context?.home, homeEntry, version)}
+        </div>
+        <div class="matchup-pair">
+          <section>
+            <h3>Injuries</h3>
+            ${injuryHtml(rate?.players ?? [])}
+          </section>
+          <section>
+            <h3>Points allowed</h3>
+            ${defenseHtml(rate, card)}
+          </section>
+        </div>
+      </div>
+    </details>
   </article>`;
+}
+
+/** What every game on the card shares, said once above the list. */
+function introHtml(card: RateCard, rates: ReadonlyMap<string, RateGame>): string {
+  const context = [...rates.values()].find((game) => game.context)?.context;
+  const defense = card.projection_context;
+  const league = context ? `League efficiency ${fixed(context.league_efficiency, 3)} points per possession.` : 'League efficiency is not on the card.';
+  const season = defense ? `Defense sample ${escapeHtml(defense.defense_season_label)}.` : 'No projection context on the card.';
+  return `<div class="matchup-intro">
+    <p class="matchup-note">The simulator is not validated as a betting model, so every game reads ${VERDICT}. This report is descriptive: recent results, opponents, injuries and positional points allowed. Open a game for the detail.</p>
+    <p class="matchup-meta">${league} ${season}</p>
+    <p class="matchup-omission">No simulated winner, score, margin, total, or win chance. No posted spread, total, moneyline, or price. No blowout rate.</p>
+  </div>`;
 }
 
 export function renderMatchups(file: MatchupsFile | null, slate: Slate, card: RateCard): string {
@@ -627,7 +661,7 @@ export function renderMatchups(file: MatchupsFile | null, slate: Slate, card: Ra
   const byId = new Map(file.games.map((game) => [game.event_id, game]));
   const rates = new Map(card.games.map((game) => [game.event_id, game]));
   const games = slate.games.map((game) => gameHtml(game, byId.get(game.event_id), rates.get(game.event_id) ?? null, card)).join('');
-  return `<div class="matchup-page">${games}</div>`;
+  return `<div class="matchup-page">${introHtml(card, rates)}${games}</div>`;
 }
 
 export function boardControlsHtml(view: BoardSubview): string {

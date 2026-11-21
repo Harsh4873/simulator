@@ -440,7 +440,11 @@ test('injuries keep unknown, skip a null cap, and defense rows are not a bet', (
   const html = renderMatchups(file, slate, card);
   assert.match(html, /NO BET/);
   assert.match(html, /Current unvalidated simulator \(possessions-v9\)\. Not a predicted score\./);
-  assert.match(html, /The simulator is unvalidated\. Calibrated is false\. This report is descriptive\./);
+  assert.match(html, /The simulator is not validated as a betting model, so every game reads NO BET\. This report is descriptive/);
+  // Shared context is said once above the games, and each game opens from its summary row.
+  assert.equal(html.split('Defense sample').length - 1, 1);
+  assert.match(html, /<details class="matchup-fold">/);
+  assert.match(html, /<summary class="matchup-summary">/);
   assert.match(html, /League efficiency 1\.123 points per possession\./);
   assert.equal(html.split('League efficiency').length - 1, 1);
   assert.match(html, /100\.5/);

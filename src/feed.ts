@@ -481,11 +481,9 @@ function renderGame(game: FeedGame): string {
     <h2 class="matchup">${sideMarkup(game.away, leftRole)}<span class="at">${between}</span>${sideMarkup(game.home, rightRole)}</h2>
     ${whereHtml}
     <p class="tip">${escapeHtml(formatTip(game.start_time))}</p>
-    <p class="status">${escapeHtml(statusLine(game))}</p>
+    ${game.status === 'scheduled' && game.sim ? '' : `<p class="status">${escapeHtml(statusLine(game))}</p>`}
     ${competition}
-    ${game.projection ? `<p class="status" data-projection>${escapeHtml(game.projection.summary)}</p>` : ''}
-    ${game.sim ? simMarkup(game, game.sim) : ''}
-    <p class="note">${escapeHtml(game.projection_note)}</p>
+    ${game.sim ? simMarkup(game, game.sim) : `${game.projection ? `<p class="status" data-projection>${escapeHtml(game.projection.summary)}</p>` : ''}<p class="note">${escapeHtml(game.projection_note)}</p>`}
     ${game.sim?.plan ? `<div class="card-actions"><button type="button" data-nfl-simulate="${escapeHtml(game.id)}">Simulate</button></div>` : ''}
   </article>`;
 }
@@ -547,9 +545,14 @@ function simMarkup(game: FeedGame, sim: FeedGameSim): string {
     return `<section class="nfl-team"><h3 class="stat-group-label">${escapeHtml(name)}</h3>${players.map(playerMarkup).join('')}</section>`;
   };
   const awayWin = 1 - sim.home_win;
+  const away = escapeHtml(game.away.abbreviation);
+  const home = escapeHtml(game.home.abbreviation);
+  const chance = (share: number) => `${Math.round(share * 100)}%`;
   return `<div class="nfl-sim" data-sim>
-    <p class="status">Projected ${escapeHtml(game.away.abbreviation)} ${escapeHtml(statText('points', sim.away_points.mean))}, ${escapeHtml(game.home.abbreviation)} ${escapeHtml(statText('points', sim.home_points.mean))} · ${escapeHtml(signedMargin(sim, game))}</p>
-    <p class="note">Win chance ${escapeHtml(game.away.abbreviation)} ${(awayWin * 100).toFixed(1)}%, ${escapeHtml(game.home.abbreviation)} ${(sim.home_win * 100).toFixed(1)}%. ${escapeHtml(game.home.abbreviation)} margin ${escapeHtml(rangeText('margin', sim.margin))}; both teams ${escapeHtml(rangeText('points', sim.combined))} points, 8 in 10 of ${sim.draws.toLocaleString('en-US')} draws.</p>
+    <p class="feed-proj-score"><span class="feed-proj-label">Projected</span><span class="feed-proj-line">${away} ${escapeHtml(statText('points', sim.away_points.mean))} <span class="feed-proj-dash">–</span> ${escapeHtml(statText('points', sim.home_points.mean))} ${home}</span></p>
+    <div class="winbar feed-winbar" role="img" aria-label="Win chance ${away} ${chance(awayWin)}, ${home} ${chance(sim.home_win)}"><span class="seg seg-away" style="flex-grow: ${awayWin}"></span><span class="seg seg-home" style="flex-grow: ${sim.home_win}"></span></div>
+    <p class="feed-proj-chances"><span>${away} ${chance(awayWin)}</span><span>${escapeHtml(signedMargin(sim, game))}</span><span>${home} ${chance(sim.home_win)}</span></p>
+    <p class="feed-proj-range">Margin ${escapeHtml(rangeText('margin', sim.margin))} for ${home} · ${escapeHtml(rangeText('points', sim.combined))} points, 8 in 10 games</p>
     ${sim.plan ? '' : `<details class="nfl-players"><summary>Player projections</summary><p class="note">Big number is the median of the draws he plays in; below it, the 10th to 90th percentile.</p>${team('away')}${team('home')}</details>`}
   </div>`;
 }
@@ -574,7 +577,10 @@ export function renderFeedSlate(slate: FeedSlate, now: Date): string {
     ? ''
     : `<p class="state" role="alert">This ${sportName} slate was published for ${escapeHtml(slate.dates[0])} and ${escapeHtml(slate.dates[1])}, not the current Chicago window.</p>`;
   const built = `Published ${formatTip(slate.generated_at)} · ${slate.source}`;
-  const head = `<div class="slate-head"><p class="slate-meta">${escapeHtml(sportName)}</p><p class="status captured">${escapeHtml(built)}</p><p class="note">${escapeHtml(slate.model.note)}</p>${validationMarkup(slate.model.validation)}</div>`;
+  const next = [...slate.games, ...slate.later].filter((game) => game.status === 'scheduled' && Date.parse(game.start_time) > now.getTime()).map((game) => game.start_time).sort()[0];
+  const count = slate.games.length + slate.later.filter((game) => chicagoDate(new Date(game.start_time)) > today).length;
+  const meta = [`${sportName} · ${count} ${count === 1 ? 'game' : 'games'}`, next ? `next kickoff ${formatTip(next)}` : ''].filter(Boolean).join(' · ');
+  const head = `<div class="feed-head"><div class="feed-titles"><p class="slate-meta">${escapeHtml(meta)}</p><p class="status captured">${escapeHtml(built)}</p></div><details class="method-note"><summary>How these projections work</summary><p class="note">${escapeHtml(slate.model.note)}</p>${validationMarkup(slate.model.validation)}</details></div>`;
   const byDate = new Map<string, FeedGame[]>();
   for (const game of slate.games) {
     const day = chicagoDate(new Date(game.start_time));

@@ -3238,3 +3238,147 @@ html {
   [data-sport] { min-height: 40px; }
   [data-sport] { min-width: 40px; }
 }
+
+/* NFL and esports pages: a short header, the method folded away, compact cards. */
+
+.feed-head {
+  display: grid;
+  gap: 10px;
+  margin: 4px 0 18px;
+}
+
+.feed-titles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+}
+
+.feed-titles .slate-title { margin: 0; }
+
+.method-note {
+  max-width: 60rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.method-note > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 14px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.method-note > summary::-webkit-details-marker { display: none; }
+
+.method-note > summary::before {
+  content: "+";
+  display: inline-block;
+  width: 1.1em;
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.method-note[open] > summary::before { content: "−"; }
+.method-note > summary:hover { color: var(--text); }
+.method-note > summary:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 14px; }
+.method-note > .note { margin: 0; padding: 0 14px 12px; }
+
+/* NFL card: the projected score, a win bar in team colors, and Simulate. */
+
+.nfl-sim {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.feed-proj-score {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+}
+
+.feed-proj-label {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.feed-proj-line {
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.feed-proj-dash { color: var(--muted); font-weight: 600; }
+
+.feed-winbar { height: 8px; }
+.feed-winbar .seg-away { background: var(--away, #4da6ff); }
+.feed-winbar .seg-home { background: var(--home, #00e5a0); }
+
+.feed-proj-chances {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.feed-proj-chances span:nth-child(2) { color: var(--muted); font-weight: 600; }
+
+.feed-proj-range { margin: 0; color: var(--muted); font-size: 0.75rem; }
+
+/* Esports: one table a match, players under their team. */
+
+.esports-matchup {
+  margin: 0 0 4px;
+  font-size: 1.125rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.esports-card .table-scroll { margin: 12px -18px -16px; }
+
+.esports-table { font-size: 0.875rem; }
+
+.esports-table tbody th[scope="row"] { font-family: var(--sans); font-weight: 600; }
+
+.esports-table .team-row th {
+  position: static;
+  padding: 10px 18px 6px;
+  text-align: left;
+  font-family: var(--sans);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.esports-table thead .th-sub {
+  display: block;
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  opacity: 0.8;
+}
+
+/* NFL box score: section labels line up with the table edge; the position sits beside the name. */
+
+.team-box > h3.stat-group-label { margin: 0; padding: 14px 18px 2px; }
+.team-box .who-cell .side-role { display: inline; }
+.team-box .who-cell { gap: 6px; }

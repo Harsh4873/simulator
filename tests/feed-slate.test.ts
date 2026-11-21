@@ -144,7 +144,11 @@ test('a finished esports game shows each player\'s projection and what he did, a
   const parsed = parseEsportsDocument(JSON.stringify(doc));
   assert.ok(parsed);
   const html = renderEsports(parsed, now);
-  assert.match(html, /Kills, maps 1-2<\/p><p class="tile-value">36<\/p><p class="tile-sub">26 to 47<\/p><p class="tile-sub">Average 18\.2 a map/);
+  // One table a match: the projected median, its range and the plain average in one cell, players under their team.
+  assert.match(html, /<th scope="col">Kills<span class="th-sub">maps 1-2<\/span><\/th>/);
+  assert.match(html, /<span class="stat">36<\/span><span class="pct">26–47<\/span><span class="pct">avg 18\.2 a map<\/span>/);
+  assert.match(html, /<tr class="team-row"><th colspan="3" scope="rowgroup">GamerLegion<\/th><\/tr>/);
+  assert.match(html, /<details class="method-note"><summary>How these projections work<\/summary>/);
   assert.match(html, /Played 21\.5 a map/);
   assert.match(html, /data-result>Final</);
   assert.doesNotMatch(html, /won/);

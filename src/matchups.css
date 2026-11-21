@@ -25,55 +25,197 @@
   color: var(--on-accent);
 }
 
-#board .matchup-page { display: grid; gap: 16px; }
+#board .matchup-page { display: grid; gap: 10px; }
 
-#board .matchup-game {
+/* What every game shares, said once. */
+#board .matchup-intro {
   display: grid;
-  gap: 12px;
+  gap: 4px;
+  margin: 0 0 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+#board .matchup-intro p { margin: 0; }
+#board .matchup-intro .matchup-note { color: var(--text); }
+
+/* One game: a fold whose summary is the row you scan. */
+#board .matchup-game {
   margin: 0;
-  padding: 16px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--card);
+  overflow: hidden;
 }
+
+#board .matchup-fold > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+#board .matchup-fold > summary::-webkit-details-marker { display: none; }
+
+#board .matchup-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "heading verdict"
+    "tags tags";
+  align-items: center;
+  gap: 8px 12px;
+  padding: 14px 16px;
+}
+
+#board .matchup-summary:hover { background: var(--card-2); }
+#board .matchup-summary:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+
+#board .matchup-heading {
+  grid-area: heading;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+#board .matchup-heading::before {
+  content: "";
+  flex: none;
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  margin-right: 2px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 150ms;
+}
+
+#board .matchup-fold[open] .matchup-heading::before { transform: rotate(45deg); }
 
 #board .matchup-game h2,
 #board .matchup-game h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.0625rem;
   font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
-#board .matchup-verdict {
-  margin: 0;
-  font-size: 1.35rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+#board .matchup-game h3 {
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
+
+#board .matchup-time {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+#board .matchup-tags {
+  grid-area: tags;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+#board .matchup-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-2);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#board .matchup-tag[data-tag="close-losses-to-strong"] { border-color: transparent; background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
+#board .matchup-tag[data-tag="margin-collapse"] { border-color: transparent; background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+#board .matchup-tag[data-tag="short-sample"] { border-color: transparent; background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold); }
+
+/* The verdict is the same for every game, so it reads as a quiet label, not a headline. */
+#board .matchup-verdict {
+  grid-area: verdict;
+  margin: 0;
+  padding: 3px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+#board .matchup-body {
+  display: grid;
+  gap: 16px;
+  padding: 4px 16px 16px;
+  border-top: 1px solid var(--border);
+}
+
+#board .matchup-body section { display: grid; gap: 8px; min-width: 0; }
 
 #board .matchup-note,
 #board .matchup-miss,
 #board .matchup-omission,
 #board .matchup-label,
 #board .matchup-form,
-#board .matchup-empty {
+#board .matchup-empty,
+#board .matchup-flag {
   margin: 0;
 }
 
-#board .matchup-note,
 #board .matchup-miss,
 #board .matchup-omission,
-#board .matchup-label { color: var(--muted); }
+#board .matchup-label,
+#board .matchup-meta { color: var(--muted); }
 
-#board .matchup-sides {
+#board .matchup-flag { color: var(--gold); font-size: 0.8125rem; font-weight: 700; padding-top: 12px; }
+
+#board .matchup-sides,
+#board .matchup-pair {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
+
+@media (min-width: 760px) {
+  #board .matchup-sides,
+  #board .matchup-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+#board .matchup-sides { padding-top: 12px; }
 
 #board .matchup-team {
   display: grid;
+  align-content: start;
   gap: 8px;
   min-width: 0;
+}
+
+#board .matchup-team > h3 {
+  font-size: 1rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+}
+
+#board .matchup-team p { margin: 0; font-size: 0.875rem; }
+
+#board .matchup-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
 }
 
 #board .matchup-dl {
@@ -81,11 +223,12 @@
   grid-template-columns: max-content 1fr;
   gap: 2px 12px;
   margin: 0;
+  font-size: 0.8125rem;
 }
 
 #board .matchup-dl dt { color: var(--muted); }
 
-#board .matchup-dl dd { margin: 0; }
+#board .matchup-dl dd { margin: 0; font-variant-numeric: tabular-nums; }
 
 #board .matchup-scroll { overflow-x: auto; }
 
@@ -93,6 +236,7 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
 }
 
 #board .matchup-table th,
@@ -103,17 +247,28 @@
   white-space: nowrap;
 }
 
+#board .matchup-table thead th {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 #board .matchup-list {
   display: grid;
   gap: 10px;
   margin: 0;
   padding: 0;
   list-style: none;
+  font-size: 0.8125rem;
 }
 
 #board .matchup-list li {
   display: grid;
   gap: 2px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
 }
 
 #board .matchup-list p { margin: 0; }

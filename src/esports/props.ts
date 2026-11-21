@@ -421,23 +421,18 @@ function actualText(actual: number, perMap: boolean): string {
 
 const SCOPE_LABEL: Record<EsportsProjection['scope'], string> = { maps12: 'maps 1-2', game: 'this game' };
 
-function renderTile(prop: EsportsProp, perMap: boolean): string {
-  const label = STAT_LABEL[prop.stat];
+function projectionCell(prop: EsportsProp | undefined, perMap: boolean): string {
+  if (!prop) return '<td>—</td>';
   const played =
     typeof prop.actual === 'number' && Number.isFinite(prop.actual)
-      ? `<p class="tile-sub" data-actual>Played ${escapeHtml(actualText(prop.actual, perMap))}</p>`
+      ? `<span class="pct" data-actual>Played ${escapeHtml(actualText(prop.actual, perMap))}</span>`
       : '';
-  const average = prop.mean === null ? 'Average not fitted' : `Average ${formatStat(prop.mean)}${perMap ? ' a map' : ' a game'}`;
+  const average = prop.mean === null ? 'avg not fitted' : `avg ${formatStat(prop.mean)}${perMap ? ' a map' : ''}`;
   if (prop.projection) {
     const projection = prop.projection;
-    return `<div class="tile" data-projection><p class="tile-label">${escapeHtml(label)}, ${escapeHtml(SCOPE_LABEL[projection.scope])}</p><p class="tile-value">${escapeHtml(String(Math.round(projection.p50)))}</p><p class="tile-sub">${escapeHtml(`${Math.round(projection.p10)} to ${Math.round(projection.p90)}`)}</p><p class="tile-sub">${escapeHtml(average)}</p>${played}</div>`;
+    return `<td data-projection><span class="stat">${Math.round(projection.p50)}</span><span class="pct">${Math.round(projection.p10)}–${Math.round(projection.p90)}</span><span class="pct">${escapeHtml(average)}</span>${played}</td>`;
   }
-  return `<div class="tile"><p class="tile-label">${escapeHtml(label)}</p><p class="tile-value">${escapeHtml(formatStat(prop.mean))}</p>${played}</div>`;
-}
-
-function renderPlayer(player: EsportsPlayer, perMap: boolean): string {
-  const tiles = player.props.map((prop) => renderTile(prop, perMap)).join('');
-  return `<div class="panel-section"><p class="who-name">${escapeHtml(player.name)}</p><p class="who-team">${escapeHtml(player.team)}</p><div class="tiles">${tiles}</div></div>`;
+  return `<td><span class="stat">${escapeHtml(formatStat(prop.mean))}</span>${played}</td>`;
 }
 
 /** Upcoming, live or final. Files from before the status field show nothing extra. */
@@ -446,14 +441,42 @@ export function resultText(match: Pick<EsportsMatch, 'status'>): string | null {
   return match.status === 'upcoming' ? 'Upcoming' : match.status === 'live' ? 'Live' : 'Final';
 }
 
+const CHIP_STATE: Record<EsportsStatus, string> = { upcoming: 'pre', live: 'live', finished: 'post' };
+
+/**
+ * One match as a table: a row per player under his team, a column per projected stat with the median, the 10th to
+ * 90th range and the plain average, and what he did once the game is played.
+ */
 function renderMatch(match: EsportsMatch, now: Date, perMap: boolean): string {
   const where = match.competition ? `<p class="where">${escapeHtml(match.competition)}</p>` : '';
   const result = resultText(match);
-  const resultHtml = result ? `<p class="status" data-result>${escapeHtml(result)}</p>` : '';
-  // Players of each side together, in the order the teams are listed.
-  const ordered = [...match.players].sort((a, b) => Number(a.team !== match.teams[0]) - Number(b.team !== match.teams[0]));
-  const players = ordered.map((player) => renderPlayer(player, perMap)).join('');
-  return `<article class="game-card"><h2 class="matchup">${escapeHtml(match.teams[0])} <span class="at">vs</span> ${escapeHtml(match.teams[1])}</h2>${where}<p class="status">${escapeHtml(whenLabel(match.start_time, now))}</p>${resultHtml}${players}</article>`;
+  const chip = result && match.status ? `<span class="chip" data-state="${CHIP_STATE[match.status]}" data-result>${escapeHtml(result)}</span>` : '';
+  const stats: EsportsStat[] = [];
+  for (const player of match.players) for (const prop of player.props) if (!stats.includes(prop.stat)) stats.push(prop.stat);
+  const scoped = (stat: EsportsStat) => match.players.flatMap((player) => player.props).find((prop) => prop.stat === stat && prop.projection)?.projection?.scope ?? null;
+  const head = stats
+    .map((stat) => {
+      const scope = scoped(stat);
+      return `<th scope="col">${escapeHtml(STAT_LABEL[stat])}${scope ? `<span class="th-sub">${escapeHtml(SCOPE_LABEL[scope])}</span>` : ''}</th>`;
+    })
+    .join('');
+  const teams = [match.teams[0], match.teams[1], ...new Set(match.players.map((player) => player.team).filter((team) => team !== match.teams[0] && team !== match.teams[1]))];
+  const body = teams
+    .map((team) => {
+      const players = match.players.filter((player) => player.team === team);
+      if (!players.length) return '';
+      const rows = players
+        .map((player) => `<tr><th scope="row">${escapeHtml(player.name)}</th>${stats.map((stat) => projectionCell(player.props.find((prop) => prop.stat === stat), perMap)).join('')}</tr>`)
+        .join('');
+      return `<tr class="team-row"><th colspan="${stats.length + 1}" scope="rowgroup">${escapeHtml(team)}</th></tr>${rows}`;
+    })
+    .join('');
+  return `<article class="game-card esports-card">
+    <div class="card-top"><span class="chip chip-time">${escapeHtml(whenLabel(match.start_time, now))}</span>${chip}</div>
+    <h2 class="esports-matchup">${escapeHtml(match.teams[0])} <span class="at">vs</span> ${escapeHtml(match.teams[1])}</h2>
+    ${where}
+    <div class="table-scroll"><table class="esports-table"><thead><tr><th scope="col">Player</th>${head}</tr></thead><tbody>${body}</tbody></table></div>
+  </article>`;
 }
 
 /** How the projections did on the same players' earlier games, one line per title. */
@@ -472,7 +495,9 @@ function checksMarkup(checks: readonly EsportsCheck[] | undefined): string {
 export function renderEsports(doc: EsportsDocument, now: Date): string {
   const sources = doc.titles.map((title) => title.source).join(', ');
   const built = `Published ${formatTip(doc.generated_at)} · ${sources}`;
-  const head = `<div class="slate-head"><p class="slate-meta">Esports</p><p class="status captured">${escapeHtml(built)}</p><p class="note">${escapeHtml(doc.model.note)}</p>${checksMarkup(doc.model.checks)}</div>`;
+  const matches = doc.titles.reduce((sum, title) => sum + title.matches.length, 0);
+  const meta = `Esports · ${matches} ${matches === 1 ? 'match' : 'matches'} across ${doc.titles.map((title) => title.title).join(', ')}`;
+  const head = `<div class="feed-head"><div class="feed-titles"><p class="slate-meta">${escapeHtml(meta)}</p><p class="status captured">${escapeHtml(built)}</p></div><details class="method-note"><summary>How these projections work</summary><p class="note">${escapeHtml(doc.model.note)}</p>${checksMarkup(doc.model.checks)}</details></div>`;
   const sections = doc.titles.map((title) => {
     const cards = title.matches.map((match) => renderMatch(match, now, title.title === 'CS2')).join('');
     return `<section class="slate-day"><h2 class="slate-title">${escapeHtml(title.title)}</h2><div class="slate">${cards}</div></section>`;
