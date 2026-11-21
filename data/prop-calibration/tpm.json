@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "group": "tpm",
+  "method": "temperature",
+  "model_version": "possessions-v9",
+  "input_hash": "96d78a0a3c7bf1a93ae5ec41291690ad176ad650c948f7d8cfb147cde6847bc7",
+  "fitted_through": "2026-11-19",
+  "validated_through": "2026-11-20",
+  "validated_from": "2026-11-19",
+  "rows_fit": 378,
+  "rows_validated": 129,
+  "clusters_fit": 378,
+  "params": {
+    "method": "temperature",
+    "temperature": 2.125709753947482,
+    "support": {
+      "lo": 0.1998,
+      "hi": 0.7459
+    }
+  },
+  "w": 0.2,
+  "metrics_fit": {
+    "n": 378,
+    "clusters": 378,
+    "eceWidth10": 0.03762962451150691,
+    "eceFreq10": 0.050809191370552,
+    "mce": 0.20372857304782313,
+    "brier": 0.24699211732248014,
+    "brierNovig": 0.24505262936534297,
+    "logLoss": 0.6870346128049645,
+    "logLossNovig": 0.6831362501742565,
+    "slope": 1.0773415841364933,
+    "intercept": 0.0817740614899712,
+    "slopeLo": 0.1314902670450878,
+    "slopeHi": 2.0138542333076463,
+    "interceptLo": -0.13326867938640435,
+    "interceptHi": 0.2830573308794064,
+    "reliability": 0.0032075836178805206,
+    "resolution": 0.007724334734763321
+  },
+  "metrics_validated": {
+    "n": 129,
+    "clusters": 129,
+    "eceWidth10": 0.02560116761494413,
+    "eceFreq10": 0.09907635439016821,
+    "mce": 0.37743625866055186,
+    "brier": 0.24457089974282006,
+    "brierNovig": 0.2379426470650731,
+    "logLoss": 0.6821804529194598,
+    "logLossNovig": 0.6685852384720059,
+    "slope": 1.379749246409589,
+    "intercept": 0.016808881562718005,
+    "slopeLo": -0.08721319456174795,
+    "slopeHi": 3.1150487472568282,
+    "interceptLo": -0.33937841314981493,
+    "interceptHi": 0.3999851682358186,
+    "reliability": 0.004798939002185377,
+    "resolution": 0.004483489119716927
+  },
+  "status": "fitted",
+  "reason": null,
+  "metrics_raw": {
+    "n": 129,
+    "clusters": 129,
+    "eceWidth10": 0.08606201550387604,
+    "eceFreq10": 0.11504186046511627,
+    "mce": 0.7188333333333334,
+    "brier": 0.24565353224806188,
+    "brierNovig": 0.2379426470650731,
+    "logLoss": 0.6845493195573275,
+    "logLossNovig": 0.6685852384720059,
+    "slope": 0.6595148121816841,
+    "intercept": 0.01774060326976343,
+    "slopeLo": -0.03750136729899751,
+    "slopeHi": 1.4787297170983063,
+    "interceptLo": -0.33887628040961704,
+    "interceptHi": 0.4010118635472132,
+    "reliability": 0.019422749099192248,
+    "resolution": 0.0222362051115893
+  },
+  "notes": [
+    "Held-out ECE is not under the 0.03 release bar.",
+    "The blend does not beat the no-vig price on Brier score.",
+    "Held-out rows 129 are below 500.",
+    "Mean-bias checks were not run. The ledger stores no projection, and the sims archive is not used."
+  ],
+  "drift": "green",
+  "w_open": 0,
+  "held_out_best": [
+    {
+      "validated_through": "2026-11-20",
+      "method": "temperature"
+    }
+  ]
+}
