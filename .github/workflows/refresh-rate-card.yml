@@ -59,6 +59,10 @@ jobs:
         # Prices are read after the draws exist and never reach the fit. A failure here leaves the rate card as built.
         continue-on-error: true
         run: npm run picks
+      - name: Write the matchup report
+        # Reads the shooting cache and the committed card. A failure leaves the previous file.
+        continue-on-error: true
+        run: npm run matchups
       - name: Verify before publication
         run: |
           npm test
@@ -90,6 +94,9 @@ jobs:
           fi
           if [ -f public/data/esports.json ]; then
             git add -- public/data/esports.json
+          fi
+          if [ -f public/data/matchups.json ]; then
+            git add -- public/data/matchups.json
           fi
           # NFL box scores the simulation reads. Off the site; only newly finished games change it.
           if [ -f data/nfl-cache.json ]; then

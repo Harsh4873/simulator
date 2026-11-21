@@ -15,6 +15,7 @@ const KNOWN_DATA = [
   '/manifest.json',
   '/health.json',
   '/picks.json',
+  '/matchups.json',
   '/prop-calibration.json',
   '/sims/index.json',
   '/nfl.json',

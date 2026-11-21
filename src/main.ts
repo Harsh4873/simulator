@@ -23,6 +23,7 @@ import { healthyCheck } from './generation.ts';
 import { fnv1a } from './rng.ts';
 import type { BookLine } from './book-lines.ts';
 import { buildOddsScreen, renderOddsBoard, type OddsQuote } from './odds-board.ts';
+import { boardControlsHtml, parseMatchupsFile, renderMatchups, type BoardSubview, type MatchupsFile } from './matchups.ts';
 import { gameLeans, LEAN_BUCKETS, linesByKey, MIN_PLAY_SHARE, parsePicksFile, type Lean, type PicksFile } from './picks.ts';
 import { parsePublishedPropCalibration, type PropCalibrationArtifact, type PropCalibrationCard, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
 import {
@@ -116,6 +117,9 @@ let projectionAutoLine = false;
 let projectionAutoPrice = false;
 /** Published lines, leans and record. Optional: the page works without it. */
 let picks: PicksFile | null = null;
+/** Descriptive matchup report. Optional: Prices still renders when it is missing or for another card. */
+let matchups: MatchupsFile | null = null;
+let boardView: BoardSubview = 'shop';
 let bookLines: Map<string, BookLine> = new Map();
 let propCalibration: { table: Map<PropCalibrationGroup, PropCalibrationCard>; artifacts: PropCalibrationArtifact[] } | null = null;
 /** Leans compared in this browser, per cached simulation. Reset whenever the posted lines are reloaded. */
@@ -1072,6 +1076,16 @@ function onSectionToggle(button: HTMLButtonElement): void {
 function onDeskClick(event: Event): void {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  const boardViewButton = target.closest('button[data-board-view]');
+  if (boardViewButton instanceof HTMLButtonElement) {
+    const next = boardViewButton.dataset.boardView;
+    if (next === 'shop' || next === 'matchups') {
+      boardView = next;
+      paintBoard();
+      boardRoot?.querySelector<HTMLButtonElement>(`button[data-board-view="${next}"]`)?.focus();
+    }
+    return;
+  }
   const sectionToggle = target.closest('button[data-block-toggle]');
   if (sectionToggle instanceof HTMLButtonElement) {
     onSectionToggle(sectionToggle);
@@ -1525,6 +1539,17 @@ async function loadPropCalibration(): Promise<void> {
   }
 }
 
+async function loadMatchups(): Promise<void> {
+  matchups = null;
+  try {
+    const response = await fetch(`${DATA_BASE}matchups.json`, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+    if (!response.ok) return;
+    matchups = parseMatchupsFile(await response.text());
+  } catch {
+    matchups = null;
+  }
+}
+
 async function loadPicks(): Promise<void> {
   picks = null;
   bookLines = new Map();
@@ -1553,6 +1578,7 @@ async function load(): Promise<void> {
     },async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join(''));
     slate=loaded.slate;card=loaded.card;health=loaded.health;
     await loadPicks();
+    await loadMatchups();
     await loadPropCalibration();
     await loadPublishedIndex();
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
@@ -1779,8 +1805,9 @@ function boardQuotes(): OddsQuote[] {
 }
 
 function paintBoard(): void {
-  if (!boardRoot) return;
-  boardRoot.innerHTML = renderOddsBoard(buildOddsScreen(boardQuotes(), new Date()));
+  if (!boardRoot || !slate || !card) return;
+  const body = boardView === 'matchups' ? renderMatchups(matchups, slate, card) : renderOddsBoard(buildOddsScreen(boardQuotes(), new Date()));
+  boardRoot.innerHTML = `${boardControlsHtml(boardView)}<div class="board-panel">${body}</div>`;
 }
 
 function showBoard(): void {

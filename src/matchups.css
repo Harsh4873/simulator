@@ -1,0 +1,119 @@
+#board .board-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 0 0 16px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+#board .board-switch button {
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px;
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+#board .board-switch button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+#board .matchup-page { display: grid; gap: 16px; }
+
+#board .matchup-game {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+
+#board .matchup-game h2,
+#board .matchup-game h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+#board .matchup-verdict {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+#board .matchup-note,
+#board .matchup-miss,
+#board .matchup-omission,
+#board .matchup-label,
+#board .matchup-form,
+#board .matchup-empty {
+  margin: 0;
+}
+
+#board .matchup-note,
+#board .matchup-miss,
+#board .matchup-omission,
+#board .matchup-label { color: var(--muted); }
+
+#board .matchup-sides {
+  display: grid;
+  gap: 14px;
+}
+
+#board .matchup-team {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+#board .matchup-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0;
+}
+
+#board .matchup-dl dt { color: var(--muted); }
+
+#board .matchup-dl dd { margin: 0; }
+
+#board .matchup-scroll { overflow-x: auto; }
+
+#board .matchup-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+#board .matchup-table th,
+#board .matchup-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+#board .matchup-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+#board .matchup-list li {
+  display: grid;
+  gap: 2px;
+}
+
+#board .matchup-list p { margin: 0; }
