@@ -35,7 +35,6 @@ const {
   RECENT_WINDOW,
   STRONG_RANK_MAX,
   VERDICT,
-  boardControlsHtml,
   buildMatchups,
   parseMatchupsFile,
   renderMatchups,
@@ -505,14 +504,9 @@ test('injuries keep unknown, skip a null cap, and defense rows are not a bet', (
   assert.match(missed, /The report is not for this card\./);
   assert.equal(missed.includes('data-verdict'), false);
   assert.match(renderMatchups(null, slate, card), /The report is not for this card\./);
-  const controls = boardControlsHtml('shop');
-  assert.match(controls, /data-board-view="shop"[^>]*aria-pressed="true"/);
-  assert.match(controls, /data-board-view="matchups"[^>]*aria-pressed="false"/);
-  assert.equal(controls.includes('data-panel-tab'), false);
-  assert.equal(controls.includes('data-desk-tab'), false);
 });
 
-test('the board opens on Prices and Matchups does not draw or read lineup edits', async () => {
+test('Projections holds the old Board: Prices and Matchups are views, and Matchups does not draw or read lineup edits', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'sim-matchups-'));
   const { window, document } = parseHTML(readFileSync('index.html', 'utf8'));
   const globals = globalThis as unknown as Record<string, unknown>;
@@ -579,40 +573,40 @@ test('the board opens on Prices and Matchups does not draw or read lineup edits'
     await build({ entryPoints: ['src/main.ts'], bundle: true, format: 'esm', outfile: join(dir, 'app.mjs'), loader: { '.css': 'empty' }, logLevel: 'silent' });
     await import(pathToFileURL(join(dir, 'app.mjs')).href);
     await flush();
-    document.querySelector<HTMLButtonElement>('[data-desk-tab="board"]')?.click();
+    // The Board tab is gone: its prices and its Matchups report are views inside Projections.
+    assert.equal(document.querySelector('[data-desk-tab="board"]'), null);
+    assert.equal(document.querySelector('#board'), null);
+    document.querySelector<HTMLButtonElement>('[data-desk-tab="projections"]')?.click();
     await flush();
-    const shop = document.querySelector<HTMLButtonElement>('#board [data-board-view="shop"]');
-    const matchup = document.querySelector<HTMLButtonElement>('#board [data-board-view="matchups"]');
-    assert.equal(shop?.getAttribute('aria-pressed'), 'true');
-    assert.equal(matchup?.getAttribute('aria-pressed'), 'false');
-    assert.equal(shop?.hasAttribute('data-panel-tab'), false);
-    assert.equal(shop?.hasAttribute('data-desk-tab'), false);
-    assert.equal(matchup?.hasAttribute('data-panel-tab'), false);
-    assert.equal(matchup?.hasAttribute('data-desk-tab'), false);
-    assert.match(document.querySelector('#board')?.textContent ?? '', /odds-player/);
-    assert.equal(document.querySelector('#board [data-verdict]'), null);
-    assert.equal(document.querySelector('[data-desk-tab="board"]')?.getAttribute('aria-selected'), 'true');
+    const mode = (value: string) => document.querySelector<HTMLButtonElement>(`#projections [data-proj-mode="${value}"]`);
+    assert.equal(mode('players')?.getAttribute('aria-pressed'), 'true');
+    mode('prices')?.click();
+    await flush();
+    assert.equal(mode('prices')?.getAttribute('aria-pressed'), 'true');
+    assert.match(document.querySelector('#projections')?.textContent ?? '', /odds-player/);
+    assert.equal(document.querySelector('#projections [data-verdict]'), null);
+    assert.equal(document.querySelector('[data-desk-tab="projections"]')?.getAttribute('aria-selected'), 'true');
     assert.equal(document.querySelector('[data-desk-tab="games"]')?.getAttribute('aria-selected'), 'false');
-    assert.equal(document.querySelector('[data-desk-tab="projections"]')?.getAttribute('aria-selected'), 'false');
     const drawn = workers;
     reads.length = 0;
-    matchup?.click();
+    mode('matchups')?.click();
     await flush();
     assert.equal(workers, drawn);
     assert.equal(reads.includes('simulator.lineups'), false);
-    assert.equal(document.querySelector('#board [data-board-view="matchups"]')?.getAttribute('aria-pressed'), 'true');
-    assert.equal(document.querySelector('#board [data-board-view="shop"]')?.getAttribute('aria-pressed'), 'false');
-    assert.equal(document.querySelector('#board [data-verdict]')?.textContent, 'NO BET');
-    assert.equal((document.querySelector('#board')?.textContent ?? '').includes('odds-player'), false);
-    assert.match(document.querySelector('#board')?.textContent ?? '', /Not a predicted score/);
-    assert.equal(document.querySelector('[data-desk-tab="board"]')?.getAttribute('aria-selected'), 'true');
-    assert.equal(document.querySelector('[data-desk-tab="games"]')?.getAttribute('aria-selected'), 'false');
-    assert.equal((document.querySelector('#board')?.textContent ?? '').includes('Simulating 10,000'), false);
-    document.querySelector<HTMLButtonElement>('#board [data-board-view="shop"]')?.click();
+    assert.equal(mode('matchups')?.getAttribute('aria-pressed'), 'true');
+    assert.equal(mode('prices')?.getAttribute('aria-pressed'), 'false');
+    assert.equal(document.querySelector('#projections [data-verdict]')?.textContent, 'NO BET');
+    assert.equal((document.querySelector('#projections')?.textContent ?? '').includes('odds-player'), false);
+    assert.match(document.querySelector('#projections')?.textContent ?? '', /Not a predicted score/);
+    assert.equal((document.querySelector('#projections')?.textContent ?? '').includes('Simulating 10,000'), false);
+    // Without defense numbers on the card, the Defense view says so instead of drawing an empty table.
+    mode('defense')?.click();
+    await flush();
+    assert.match(document.querySelector('#projections')?.textContent ?? '', /Defense numbers are not on this card yet/);
+    mode('prices')?.click();
     await flush();
     assert.equal(workers, drawn);
-    assert.match(document.querySelector('#board')?.textContent ?? '', /odds-player/);
-    assert.equal(document.querySelector('#board [data-board-view="shop"]')?.getAttribute('aria-pressed'), 'true');
+    assert.match(document.querySelector('#projections')?.textContent ?? '', /odds-player/);
   } finally {
     globalThis.setInterval = timer;
     rmSync(dir, { recursive: true, force: true });

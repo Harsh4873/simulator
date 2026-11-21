@@ -23,7 +23,7 @@ import { healthyCheck } from './generation.ts';
 import { fnv1a } from './rng.ts';
 import type { BookLine } from './book-lines.ts';
 import { buildOddsScreen, renderOddsBoard, type OddsQuote } from './odds-board.ts';
-import { boardControlsHtml, parseMatchupsFile, renderMatchups, type BoardSubview, type MatchupsFile } from './matchups.ts';
+import { parseMatchupsFile, renderMatchups, type MatchupsFile } from './matchups.ts';
 import { gameLeans, LEAN_BUCKETS, linesByKey, MIN_PLAY_SHARE, parsePicksFile, type Lean, type PicksFile } from './picks.ts';
 import { parsePublishedPropCalibration, type PropCalibrationArtifact, type PropCalibrationCard, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
 import {
@@ -35,6 +35,8 @@ import {
   historyWindowsHtml,
   isDefenseSlot,
   isBoardSort,
+  isDvpFilter,
+  isProjectionMode,
   isHistorySplit,
   isPropMarket,
   l10HistoricalValues,
@@ -51,6 +53,9 @@ import {
   viewerLine,
   type BoardScope,
   type BoardSort,
+  type DvpFilter,
+  type DvpFocus,
+  type ProjectionMode,
   type HistorySplit,
   type ProjectionView,
   type SupportMode,
@@ -81,8 +86,6 @@ const playerFrame = document.querySelector<HTMLElement>('[data-region="player"]'
 const panelBody = document.querySelector<HTMLElement>('[data-panel-body]');
 const projectionsRoot = document.querySelector<HTMLElement>('#projections');
 const projectionsFrame = document.querySelector<HTMLElement>('[data-region="projections"]');
-const boardRoot = document.querySelector<HTMLElement>('#board');
-const boardFrame = document.querySelector<HTMLElement>('[data-region="board"]');
 const foot = document.querySelector<HTMLElement>('.foot p');
 const nbaFoot = foot?.textContent ?? '';
 
@@ -116,6 +119,11 @@ let projectionScope: BoardScope = 'all';
 /** The every-game board shows its first cards until the viewer asks for the rest. */
 const BOARD_LIMIT = 40;
 let projectionBoardExpanded = false;
+/** Players, Defense, Matchups or Prices. The old Board tab's two views live here now. */
+let projectionMode: ProjectionMode = 'players';
+let dvpFilter: DvpFilter = 'all';
+let dvpFocus: DvpFocus | null = null;
+let dvpSort: DefenseSlot = 'all';
 let projectionSelectedBar: number | null = null;
 let projectionSupportMode: SupportMode = 'avg';
 let projectionTeammate: string | null = null;
@@ -129,7 +137,6 @@ let picks: PicksFile | null = null;
 let matchups: MatchupsFile | null = null;
 /** True while the optional Matchups report is still on its way. */
 let matchupsLoading = false;
-let boardView: BoardSubview = 'shop';
 let bookLines: Map<string, BookLine> = new Map();
 let propCalibration: { table: Map<PropCalibrationGroup, PropCalibrationCard>; artifacts: PropCalibrationArtifact[] } | null = null;
 /** Leans compared in this browser, per cached simulation. Reset whenever the posted lines are reloaded. */
@@ -331,11 +338,6 @@ function unmountProjections(): void {
   projectionsRoot?.replaceChildren();
 }
 
-function unmountBoard(): void {
-  if (boardFrame) boardFrame.hidden = true;
-  boardRoot?.replaceChildren();
-}
-
 function unmountSheet(): void {
   panelAthlete = null;
   panelBody?.replaceChildren();
@@ -344,11 +346,8 @@ function unmountSheet(): void {
 }
 
 /** Score, empty, error, loading, and lineups stay on the Games tab. */
-function deskTabName(): 'games' | 'projections' | 'board' {
-  const mode = desk?.dataset.mode;
-  if (mode === 'projections') return 'projections';
-  if (mode === 'board') return 'board';
-  return 'games';
+function deskTabName(): 'games' | 'projections' {
+  return desk?.dataset.mode === 'projections' ? 'projections' : 'games';
 }
 
 function markDeskTabs(): void {
@@ -388,15 +387,32 @@ function projectionView(): ProjectionView | null {
     scope: projectionScope === 'game' && projectionEvent ? 'game' : 'all',
     simulations: cachedSimulations(),
     boardLimit: projectionBoardExpanded ? null : BOARD_LIMIT,
+    mode: projectionMode,
+    modeBody: projectionModeBody(),
+    dvpFilter,
+    dvpFocus,
+    dvpSort,
   };
+}
+
+/** The Matchups report or the posted prices, for the two views that read files the projection view does not carry. */
+function projectionModeBody(): string {
+  if (!slate || !card) return '';
+  if (projectionMode === 'matchups') {
+    return matchups === null && matchupsLoading ? '<p class="state" role="status">Loading the Matchups report…</p>' : renderMatchups(matchups, slate, card);
+  }
+  if (projectionMode === 'prices') {
+    return renderOddsBoard(buildOddsScreen(boardQuotes(), new Date())) || '<p class="state">No line is posted for this slate yet. Lines usually arrive late morning Central.</p>';
+  }
+  return '';
 }
 
 /** Repaints only the board, as a game's draws arrive or the line changes, so the rest of the page keeps its place. */
 function paintBoardCards(): void {
   const board = projectionsRoot?.querySelector<HTMLElement>('[data-projection-board]');
+  if (!board) return;
   const viewModel = projectionView();
-  if (!board || !viewModel) return;
-  board.innerHTML = boardInnerHtml(viewModel);
+  if (viewModel) board.innerHTML = boardInnerHtml(viewModel);
 }
 
 function panelCalibration(tipDate: string | null | undefined): PropPanelCalibration | null {
@@ -676,7 +692,6 @@ function showProjections(): void {
     drawingProgress = 0;
   }
   unmountSheet();
-  unmountBoard();
   const games = gamesFrame();
   if (games) games.hidden = true;
   if (stageFrame) stageFrame.hidden = true;
@@ -713,7 +728,6 @@ function showSlate(): void {
   }
   lineupEvent = null;
   unmountProjections();
-  unmountBoard();
   try {
     if (location.hash === '#projections' || location.hash === '#board') location.hash = '';
   } catch {
@@ -741,13 +755,12 @@ function showScore(): void {
   if (playerFrame) playerFrame.hidden = true;
   desk?.classList.remove('panel-open');
   unmountProjections();
-  unmountBoard();
   if (desk) desk.dataset.mode = 'score';
   markDeskTabs();
 }
 
 function syncPanel(): void {
-  if (desk?.dataset.mode === 'projections' || desk?.dataset.mode === 'board') return;
+  if (desk?.dataset.mode === 'projections') return;
   if (!desk || !panelBody || !view) return;
   if (panelAthlete === null) {
     desk.classList.remove('panel-open');
@@ -1045,7 +1058,6 @@ function showLineups(eventId: string, focusSelector?: string): void {
   if (stageFrame) stageFrame.hidden = false;
   if (playerFrame) playerFrame.hidden = true;
   unmountProjections();
-  unmountBoard();
   if (desk) desk.dataset.mode = 'lineups';
   markDeskTabs();
   const focus = focusSelector ? boxRoot.querySelector<HTMLElement>(focusSelector) : null;
@@ -1115,14 +1127,62 @@ function onSectionToggle(button: HTMLButtonElement): void {
 function onDeskClick(event: Event): void {
   const target = event.target;
   if (!(target instanceof Element)) return;
-  const boardViewButton = target.closest('button[data-board-view]');
-  if (boardViewButton instanceof HTMLButtonElement) {
-    const next = boardViewButton.dataset.boardView;
-    if (next === 'shop' || next === 'matchups') {
-      boardView = next;
-      paintBoard();
-      boardRoot?.querySelector<HTMLButtonElement>(`button[data-board-view="${next}"]`)?.focus();
+  const modeButton = target.closest('button[data-proj-mode]');
+  if (modeButton instanceof HTMLButtonElement) {
+    const next = modeButton.dataset.projMode ?? '';
+    if (isProjectionMode(next)) {
+      projectionMode = next;
+      paintProjection();
+      projectionsRoot?.querySelector<HTMLButtonElement>(`button[data-proj-mode="${next}"]`)?.focus();
     }
+    return;
+  }
+  const dvpFilterButton = target.closest('button[data-dvp-filter]');
+  if (dvpFilterButton instanceof HTMLButtonElement) {
+    const next = dvpFilterButton.dataset.dvpFilter ?? '';
+    if (isDvpFilter(next)) {
+      dvpFilter = next;
+      paintBoardCards();
+      projectionsRoot?.querySelector<HTMLButtonElement>(`button[data-dvp-filter="${next}"]`)?.focus();
+    }
+    return;
+  }
+  if (target.closest('button[data-dvp-clear]')) {
+    dvpFocus = null;
+    paintBoardCards();
+    projectionsRoot?.querySelector<HTMLButtonElement>('button[data-dvp-filter="all"]')?.focus();
+    return;
+  }
+  const dvpSortButton = target.closest('button[data-dvp-sort]');
+  if (dvpSortButton instanceof HTMLButtonElement) {
+    const next = dvpSortButton.dataset.dvpSort ?? '';
+    if (isDefenseSlot(next)) {
+      dvpSort = next;
+      paintProjection();
+      projectionsRoot?.querySelector<HTMLButtonElement>(`button[data-dvp-sort="${next}"]`)?.focus();
+    }
+    return;
+  }
+  const dvpCell = target.closest('button[data-dvp-team]');
+  if (dvpCell instanceof HTMLButtonElement) {
+    const team = dvpCell.dataset.dvpTeam ?? '';
+    const slot = dvpCell.dataset.dvpSlot ?? '';
+    const eventId = dvpCell.dataset.dvpEvent ?? '';
+    if (!team || !eventId || !isDefenseSlot(slot)) return;
+    // The defense picked in the Defense view opens that game's board on the players who face it.
+    projectionMode = 'players';
+    projectionScope = 'game';
+    projectionEvent = eventId;
+    projectionAthlete = null;
+    projectionQuery = '';
+    dvpFocus = { team, slot };
+    if (!cachedSimulation(eventId) && !(running && drawingEvent === eventId)) {
+      drawingEvent = eventId;
+      drawingProgress = 0;
+      paintProjection();
+      void simulateProjection(eventId);
+    } else paintProjection();
+    reveal('.projection-board');
     return;
   }
   const sectionToggle = target.closest('button[data-block-toggle]');
@@ -1338,6 +1398,7 @@ function onDeskClick(event: Event): void {
   if (target.closest('button[data-projection-all]')) {
     projectionScope = 'all';
     projectionAthlete = null;
+    dvpFocus = null;
     paintProjection();
     projectionsRoot?.querySelector<HTMLButtonElement>('button[data-projection-all]')?.focus();
     return;
@@ -1361,6 +1422,7 @@ function onDeskClick(event: Event): void {
     projectionEvent = eventId;
     projectionAthlete = null;
     projectionScope = 'game';
+    dvpFocus = null;
     paintProjection();
     reveal('.projection-board');
     if (!cachedSimulation(eventId) && !(running && drawingEvent === eventId)) {
@@ -1683,7 +1745,7 @@ async function load(): Promise<void> {
     // The Matchups report is large and only the board reads it: the games paint without waiting, and an open
     // Matchups view repaints when it arrives.
     void loadMatchups().then(() => {
-      if (currentSport() === 'nba' && desk?.dataset.mode === 'board' && boardView === 'matchups') paintBoard();
+      if (currentSport() === 'nba' && desk?.dataset.mode === 'projections' && projectionMode === 'matchups') paintProjection();
     });
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
@@ -1691,7 +1753,7 @@ async function load(): Promise<void> {
     if (currentSport() === 'nba') {
       const hash = readHash();
       if (hash === '#projections') showProjections();
-      else if (hash === '#board') showBoard();
+      else if (hash === '#board') showLegacyBoard();
       else showSlate();
     }
   } catch {
@@ -1747,7 +1809,6 @@ function currentSport(): Sport {
 
 function showNbaError(): void {
   if (!slateRoot) return;
-  unmountBoard();
   slateRoot.innerHTML = '<p class="state" role="alert">Slate could not be loaded or validated. <button data-retry>Retry</button></p>';
   if (desk) desk.dataset.mode = 'error';
   markDeskTabs();
@@ -1782,7 +1843,6 @@ function parkNbaViews(): void {
   if (stageFrame) stageFrame.hidden = true;
   if (playerFrame) playerFrame.hidden = true;
   unmountProjections();
-  unmountBoard();
   boxRoot?.replaceChildren();
 }
 
@@ -2030,7 +2090,7 @@ function applySport(next: Sport): void {
     if (slate && card) {
       const hash = readHash();
       if (hash === '#projections') showProjections();
-      else if (hash === '#board') showBoard();
+      else if (hash === '#board') showLegacyBoard();
       else showSlate();
     } else if (nbaFailed) showNbaError();
     else if (slateRoot) slateRoot.innerHTML = '<p class="state" role="status">Loading slate…</p>';
@@ -2078,45 +2138,15 @@ function boardQuotes(): OddsQuote[] {
   }));
 }
 
-function paintBoard(): void {
-  if (!boardRoot || !slate || !card) return;
-  const body =
-    boardView !== 'matchups'
-      ? renderOddsBoard(buildOddsScreen(boardQuotes(), new Date()))
-      : matchups === null && matchupsLoading
-        ? '<p class="state" role="status">Loading the Matchups report…</p>'
-        : renderMatchups(matchups, slate, card);
-  boardRoot.innerHTML = `${boardControlsHtml(boardView)}<div class="board-panel">${body}</div>`;
+/** An old #board link opens Projections on its prices, where the Board's two views now live. */
+function showLegacyBoard(): void {
+  projectionMode = 'prices';
+  showProjections();
 }
 
-function showBoard(): void {
+function navigateDesk(mode: 'games' | 'projections'): void {
   if (currentSport() !== 'nba') return;
-  if (!slate || !card || !desk || !boardRoot) return;
-  const entering = desk.dataset.mode !== 'board';
-  if (entering) {
-    cancelRun?.();
-    drawingEvent = null;
-    drawingProgress = 0;
-  }
-  stopPrefetch();
-  unmountSheet();
-  const games = gamesFrame();
-  if (games) games.hidden = true;
-  if (stageFrame) stageFrame.hidden = true;
-  if (entering) {
-    lineupEvent = null;
-    boxRoot?.replaceChildren();
-  }
-  unmountProjections();
-  if (boardFrame) boardFrame.hidden = false;
-  desk.dataset.mode = 'board';
-  paintBoard();
-  markDeskTabs();
-}
-
-function navigateDesk(mode: 'games' | 'projections' | 'board'): void {
-  if (currentSport() !== 'nba') return;
-  const next = mode === 'projections' ? '#projections' : mode === 'board' ? '#board' : '';
+  const next = mode === 'projections' ? '#projections' : '';
   try {
     if (location.hash !== next) {
       location.hash = next;
@@ -2126,14 +2156,13 @@ function navigateDesk(mode: 'games' | 'projections' | 'board'): void {
     // Some hosts have no location object. The click still changes the surface.
   }
   if (mode === 'projections') showProjections();
-  else if (mode === 'board') showBoard();
   else showSlate();
 }
 
 document.querySelectorAll<HTMLButtonElement>('[data-desk-tab]').forEach((button) => {
   button.addEventListener('click', () => {
     const tab = button.dataset.deskTab;
-    navigateDesk(tab === 'projections' ? 'projections' : tab === 'board' ? 'board' : 'games');
+    navigateDesk(tab === 'projections' ? 'projections' : 'games');
   });
 });
 
@@ -2145,7 +2174,7 @@ window.addEventListener('hashchange', () => {
   }
   const hash = readHash();
   if (hash === '#projections') showProjections();
-  else if (hash === '#board') showBoard();
+  else if (hash === '#board') showLegacyBoard();
   else showSlate();
 });
 

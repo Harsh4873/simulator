@@ -1,34 +1,7 @@
-#board .board-switch {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
-  margin: 0 0 16px;
-  padding: 4px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--surface);
-}
-
-#board .board-switch button {
-  margin: 0;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  padding: 8px;
-  font-size: 0.8125rem;
-  font-weight: 800;
-}
-
-#board .board-switch button[aria-pressed="true"] {
-  background: var(--accent);
-  color: var(--on-accent);
-}
-
-#board .matchup-page { display: grid; gap: 10px; }
+.proj-mode-body .matchup-page { display: grid; gap: 10px; }
 
 /* What every game shares, said once. */
-#board .matchup-intro {
+.proj-mode-body .matchup-intro {
   display: grid;
   gap: 4px;
   margin: 0 0 6px;
@@ -40,11 +13,11 @@
   line-height: 1.5;
 }
 
-#board .matchup-intro p { margin: 0; }
-#board .matchup-intro .matchup-note { color: var(--text); }
+.proj-mode-body .matchup-intro p { margin: 0; }
+.proj-mode-body .matchup-intro .matchup-note { color: var(--text); }
 
 /* One game: a fold whose summary is the row you scan. */
-#board .matchup-game {
+.proj-mode-body .matchup-game {
   margin: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -52,14 +25,14 @@
   overflow: hidden;
 }
 
-#board .matchup-fold > summary {
+.proj-mode-body .matchup-fold > summary {
   list-style: none;
   cursor: pointer;
 }
 
-#board .matchup-fold > summary::-webkit-details-marker { display: none; }
+.proj-mode-body .matchup-fold > summary::-webkit-details-marker { display: none; }
 
-#board .matchup-summary {
+.proj-mode-body .matchup-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
@@ -70,10 +43,10 @@
   padding: 14px 16px;
 }
 
-#board .matchup-summary:hover { background: var(--card-2); }
-#board .matchup-summary:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.proj-mode-body .matchup-summary:hover { background: var(--card-2); }
+.proj-mode-body .matchup-summary:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
 
-#board .matchup-heading {
+.proj-mode-body .matchup-heading {
   grid-area: heading;
   display: flex;
   flex-wrap: wrap;
@@ -82,7 +55,7 @@
   min-width: 0;
 }
 
-#board .matchup-heading::before {
+.proj-mode-body .matchup-heading::before {
   content: "";
   flex: none;
   align-self: center;
@@ -95,37 +68,37 @@
   transition: transform 150ms;
 }
 
-#board .matchup-fold[open] .matchup-heading::before { transform: rotate(45deg); }
+.proj-mode-body .matchup-fold[open] .matchup-heading::before { transform: rotate(45deg); }
 
-#board .matchup-game h2,
-#board .matchup-game h3 {
+.proj-mode-body .matchup-game h2,
+.proj-mode-body .matchup-game h3 {
   margin: 0;
   font-size: 1.0625rem;
   font-weight: 800;
   letter-spacing: -0.01em;
 }
 
-#board .matchup-game h3 {
+.proj-mode-body .matchup-game h3 {
   font-size: 0.75rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
 }
 
-#board .matchup-time {
+.proj-mode-body .matchup-time {
   color: var(--muted);
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
 
-#board .matchup-tags {
+.proj-mode-body .matchup-tags {
   grid-area: tags;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-#board .matchup-tag {
+.proj-mode-body .matchup-tag {
   display: inline-flex;
   align-items: center;
   padding: 2px 9px;
@@ -138,12 +111,12 @@
   white-space: nowrap;
 }
 
-#board .matchup-tag[data-tag="close-losses-to-strong"] { border-color: transparent; background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
-#board .matchup-tag[data-tag="margin-collapse"] { border-color: transparent; background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
-#board .matchup-tag[data-tag="short-sample"] { border-color: transparent; background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold); }
+.proj-mode-body .matchup-tag[data-tag="close-losses-to-strong"] { border-color: transparent; background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue); }
+.proj-mode-body .matchup-tag[data-tag="margin-collapse"] { border-color: transparent; background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.proj-mode-body .matchup-tag[data-tag="short-sample"] { border-color: transparent; background: color-mix(in srgb, var(--gold) 16%, transparent); color: var(--gold); }
 
 /* The verdict is the same for every game, so it reads as a quiet label, not a headline. */
-#board .matchup-verdict {
+.proj-mode-body .matchup-verdict {
   grid-area: verdict;
   margin: 0;
   padding: 3px 10px;
@@ -156,69 +129,69 @@
   white-space: nowrap;
 }
 
-#board .matchup-body {
+.proj-mode-body .matchup-body {
   display: grid;
   gap: 16px;
   padding: 4px 16px 16px;
   border-top: 1px solid var(--border);
 }
 
-#board .matchup-body section { display: grid; gap: 8px; min-width: 0; }
+.proj-mode-body .matchup-body section { display: grid; gap: 8px; min-width: 0; }
 
-#board .matchup-note,
-#board .matchup-miss,
-#board .matchup-omission,
-#board .matchup-label,
-#board .matchup-form,
-#board .matchup-empty,
-#board .matchup-flag {
+.proj-mode-body .matchup-note,
+.proj-mode-body .matchup-miss,
+.proj-mode-body .matchup-omission,
+.proj-mode-body .matchup-label,
+.proj-mode-body .matchup-form,
+.proj-mode-body .matchup-empty,
+.proj-mode-body .matchup-flag {
   margin: 0;
 }
 
-#board .matchup-miss,
-#board .matchup-omission,
-#board .matchup-label,
-#board .matchup-meta { color: var(--muted); }
+.proj-mode-body .matchup-miss,
+.proj-mode-body .matchup-omission,
+.proj-mode-body .matchup-label,
+.proj-mode-body .matchup-meta { color: var(--muted); }
 
-#board .matchup-flag { color: var(--gold); font-size: 0.8125rem; font-weight: 700; padding-top: 12px; }
+.proj-mode-body .matchup-flag { color: var(--gold); font-size: 0.8125rem; font-weight: 700; padding-top: 12px; }
 
-#board .matchup-sides,
-#board .matchup-pair {
+.proj-mode-body .matchup-sides,
+.proj-mode-body .matchup-pair {
   display: grid;
   gap: 16px;
 }
 
 @media (min-width: 760px) {
-  #board .matchup-sides,
-  #board .matchup-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .proj-mode-body .matchup-sides,
+  .proj-mode-body .matchup-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-#board .matchup-sides { padding-top: 12px; }
+.proj-mode-body .matchup-sides { padding-top: 12px; }
 
-#board .matchup-team {
+.proj-mode-body .matchup-team {
   display: grid;
   align-content: start;
   gap: 8px;
   min-width: 0;
 }
 
-#board .matchup-team > h3 {
+.proj-mode-body .matchup-team > h3 {
   font-size: 1rem;
   letter-spacing: 0;
   text-transform: none;
   color: var(--text);
 }
 
-#board .matchup-team p { margin: 0; font-size: 0.875rem; }
+.proj-mode-body .matchup-team p { margin: 0; font-size: 0.875rem; }
 
-#board .matchup-form {
+.proj-mode-body .matchup-form {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 4px 8px;
 }
 
-#board .matchup-dl {
+.proj-mode-body .matchup-dl {
   display: grid;
   grid-template-columns: max-content 1fr;
   gap: 2px 12px;
@@ -226,28 +199,28 @@
   font-size: 0.8125rem;
 }
 
-#board .matchup-dl dt { color: var(--muted); }
+.proj-mode-body .matchup-dl dt { color: var(--muted); }
 
-#board .matchup-dl dd { margin: 0; font-variant-numeric: tabular-nums; }
+.proj-mode-body .matchup-dl dd { margin: 0; font-variant-numeric: tabular-nums; }
 
-#board .matchup-scroll { overflow-x: auto; }
+.proj-mode-body .matchup-scroll { overflow-x: auto; }
 
-#board .matchup-table {
+.proj-mode-body .matchup-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
 }
 
-#board .matchup-table th,
-#board .matchup-table td {
+.proj-mode-body .matchup-table th,
+.proj-mode-body .matchup-table td {
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
   text-align: left;
   white-space: nowrap;
 }
 
-#board .matchup-table thead th {
+.proj-mode-body .matchup-table thead th {
   color: var(--muted);
   font-size: 0.6875rem;
   font-weight: 800;
@@ -255,7 +228,7 @@
   text-transform: uppercase;
 }
 
-#board .matchup-list {
+.proj-mode-body .matchup-list {
   display: grid;
   gap: 10px;
   margin: 0;
@@ -264,11 +237,11 @@
   font-size: 0.8125rem;
 }
 
-#board .matchup-list li {
+.proj-mode-body .matchup-list li {
   display: grid;
   gap: 2px;
   padding-left: 10px;
   border-left: 2px solid var(--border);
 }
 
-#board .matchup-list p { margin: 0; }
+.proj-mode-body .matchup-list p { margin: 0; }

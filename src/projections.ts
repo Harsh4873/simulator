@@ -23,6 +23,7 @@ import {
   type PlayerGameRow,
   type PlayerOnOffSummary,
   type ProjectionContext,
+  type RankedStat,
   type TeammateSplit,
 } from './projection-context.ts';
 import { bookKey, type BookLine } from './book-lines.ts';
@@ -52,7 +53,16 @@ const MARKETS: { value: PropMarket; label: string; short: string }[] = [
 export type HistorySplit = 'all' | 'home' | 'away';
 /** The board shows every game still to play, or one game. */
 export type BoardScope = 'all' | 'game';
-export type BoardSort = 'projection' | 'over' | 'under';
+export type BoardSort = 'projection' | 'over' | 'under' | 'matchup';
+/** Players is the card board; Defense ranks tonight's defenses by position; Matchups and Prices are the team report and the posted prices. */
+export type ProjectionMode = 'players' | 'defense' | 'matchups' | 'prices';
+/** Keeps the cards whose opponent is soft (ranked 21st to 30th in what it allows) or tough (1st to 10th) at the player's position. */
+export type DvpFilter = 'all' | 'soft' | 'tough';
+/** One defense and position picked from the Defense view. */
+export interface DvpFocus {
+  team: string;
+  slot: DefenseSlot;
+}
 export type SupportMode = 'avg' | 'med';
 
 export interface ProjectionView {
@@ -92,6 +102,28 @@ export interface ProjectionView {
   simulations?: ReadonlyMap<string, Simulation>;
   /** How many cards the every-game board shows before its Show all button. Unset shows them all. */
   boardLimit?: number | null;
+  mode?: ProjectionMode;
+  /** The Matchups or Prices body, rendered from files the view does not carry. */
+  modeBody?: string;
+  dvpFilter?: DvpFilter;
+  dvpFocus?: DvpFocus | null;
+  /** The position column the Defense view is ordered by. */
+  dvpSort?: DefenseSlot;
+}
+
+export const PROJECTION_MODES: readonly { value: ProjectionMode; label: string }[] = [
+  { value: 'players', label: 'Players' },
+  { value: 'defense', label: 'Defense' },
+  { value: 'matchups', label: 'Matchups' },
+  { value: 'prices', label: 'Prices' },
+];
+
+export function isProjectionMode(value: string): value is ProjectionMode {
+  return PROJECTION_MODES.some((mode) => mode.value === value);
+}
+
+export function isDvpFilter(value: string): value is DvpFilter {
+  return value === 'all' || value === 'soft' || value === 'tough';
 }
 
 export function isPropMarket(value: string): value is PropMarket {
@@ -103,7 +135,7 @@ export function isHistorySplit(value: string): value is HistorySplit {
 }
 
 export function isBoardSort(value: string): value is BoardSort {
-  return value === 'projection' || value === 'over' || value === 'under';
+  return value === 'projection' || value === 'over' || value === 'under' || value === 'matchup';
 }
 
 export function isDefenseSlot(value: string): value is DefenseSlot {
@@ -331,6 +363,11 @@ interface BoardRow {
   games: PlayerGameRow[];
   /** His simulated values for the stat in the games he plays, for the card's small chart. */
   values: readonly number[];
+  opponentId: string;
+  /** His position group, the split the defense numbers come in. */
+  slot: DefenseSlot;
+  /** What his opponent allows a game at his position for the stat, and its rank of 30 (30th allows the most). */
+  dvp: RankedStat | null;
 }
 
 function byRate(key: 'overRate' | 'underRate') {
@@ -351,7 +388,15 @@ function byProjection(a: BoardRow, b: BoardRow): number {
   return b.projection - a.projection || a.name.localeCompare(b.name);
 }
 
+function byMatchup(a: BoardRow, b: BoardRow): number {
+  if (a.dvp === null && b.dvp === null) return byProjection(a, b);
+  if (a.dvp === null) return 1;
+  if (b.dvp === null) return -1;
+  return b.dvp[1] - a.dvp[1] || byProjection(a, b);
+}
+
 function sortRows(rows: BoardRow[], sort: BoardSort, simulated: boolean): BoardRow[] {
+  if (sort === 'matchup') return rows.sort(byMatchup);
   if (sort === 'over' && simulated) return rows.sort(byRate('overRate'));
   if (sort === 'under' && simulated) return rows.sort(byRate('underRate'));
   if (!simulated) return rows.sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name));
@@ -411,7 +456,13 @@ function boardRows(
       }
     }
     const games = context ? unpackPlayerGames(context.players[player.athlete_id]?.games) : [];
+    const opponentId = player.team_id === game.home_team_id ? game.away_team_id : game.home_team_id;
+    const slot = positionToDefenseSlot(player.position_group);
+    const defense = context?.teams[opponentId];
     return {
+      opponentId,
+      slot,
+      dvp: defense?.allowed?.[marketToDefenseKey(form.market)] ? unpackTeamAllowed(defense, marketToDefenseKey(form.market), slot) : null,
       athleteId: player.athlete_id,
       eventId: game.event_id,
       name: player.name,
@@ -472,6 +523,40 @@ function logoImg(side: TeamSide | null): string {
   return `<span class="logo pick-logo">${url ? `<img referrerpolicy="no-referrer" loading="lazy" alt="" src="${escapeHtml(url)}" width="22" height="22">` : ''}<span class="mono"${url ? ' hidden' : ''}>${abbr}</span></span>`;
 }
 
+const SLOT_WORD: Record<DefenseSlot, string> = { all: 'all players', G: 'guards', F: 'forwards', C: 'centers' };
+const SLOT_NAME: Record<DefenseSlot, string> = { all: 'All', G: 'Guards', F: 'Forwards', C: 'Centers' };
+const TONE_WORD = { fav: 'Soft', mid: 'Mid', tough: 'Tough' } as const;
+
+function ordinal(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  const unit = n % 10;
+  return `${n}${unit === 1 ? 'st' : unit === 2 ? 'nd' : unit === 3 ? 'rd' : 'th'}`;
+}
+
+function defenseStatLabel(market: PropMarket): string {
+  return marketLabel(market === 'dd' || market === 'td' ? 'pra' : market).toLowerCase();
+}
+
+/** The opponent's defense at his position for the stat: soft, mid or tough, and its rank of 30. */
+function dvpChip(row: BoardRow, form: PropFormState, opponent: TeamSide | null): string {
+  if (!row.dvp) return '';
+  const [value, rank] = row.dvp;
+  const tone = rankTone(rank, true);
+  const who = opponent ? sideAbbr(opponent) : 'His opponent';
+  const title = `${who} allows ${value.toFixed(1)} ${defenseStatLabel(form.market)} a game to ${SLOT_WORD[row.slot]}: ${ordinal(rank)} of 30, where 30th allows the most.`;
+  return `<span class="dvp-chip" data-tone="${tone}" title="${escapeHtml(title)}"><small>${TONE_WORD[tone]} D</small><strong>${ordinal(rank)}</strong></span>`;
+}
+
+/** Whether a card passes the defense filter and the defense picked in the Defense view. */
+function passesDefense(row: BoardRow, filter: DvpFilter, focus: DvpFocus | null): boolean {
+  if (focus && (row.opponentId !== focus.team || (focus.slot !== 'all' && row.slot !== focus.slot))) return false;
+  if (filter === 'all') return true;
+  if (!row.dvp) return false;
+  const tone = rankTone(row.dvp[1], true);
+  return filter === 'soft' ? tone === 'fav' : tone === 'tough';
+}
+
 /** One player on the board: who, the projection and line, his simulated spread against it, and the chances. */
 function pickCardHtml(row: BoardRow, form: PropFormState, selected: boolean, sides: CardSides, hasHistory: boolean, showMatchup: boolean): string {
   const id = escapeHtml(row.athleteId);
@@ -501,7 +586,7 @@ function pickCardHtml(row: BoardRow, form: PropFormState, selected: boolean, sid
       : '';
   const spark = row.values.length ? `<span class="pick-spark">${sparkBarsSvg(row.values, row.line, `${row.name}: ${marketLabel(form.market)} in simulated games he played`)}</span>` : '';
   const hits = hasHistory
-    ? [hitChip('L5', row.games, form, row.line, 5), hitChip('L10', row.games, form, row.line, 10), hitChip('Home', row.games.filter((g) => g.home), form, row.line), hitChip('Away', row.games.filter((g) => !g.home), form, row.line)].join('')
+    ? [dvpChip(row, form, sides.opponent), hitChip('L5', row.games, form, row.line, 5), hitChip('L10', row.games, form, row.line, 10), hitChip('Home', row.games.filter((g) => g.home), form, row.line), hitChip('Away', row.games.filter((g) => !g.home), form, row.line)].join('')
     : '';
   const edgeTone = row.edge.includes('+') ? ' edge-up' : row.edge.includes('-') || row.edge.includes('−') ? ' edge-down' : '';
   return `<li class="pick-card${selected ? ' is-selected' : ''}${row.note ? ' is-out' : ''}"${leanTo ? ` data-lean="${leanTo}"` : ''}>
@@ -522,12 +607,24 @@ function pickCardHtml(row: BoardRow, form: PropFormState, selected: boolean, sid
     </li>`;
 }
 
-function sortBarHtml(sort: BoardSort): string {
+function sortBarHtml(sort: BoardSort, defense: boolean): string {
   return `<div class="mini-tabs board-sort" role="group" aria-label="Order the board">
       <button type="button" class="mini-tab" data-board-sort="projection" aria-pressed="${sort === 'projection' ? 'true' : 'false'}">Projection</button>
       <button type="button" class="mini-tab" data-board-sort="over" aria-pressed="${sort === 'over' ? 'true' : 'false'}">Highest over</button>
       <button type="button" class="mini-tab" data-board-sort="under" aria-pressed="${sort === 'under' ? 'true' : 'false'}">Highest under</button>
+      ${defense ? `<button type="button" class="mini-tab" data-board-sort="matchup" aria-pressed="${sort === 'matchup' ? 'true' : 'false'}">Softest D</button>` : ''}
     </div>`;
+}
+
+/** The defense filter, and the defense picked from the Defense view with a button to drop it. */
+function defenseToolsHtml(context: ProjectionContext | undefined, filter: DvpFilter, focus: DvpFocus | null): string {
+  if (!context) return '';
+  const chip = (value: DvpFilter, label: string) => `<button type="button" class="mini-tab" data-dvp-filter="${value}" aria-pressed="${filter === value ? 'true' : 'false'}">${label}</button>`;
+  const team = focus ? context.teams[focus.team] : null;
+  const picked = focus
+    ? `<button type="button" class="ghost mini-action dvp-focus" data-dvp-clear>Facing ${escapeHtml(team?.abbr ?? 'this')} D${focus.slot === 'all' ? '' : ` · ${SLOT_WORD[focus.slot]}`} <span aria-hidden="true">×</span><span class="sr-only">, show everyone</span></button>`
+    : '';
+  return `<div class="mini-tabs dvp-filter" role="group" aria-label="Opponent defense">${chip('all', 'Any defense')}${chip('soft', 'Soft D')}${chip('tough', 'Tough D')}</div>${picked}`;
 }
 
 export function projectionBoardHtml(
@@ -541,8 +638,11 @@ export function projectionBoardHtml(
   lines?: ReadonlyMap<string, BookLine>,
   calibration?: PropPanelCalibration | null,
   slate: Slate | null = null,
+  defense: { filter?: DvpFilter; focus?: DvpFocus | null } = {},
 ): string {
-  const rows = boardRows(game, simulation, form, athleteId, context, sort, lines, calibration);
+  const filter = context ? defense.filter ?? 'all' : 'all';
+  const focus = defense.focus ?? null;
+  const rows = boardRows(game, simulation, form, athleteId, context, sort, lines, calibration).filter((row) => passesDefense(row, filter, focus));
   const hasHistory = Boolean(context);
   const line = validPropLine(form.line);
   const gradedLine = line !== null && !((form.market === 'dd' || form.market === 'td') && line !== 0.5) ? line : null;
@@ -560,7 +660,8 @@ export function projectionBoardHtml(
     ? `<p class="board-grade-note">${gradedLine !== null && athleteId ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}${source}</p>`
     : '';
   const cards = rows.map((row) => pickCardHtml(row, form, row.athleteId === athleteId, cardSides(slate, eventId, row.teamId), hasHistory, false)).join('');
-  return `${pickPrompt}${waiting}<div class="board-tools">${sortBarHtml(sort)}</div>${lineBadge}<ul class="pick-grid">${cards}</ul>`;
+  const none = rows.length ? '' : '<p class="prop-note">No player in this game matches the defense filter.</p>';
+  return `${pickPrompt}${waiting}<div class="board-tools">${sortBarHtml(sort, hasHistory)}${defenseToolsHtml(context, filter, focus)}</div>${lineBadge}${none}<ul class="pick-grid">${cards}</ul>`;
 }
 
 /** Games the every-game board covers: those not yet final, or the whole slate once every game is done. */
@@ -583,6 +684,8 @@ export function slateBoardHtml(view: ProjectionView): string {
   const games = boardGames(view.slate, view.now);
   const context = view.card.projection_context;
   const sort = view.boardSort ?? 'projection';
+  const filter = context ? view.dvpFilter ?? 'all' : 'all';
+  const focus = view.dvpFocus ?? null;
   const anyPosted = games.some((game) => view.card.games.find((rate) => rate.event_id === game.event_id)?.players.some((player) => bookLineFor(view.lines, game.event_id, player.athlete_id, view.form.market)));
   const rows: BoardRow[] = [];
   let pending = 0;
@@ -597,7 +700,7 @@ export function slateBoardHtml(view: ProjectionView): string {
       const player = rate.players.find((item) => item.athlete_id === row.athleteId);
       if (!player || player.replacement_level) continue;
       const keep = anyPosted ? row.book !== null : player.minutes_weight !== 0 && player.minutes_mean >= BOARD_MINUTES;
-      if (keep || row.athleteId === view.athleteId) rows.push(row);
+      if ((keep || row.athleteId === view.athleteId) && passesDefense(row, filter, focus)) rows.push(row);
     }
   }
   sortRows(rows, sort, true);
@@ -615,8 +718,72 @@ export function slateBoardHtml(view: ProjectionView): string {
   if (chosen && !shown.includes(chosen)) shown.push(chosen);
   const more = shown.length < rows.length ? `<button type="button" class="ghost board-more" data-board-more>Show all ${rows.length} players</button>` : '';
   const cards = shown.map((row) => pickCardHtml(row, view.form, row.athleteId === view.athleteId && row.eventId === view.eventId, cardSides(view.slate, row.eventId, row.teamId), Boolean(context), true)).join('');
-  const empty = rows.length ? '' : '<p class="prop-note">No player on the board yet.</p>';
-  return `<p class="board-hint">Tap a player for his full breakdown: the 10,000-game chart, game log, and floor splits.</p><div class="board-tools">${sortBarHtml(sort)}</div><p class="board-grade-note">${note}</p>${waiting}${empty}<ul class="pick-grid">${cards}</ul>${more}`;
+  const empty = rows.length ? '' : filter !== 'all' || focus ? '<p class="prop-note">No player matches the defense filter.</p>' : '<p class="prop-note">No player on the board yet.</p>';
+  return `<p class="board-hint">Tap a player for his full breakdown: the 10,000-game chart, game log, and floor splits.</p><div class="board-tools">${sortBarHtml(sort, Boolean(context))}${defenseToolsHtml(context, filter, focus)}</div><p class="board-grade-note">${note}</p>${waiting}${empty}<ul class="pick-grid">${cards}</ul>${more}`;
+}
+
+interface DefenseRow {
+  game: SlateGame;
+  defense: TeamSide;
+  offense: TeamSide;
+  cells: Record<DefenseSlot, RankedStat>;
+  pace: RankedStat;
+}
+
+const DEFENSE_COLUMNS: readonly DefenseSlot[] = ['G', 'F', 'C', 'all'];
+
+/**
+ * Tonight's defenses against each position for the picked stat, as a heatmap: what each allows a game, its rank of 30,
+ * and its pace. A number opens the players who face that defense at that position.
+ */
+export function defenseModeHtml(view: ProjectionView): string {
+  const context = view.card.projection_context;
+  if (!context) return '<p class="state">Defense numbers are not on this card yet.</p>';
+  const key = marketToDefenseKey(view.form.market);
+  const stat = defenseStatLabel(view.form.market);
+  const sort = view.dvpSort ?? 'all';
+  const rows: DefenseRow[] = [];
+  for (const game of boardGames(view.slate, view.now)) {
+    for (const [defense, offense] of [[game.home, game.away], [game.away, game.home]] as const) {
+      const team = context.teams[defense.team_id];
+      if (!team?.allowed?.[key]) continue;
+      const cells = { all: unpackTeamAllowed(team, key, 'all'), G: unpackTeamAllowed(team, key, 'G'), F: unpackTeamAllowed(team, key, 'F'), C: unpackTeamAllowed(team, key, 'C') };
+      rows.push({ game, defense, offense, cells, pace: unpackRankedPair(team.pace) });
+    }
+  }
+  if (!rows.length) return '<p class="state">No game left tonight to rank.</p>';
+  rows.sort((a, b) => b.cells[sort][1] - a.cells[sort][1] || b.cells[sort][0] - a.cells[sort][0] || sideAbbr(a.defense).localeCompare(sideAbbr(b.defense)));
+  const head = DEFENSE_COLUMNS.map(
+    (slot) => `<th scope="col"><button type="button" class="dvp-sort" data-dvp-sort="${slot}" aria-pressed="${sort === slot ? 'true' : 'false'}">${SLOT_NAME[slot]}${sort === slot ? ' <span aria-hidden="true">↓</span>' : ''}</button></th>`,
+  ).join('');
+  const body = rows
+    .map((row) => {
+      const abbr = sideAbbr(row.defense);
+      const cells = DEFENSE_COLUMNS.map((slot) => {
+        const [value, rank] = row.cells[slot];
+        const tone = rankTone(rank, true);
+        const title = `${abbr} allows ${value.toFixed(1)} ${stat} a game to ${SLOT_WORD[slot]}: ${ordinal(rank)} of 30, where 30th allows the most. Show the ${sideAbbr(row.offense)} ${slot === 'all' ? 'players' : SLOT_WORD[slot]} facing it.`;
+        return `<td><button type="button" class="dvp-cell" data-tone="${tone}" data-dvp-team="${escapeHtml(row.defense.team_id)}" data-dvp-slot="${slot}" data-dvp-event="${escapeHtml(row.game.event_id)}" title="${escapeHtml(title)}"><strong>${value.toFixed(1)}</strong><small>${ordinal(rank)}</small></button></td>`;
+      }).join('');
+      const [pace, paceRank] = row.pace;
+      return `<tr>
+          <th scope="row"><span class="dvp-team">${logoImg(row.defense)}<span class="dvp-team-copy"><span class="dvp-abbr">${escapeHtml(abbr)}</span><span class="dvp-vs">vs ${escapeHtml(sideAbbr(row.offense))} · ${escapeHtml(clockText(row.game.start_time))}</span></span></span></th>
+          ${cells}
+          <td class="dvp-pace" data-tone="${rankTone(paceRank, false)}" title="${escapeHtml(`${pace.toFixed(1)} possessions per 48 minutes, ${ordinal(paceRank)} fastest of 30`)}"><strong>${pace.toFixed(1)}</strong><small>${ordinal(paceRank)}</small></td>
+        </tr>`;
+    })
+    .join('');
+  return `<section class="dvp-page" aria-label="Defense by position">
+      <div class="dvp-head">
+        <h2>${escapeHtml(marketLabel(view.form.market === 'dd' || view.form.market === 'td' ? 'pra' : view.form.market))} allowed by position</h2>
+        <p class="section-sub">Tonight's defenses, ${escapeHtml(context.defense_season_label)}, per game. Rank 30 allows the most, so green is the softest matchup. Tap a number to see the players who face it.</p>
+      </div>
+      <p class="def-legend"><span><i class="dot fav"></i>Soft (21–30)</span><span><i class="dot mid"></i>Mid (11–20)</span><span><i class="dot tough"></i>Tough (1–10)</span></p>
+      <div class="table-scroll"><table class="dvp-table">
+        <thead><tr><th scope="col">Defense</th>${head}<th scope="col">Pace</th></tr></thead>
+        <tbody>${body}</tbody>
+      </table></div>
+    </section>`;
 }
 
 /** What goes inside the board for the view's scope. */
@@ -625,7 +792,7 @@ export function boardInnerHtml(view: ProjectionView): string {
   if (scope === 'all') return slateBoardHtml(view);
   const rate = view.card.games.find((item) => item.event_id === view.eventId) ?? null;
   if (!rate || !view.eventId) return '';
-  return projectionBoardHtml(rate, view.simulation, view.form, view.eventId, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines, view.propCalibration, view.slate);
+  return projectionBoardHtml(rate, view.simulation, view.form, view.eventId, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines, view.propCalibration, view.slate, { filter: view.dvpFilter, focus: view.dvpFocus });
 }
 
 export function projectionChartHtml(sample: PlayerSample | null, market: PropMarket, lineRaw: string): string {
@@ -1743,7 +1910,45 @@ export function leanPanelHtml(
   });
 }
 
+function modeSwitchHtml(mode: ProjectionMode): string {
+  const buttons = PROJECTION_MODES.map((item) => `<button type="button" data-proj-mode="${item.value}" aria-pressed="${item.value === mode ? 'true' : 'false'}">${item.label}</button>`).join('');
+  return `<div class="proj-modes" role="group" aria-label="Projections view">${buttons}</div>`;
+}
+
+function introHtml(mode: ProjectionMode): string {
+  const note =
+    mode === 'defense'
+      ? 'How tonight\'s defenses hold each position. Pick a stat, then tap a number for the players in that matchup.'
+      : mode === 'matchups'
+        ? 'Each game in words: recent results, opponents, injuries and points allowed by position.'
+        : mode === 'prices'
+          ? 'Every posted line with its price, hold and fair price.'
+          : 'Every player, 10,000 simulated games. Pick a stat, then tap a player for the full breakdown.';
+  return `<header class="projection-intro">
+        <div class="projection-titles">
+          <h2>Projections</h2>
+          <p class="projection-note">${note}</p>
+        </div>
+        <details class="method-note"><summary>How this works</summary><p class="note">A simulator, not a betting ticket. 10,000 simulated games paired with ESPN box-score history and reconstructed lineup stints. Posted lines and prices are compared after the games are drawn; the simulator does not read them, or the spread under a game.</p></details>
+      </header>
+      ${modeSwitchHtml(mode)}`;
+}
+
 export function renderProjections(view: ProjectionView): string {
+  const mode = view.mode ?? 'players';
+  if (mode === 'defense') {
+    return `<div class="projection-page" data-proj-view="defense">
+      ${introHtml(mode)}
+      <div class="projection-controls">${marketPills(view.form, null, [])}</div>
+      ${defenseModeHtml(view)}
+    </div>`;
+  }
+  if (mode === 'matchups' || mode === 'prices') {
+    return `<div class="projection-page" data-proj-view="${mode}">
+      ${introHtml(mode)}
+      <div class="proj-mode-body">${view.modeBody ?? ''}</div>
+    </div>`;
+  }
   const scope: BoardScope = view.scope ?? (view.eventId ? 'game' : 'all');
   const game = view.slate.games.find((item) => item.event_id === view.eventId) ?? null;
   const rate = view.card.games.find((item) => item.event_id === view.eventId) ?? null;
@@ -1773,14 +1978,8 @@ export function renderProjections(view: ProjectionView): string {
   const selected = rate?.players.find((item) => item.athlete_id === view.athleteId) ?? null;
   const sample = selected ? view.simulation?.playerDraws.get(selected.athlete_id) ?? null : null;
   const history = selected && view.card.projection_context ? unpackPlayerGames(view.card.projection_context.players[selected.athlete_id]?.games) : [];
-  return `<div class="projection-page">
-      <header class="projection-intro">
-        <div class="projection-titles">
-          <h2>Projections</h2>
-          <p class="projection-note">Every player, 10,000 simulated games. Pick a stat, then tap a player for the full breakdown.</p>
-        </div>
-        <details class="method-note"><summary>How this works</summary><p class="note">A simulator, not a betting ticket. 10,000 simulated games paired with ESPN box-score history and reconstructed lineup stints. Posted lines and prices are compared after the games are drawn; the simulator does not read them, or the spread under a game.</p></details>
-      </header>
+  return `<div class="projection-page" data-proj-view="players">
+      ${introHtml(mode)}
       ${gameStripHtml(view, scope)}
       <div class="projection-controls">
         ${marketPills(view.form, sample, history)}

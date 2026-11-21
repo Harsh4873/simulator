@@ -492,8 +492,7 @@ export function renderOddsBoard(screen: OddsScreen): string {
     screen.lines.length === 0
       ? ''
       : `<div class="table-scroll"><table><thead><tr><th>Event</th><th>Player</th><th>Stat</th><th>Line</th><th>Book</th><th>Over</th><th>Under</th><th>Hold</th><th>Fair</th><th>Freshness</th></tr></thead><tbody>${screen.lines.map(lineCells).join('')}</tbody></table></div>`;
-  return `<div class="projection-page">
-    <header class="projection-intro"><h2>Board</h2></header>
+  return `<div class="projection-page odds-page">
     ${posted}
     ${reason}
     ${listBlock('shop', 'Shop', shopTable(screen.shopping, screen.books))}

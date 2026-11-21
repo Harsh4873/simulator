@@ -29,8 +29,6 @@ export const MATCHUP_MIN_MINUTES = 20;
 export const VERDICT = 'NO BET';
 
 export type FormTag = 'short-sample' | 'close-losses-to-strong' | 'margin-collapse' | 'no-tag';
-export type BoardSubview = 'shop' | 'matchups';
-
 export interface MatchupForm {
   tag: FormTag;
   games: number;
@@ -662,12 +660,4 @@ export function renderMatchups(file: MatchupsFile | null, slate: Slate, card: Ra
   const rates = new Map(card.games.map((game) => [game.event_id, game]));
   const games = slate.games.map((game) => gameHtml(game, byId.get(game.event_id), rates.get(game.event_id) ?? null, card)).join('');
   return `<div class="matchup-page">${introHtml(card, rates)}${games}</div>`;
-}
-
-export function boardControlsHtml(view: BoardSubview): string {
-  const shop = view === 'shop';
-  return `<div class="board-switch" role="group" aria-label="Board view">
-    <button type="button" data-board-view="shop" aria-pressed="${shop ? 'true' : 'false'}">Prices</button>
-    <button type="button" data-board-view="matchups" aria-pressed="${shop ? 'false' : 'true'}">Matchups</button>
-  </div>`;
 }

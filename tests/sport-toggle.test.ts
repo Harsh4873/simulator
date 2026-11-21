@@ -207,7 +207,6 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
     assert.equal(/lean|spread|moneyline|odds/i.test(document.querySelector('#slate')?.textContent ?? ''), false);
     assert.equal(document.querySelector('#projections')?.textContent, '');
     assert.equal(document.querySelector('[data-region="projections"]')?.hasAttribute('hidden'), true);
-    assert.equal(document.querySelector('[data-region="board"]')?.hasAttribute('hidden'), true);
     assert.equal(document.querySelector('.desk-tabs')?.hasAttribute('hidden'), true);
     assert.equal(document.querySelector('[data-fresh]')?.hasAttribute('hidden'), true);
     assert.match(document.querySelector('.foot')?.textContent ?? '', /No line or price is shown/);
@@ -230,7 +229,7 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
     assert.equal(/55\.0%|tier-1|Not calibrated/.test(document.querySelector('#slate')?.textContent ?? ''), false);
     assert.equal(/not live yet/i.test(document.querySelector('#slate')?.textContent ?? ''), false);
     assert.equal(document.querySelector('button[data-event]'), null);
-    assert.equal(document.querySelector('[data-desk-tab="board"]')?.closest('.desk-tabs')?.hasAttribute('hidden'), true);
+    assert.equal(document.querySelector('[data-desk-tab="projections"]')?.closest('.desk-tabs')?.hasAttribute('hidden'), true);
     key(document, page.window, '[data-sport="esports"]', 'ArrowLeft');
     await flush();
     assert.equal(checked(document), 'nfl');

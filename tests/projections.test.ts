@@ -37,6 +37,7 @@ import {
   playedValues,
   projectionBoardHtml,
   renderProjections,
+  defenseModeHtml,
   searchHitsHtml,
   slateBoardHtml,
   viewerLine,
@@ -867,6 +868,26 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     rerun.click();
     await flush();
     assert.equal(workers, drawn + 2);
+
+    // The Defense view: a number opens that game's board on the players who face that defense at that position.
+    document.querySelector<HTMLButtonElement>('[data-proj-mode="defense"]')?.click();
+    assert.equal(document.querySelector('[data-proj-mode="defense"]')?.getAttribute('aria-pressed'), 'true');
+    const cell = document.querySelector<HTMLButtonElement>('#projections button[data-dvp-team]');
+    assert.ok(cell, 'the Defense view has a number for each defense and position');
+    const cellEvent = cell.dataset.dvpEvent!;
+    cell.click();
+    await flush();
+    assert.equal(document.querySelector('[data-proj-mode="players"]')?.getAttribute('aria-pressed'), 'true');
+    assert.equal(document.querySelector(`button[data-projection-game="${cellEvent}"]`)?.getAttribute('aria-pressed'), 'true');
+    assert.ok(document.querySelector('[data-projection-board] [data-dvp-clear]'), 'the picked defense shows with a way back');
+    const facing = document.querySelectorAll('[data-projection-board] .pick-card').length;
+    document.querySelector<HTMLButtonElement>('[data-dvp-clear]')?.click();
+    assert.equal(document.querySelector('[data-projection-board] [data-dvp-clear]'), null);
+    assert.ok(document.querySelectorAll('[data-projection-board] .pick-card').length > facing);
+    // Soft D narrows the board to soft matchups.
+    document.querySelector<HTMLButtonElement>('[data-dvp-filter="soft"]')?.click();
+    assert.equal(document.querySelector('[data-dvp-filter="soft"]')?.getAttribute('aria-pressed'), 'true');
+    for (const chip of document.querySelectorAll('[data-projection-board] .pick-card .dvp-chip')) assert.equal(chip.getAttribute('data-tone'), 'fav');
   } finally {
     delete (globalThis as Record<string, unknown>).location;
     globals.setInterval = timer;
@@ -1211,4 +1232,83 @@ test('the every-game board lists the rotation as cards, fills each game in as it
   assert.match(priced, /<span class="line-posted"[^>]*>20\.5<\/span>/);
   assert.match(priced, /<small class="line-price">-115<\/small>/);
   assert.match(priced, /<span class="pick-side-name">Over<\/span><span class="pick-pct">\d+(\.\d)?%<\/span>/);
+});
+
+test('a defense filter keeps soft or tough matchups, a card shows its opponent at his position, and the Defense view ranks tonight', () => {
+  const now = new Date('2026-11-02T20:00:00Z');
+  const open = structuredClone(slate);
+  for (const item of open.games) {
+    item.status_state = 'pre';
+    item.completed = false;
+  }
+  const g = open.games.find((item) => item.event_id === game.event_id)!;
+  // The home defense is soft against guards and tough against forwards; the away defense is the reverse.
+  const allowed = (all: number, guards: number, forwards: number, centers: number) => ({ pts: `110,${all}|50,${guards}|45,${forwards}|18,${centers}` });
+  const contextCard: RateCard = {
+    ...card,
+    projection_context: {
+      active_season: 2027,
+      season_label: '2026-27',
+      defense_season_label: '2026-27',
+      players: {},
+      teams: {
+        [g.home.team_id]: { abbr: g.home.abbreviation, name: g.home.name, games: 15, pace: '101.2,4', allowed: allowed(25, 28, 3, 15) as never },
+        [g.away.team_id]: { abbr: g.away.abbreviation, name: g.away.name, games: 15, pace: '97.5,26', allowed: allowed(6, 2, 27, 12) as never },
+      },
+    },
+  };
+  const form: PropFormState = { market: 'pts', side: 'over', line: '', style: 'american', odds: '', opposite: '' };
+  const drawn = simulate(game, seed, draws);
+  const slotOf = (id: string) => {
+    const group = game.players.find((player) => player.athlete_id === id)?.position_group;
+    return group === 'Guard' ? 'G' : group === 'Forward' ? 'F' : group === 'Center' ? 'C' : 'all';
+  };
+  const ids = (html: string) => [...html.matchAll(/data-projection-player="([^"]+)"/g)].map((m) => m[1]!);
+  const board = (filter: 'all' | 'soft' | 'tough', focus: { team: string; slot: 'all' | 'G' | 'F' | 'C' } | null = null, sort: 'projection' | 'matchup' = 'projection') =>
+    projectionBoardHtml(game, drawn, form, game.event_id, null, contextCard.projection_context, sort, undefined, null, open, { filter, focus });
+  const everyone = board('all');
+  assert.match(everyone, /data-dvp-filter="soft" aria-pressed="false"/);
+  assert.match(everyone, /data-board-sort="matchup"/);
+  // Each card names its opponent's defense at his position: an away guard faces the soft home guard defense.
+  const awayGuard = game.players.find((player) => player.team_id === game.away_team_id && player.position_group === 'Guard' && !player.replacement_level)!;
+  const guardCard = everyone.split('<li').find((card) => card.includes(`data-projection-player="${awayGuard.athlete_id}"`))!;
+  assert.match(guardCard, /<span class="dvp-chip" data-tone="fav"[^>]*><small>Soft D<\/small><strong>28th<\/strong><\/span>/);
+  // Soft keeps away guards (home allows them the most) and home forwards (away allows them the most), and no one else.
+  const soft = ids(board('soft'));
+  assert.ok(soft.length > 0);
+  for (const id of soft) {
+    const away = game.players.find((player) => player.athlete_id === id)!.team_id === game.away_team_id;
+    assert.equal(away ? slotOf(id) === 'G' : slotOf(id) === 'F', true, id);
+  }
+  const tough = ids(board('tough'));
+  for (const id of tough) {
+    const away = game.players.find((player) => player.athlete_id === id)!.team_id === game.away_team_id;
+    assert.equal(away ? slotOf(id) === 'F' : slotOf(id) === 'G', true, id);
+  }
+  // A defense picked in the Defense view keeps only the players who face it at that position, with a way back.
+  const focused = board('all', { team: g.home.team_id, slot: 'G' });
+  assert.deepEqual(ids(focused).sort(), game.players.filter((player) => player.team_id === game.away_team_id && player.position_group === 'Guard').map((player) => player.athlete_id).filter((id) => ids(everyone).includes(id)).sort());
+  assert.match(focused, new RegExp(`data-dvp-clear>Facing ${g.home.abbreviation} D · guards`));
+  // Softest D puts the softest matchups first.
+  const first = ids(board('all', null, 'matchup'))[0]!;
+  assert.ok(soft.includes(first));
+
+  // The Defense view: two rows a game, softest first for the column picked, every number a button into the board.
+  const view: ProjectionView = { slate: open, card: contextCard, now, query: '', eventId: null, athleteId: null, form, simulation: null, drawing: false, overrides: {}, mode: 'defense' };
+  const byAll = defenseModeHtml(view);
+  assert.match(byAll, /Points allowed by position/);
+  const order = [...byAll.matchAll(/<span class="dvp-abbr">([^<]+)<\/span>/g)].map((m) => m[1]);
+  assert.deepEqual(order, [g.home.abbreviation, g.away.abbreviation]);
+  assert.deepEqual([...defenseModeHtml({ ...view, dvpSort: 'F' }).matchAll(/<span class="dvp-abbr">([^<]+)<\/span>/g)].map((m) => m[1]), [g.away.abbreviation, g.home.abbreviation]);
+  assert.match(byAll, new RegExp(`data-tone="fav" data-dvp-team="${g.home.team_id}" data-dvp-slot="G" data-dvp-event="${g.event_id}"`));
+  assert.match(byAll, new RegExp(`data-tone="tough" data-dvp-team="${g.away.team_id}" data-dvp-slot="G"`));
+  assert.match(byAll, /data-dvp-sort="all" aria-pressed="true"/);
+  const page = renderProjections(view);
+  assert.match(page, /data-proj-mode="defense" aria-pressed="true"/);
+  assert.equal(page.includes('pick-grid'), false);
+  // Without defense numbers the board has no defense controls, and the Defense view says why.
+  const bare = projectionBoardHtml(game, drawn, form, game.event_id, null, undefined, 'projection', undefined, null, open, { filter: 'soft' });
+  assert.equal(bare.includes('data-dvp-filter'), false);
+  assert.equal(ids(bare).length, ids(everyone).length);
+  assert.match(defenseModeHtml({ ...view, card }), /Defense numbers are not on this card yet/);
 });

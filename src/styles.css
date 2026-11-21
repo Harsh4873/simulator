@@ -1744,9 +1744,9 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
 
 .desk-tabs.panel-tabs {
   margin: 0;
-  width: min(22rem, 100%);
+  width: min(16rem, 100%);
   flex: none;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .projection-page { display: grid; gap: 18px; min-width: 0; }
@@ -3745,3 +3745,157 @@ html {
 
 /* NFL box score rows: photo, name, then the position. */
 .team-box .who-cell .player-btn { text-align: left; }
+
+/* Projections views: Players, Defense, Matchups and Prices. */
+
+.proj-modes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  max-width: 34rem;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.proj-modes button {
+  margin: 0;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  box-shadow: none;
+}
+
+.proj-modes button:hover:not(:disabled) { transform: none; box-shadow: none; color: var(--text); }
+.proj-modes button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+
+.proj-mode-body { min-width: 0; }
+.proj-mode-body > .projection-page { gap: 14px; }
+
+/* The opponent's defense on a card, and the filter above the cards. */
+
+.dvp-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums;
+}
+
+.dvp-chip small { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
+.dvp-chip strong { font-size: 0.8rem; font-weight: 800; }
+.dvp-chip[data-tone="fav"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.dvp-chip[data-tone="mid"] { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, var(--border)); background: color-mix(in srgb, var(--gold) 10%, transparent); }
+.dvp-chip[data-tone="tough"] { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: color-mix(in srgb, var(--danger) 10%, transparent); }
+
+.board-tools .board-sort,
+.board-tools .dvp-filter { margin: 0; }
+.board-tools { margin-bottom: 10px; }
+.dvp-focus { border-color: var(--accent); color: var(--accent); }
+
+/* Defense view: tonight's defenses by position as a heatmap. */
+
+.dvp-page {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.dvp-head h2 { margin: 0; font-size: 1.25rem; font-weight: 800; letter-spacing: -0.02em; }
+.dvp-head .section-sub { margin: 2px 0 0; }
+.dvp-page .def-legend { justify-content: flex-start; gap: 14px; font-size: 0.75rem; }
+
+.dvp-table { width: 100%; border-collapse: separate; border-spacing: 4px; font-variant-numeric: tabular-nums; }
+.dvp-table th,
+.dvp-table td { padding: 0; border: 0; text-align: center; white-space: nowrap; }
+
+.dvp-table thead th {
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dvp-table thead th:first-child,
+.dvp-table tbody th { text-align: left; }
+
+.dvp-sort {
+  margin: 0;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  box-shadow: none;
+}
+
+.dvp-sort:hover:not(:disabled) { transform: none; box-shadow: none; color: var(--text); }
+.dvp-sort[aria-pressed="true"] { color: var(--text); background: var(--card-2); }
+
+.dvp-team { display: inline-flex; align-items: center; gap: 8px; padding-right: 6px; }
+.dvp-team .pick-logo { width: 26px; height: 26px; }
+.dvp-team-copy { display: grid; }
+.dvp-abbr { font-weight: 800; font-size: 0.9375rem; }
+.dvp-vs { color: var(--muted); font-size: 0.6875rem; font-weight: 600; }
+
+.dvp-cell,
+.dvp-pace {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  min-width: 3.6rem;
+  padding: 7px 6px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  line-height: 1.1;
+}
+
+.dvp-cell {
+  width: 100%;
+  margin: 0;
+  color: var(--text);
+  font-weight: 400;
+  box-shadow: none;
+}
+
+.dvp-cell strong,
+.dvp-pace strong { font-family: var(--mono); font-size: 0.9375rem; font-weight: 800; }
+.dvp-cell small,
+.dvp-pace small { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.02em; }
+
+.dvp-cell:hover:not(:disabled) { transform: none; box-shadow: none; border-color: var(--text); }
+.dvp-cell[data-tone="fav"],
+.dvp-pace[data-tone="fav"] { background: color-mix(in srgb, var(--accent) 22%, var(--card)); }
+.dvp-cell[data-tone="mid"],
+.dvp-pace[data-tone="mid"] { background: color-mix(in srgb, var(--gold) 14%, var(--card)); }
+.dvp-cell[data-tone="tough"],
+.dvp-pace[data-tone="tough"] { background: color-mix(in srgb, var(--danger) 18%, var(--card)); }
+.dvp-cell[data-tone="fav"] small { color: var(--accent); }
+.dvp-cell[data-tone="mid"] small { color: var(--gold); }
+.dvp-cell[data-tone="tough"] small { color: var(--danger); }
+.dvp-table td.dvp-pace { display: table-cell; vertical-align: middle; min-width: 3.6rem; padding: 7px 6px; border-radius: 10px; }
+.dvp-pace strong,
+.dvp-pace small { display: block; }
+
+@media (max-width: 640px) {
+  .proj-modes button { font-size: 0.75rem; padding: 8px 2px; }
+  .dvp-page { padding: 12px 10px; }
+  .dvp-cell,
+  .dvp-table td.dvp-pace { min-width: 3.1rem; padding: 6px 4px; }
+  .dvp-vs { display: none; }
+}
