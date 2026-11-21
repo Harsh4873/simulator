@@ -22,7 +22,6 @@ import { applyLineupOverrides, cleanOverrides, isLineupChoice, LINEUP_STORAGE_KE
 import { healthyCheck } from './generation.ts';
 import { fnv1a } from './rng.ts';
 import type { BookLine } from './book-lines.ts';
-import { parseMatchupsFile, renderMatchups, type MatchupsFile } from './matchups.ts';
 import { gameLeans, LEAN_BUCKETS, linesByKey, MIN_PLAY_SHARE, parsePicksFile, type Lean, type PicksFile } from './picks.ts';
 import { parsePublishedPropCalibration, type PropCalibrationArtifact, type PropCalibrationCard, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
 import {
@@ -72,6 +71,7 @@ import type { RateCard, RateGame, Slate, SlateGame } from './types.ts';
 
 const DATA_BASE = '/simulator/data/';
 const THEME_KEY = 'simulator.theme';
+const LAYOUT_KEY = 'simulator.layout';
 const SPORT_KEY = 'simulator.sport';
 const FEED_FOOT = 'Schedule from a public feed. No line or price is shown. A projection is shown only when it is fit from results.';
 const SECTION_KEY = 'simulator.sections';
@@ -118,7 +118,7 @@ let projectionScope: BoardScope = 'all';
 /** The every-game board shows its first cards until the viewer asks for the rest. */
 const BOARD_LIMIT = 40;
 let projectionBoardExpanded = false;
-/** Players, Defense or Matchups. */
+/** Players or Defense. */
 let projectionMode: ProjectionMode = 'players';
 let dvpFilter: DvpFilter = 'all';
 let dvpFocus: DvpFocus | null = null;
@@ -132,10 +132,6 @@ let projectionAutoLine = false;
 let projectionAutoPrice = false;
 /** Published lines, leans and record. Optional: the page works without it. */
 let picks: PicksFile | null = null;
-/** Descriptive matchup report. Optional: the Matchups view says so when it is missing or for another card. */
-let matchups: MatchupsFile | null = null;
-/** True while the optional Matchups report is still on its way. */
-let matchupsLoading = false;
 let bookLines: Map<string, BookLine> = new Map();
 let propCalibration: { table: Map<PropCalibrationGroup, PropCalibrationCard>; artifacts: PropCalibrationArtifact[] } | null = null;
 /** Leans compared in this browser, per cached simulation. Reset whenever the posted lines are reloaded. */
@@ -387,20 +383,10 @@ function projectionView(): ProjectionView | null {
     simulations: cachedSimulations(),
     boardLimit: projectionBoardExpanded ? null : BOARD_LIMIT,
     mode: projectionMode,
-    modeBody: projectionModeBody(),
     dvpFilter,
     dvpFocus,
     dvpSort,
   };
-}
-
-/** The Matchups report, which reads a file the projection view does not carry. */
-function projectionModeBody(): string {
-  if (!slate || !card) return '';
-  if (projectionMode === 'matchups') {
-    return matchups === null && matchupsLoading ? '<p class="state" role="status">Loading the Matchups report…</p>' : renderMatchups(matchups, slate, card);
-  }
-  return '';
 }
 
 /** Repaints only the board, as a game's draws arrive or the line changes, so the rest of the page keeps its place. */
@@ -1695,20 +1681,6 @@ async function loadPropCalibration(): Promise<void> {
   }
 }
 
-async function loadMatchups(): Promise<void> {
-  matchups = null;
-  matchupsLoading = true;
-  try {
-    const response = await fetch(`${DATA_BASE}matchups.json`, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
-    if (!response.ok) return;
-    matchups = parseMatchupsFile(await response.text());
-  } catch {
-    matchups = null;
-  } finally {
-    matchupsLoading = false;
-  }
-}
-
 async function loadPicks(): Promise<void> {
   picks = null;
   bookLines = new Map();
@@ -1738,11 +1710,6 @@ async function load(): Promise<void> {
     slate=loaded.slate;card=loaded.card;health=loaded.health;
     // The optional files load side by side, so a slow one does not stack its wait on the others.
     await Promise.all([loadPicks(), loadPropCalibration(), loadPublishedIndex()]);
-    // The Matchups report is large and only the board reads it: the games paint without waiting, and an open
-    // Matchups view repaints when it arrives.
-    void loadMatchups().then(() => {
-      if (currentSport() === 'nba' && desk?.dataset.mode === 'projections' && projectionMode === 'matchups') paintProjection();
-    });
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
     await hydrateSimulationCache(generationKey(), simulationCache);
@@ -1788,6 +1755,40 @@ function bindTheme(): void {
       // The header still follows the click when storage is blocked.
     }
     applyTheme(next);
+  });
+}
+
+type LayoutMode = 'phone' | 'laptop';
+
+function storedLayout(): LayoutMode {
+  try {
+    const stored = localStorage.getItem(LAYOUT_KEY);
+    return stored === 'phone' || stored === 'laptop' ? stored : 'laptop';
+  } catch {
+    return 'laptop';
+  }
+}
+
+function applyLayout(layout: LayoutMode): void {
+  document.documentElement.dataset.layout = layout;
+  const button = document.querySelector<HTMLButtonElement>('[data-layout-toggle]');
+  if (!button) return;
+  const phone = layout === 'phone';
+  button.textContent = phone ? 'Phone' : 'Laptop';
+  button.setAttribute('aria-pressed', phone ? 'true' : 'false');
+}
+
+function bindLayout(): void {
+  const button = document.querySelector<HTMLButtonElement>('[data-layout-toggle]');
+  if (!button) return;
+  button.addEventListener('click', () => {
+    const next: LayoutMode = document.documentElement.dataset.layout === 'phone' ? 'laptop' : 'phone';
+    try {
+      localStorage.setItem(LAYOUT_KEY, next);
+    } catch {
+      // The header still follows the click when storage is blocked.
+    }
+    applyLayout(next);
   });
 }
 
@@ -2107,9 +2108,9 @@ function readHash(): string {
   }
 }
 
-/** An old #board link opens Projections on the Matchups report, the Board view that remains. */
+/** An old #board link opens Projections on Players. */
 function showLegacyBoard(): void {
-  projectionMode = 'matchups';
+  projectionMode = 'players';
   showProjections();
 }
 
@@ -2156,6 +2157,8 @@ document.querySelectorAll<HTMLButtonElement>('[data-sport]').forEach((button) =>
 
 applyTheme(themeFromStorage(storedTheme(), window.matchMedia('(prefers-color-scheme: light)').matches));
 bindTheme();
+applyLayout(storedLayout());
+bindLayout();
 applySport(storedSport());
 void load();
 

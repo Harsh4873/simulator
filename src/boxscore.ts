@@ -340,8 +340,8 @@ function scoreboard(game: SlateGame, score: Simulation, forecast?: MarginForecas
 
 function distributionPanel(score:Simulation):string{
   if(!score.distributions)return '';
-  return `<section class="dist-panel" data-block="box-lines" aria-label="Game distributions"><h3>Check a line</h3><p>Includes overtime. Margin = home points minus away points; a positive margin favors home. Enter a margin threshold (the negative of a home spread).</p>${(['total','margin'] as const).map(kind=>{
-    const d=score.distributions![kind];return `<p>${kind==='total'?'Total':'Home margin'}: mean ${d.mean.toFixed(1)}; median ${d.median.toFixed(1)}; 10–90% ${d.p10.toFixed(1)} to ${d.p90.toFixed(1)}; 5–95% ${d.p05.toFixed(1)} to ${d.p95.toFixed(1)}. Monte Carlo SE of mean ${d.standardError.toFixed(2)} (sampling noise only).</p><label>${kind} line <input type="number" step="0.5" data-game-line="${kind}"></label><p data-line-result="${kind}" role="status">Enter a line.</p>`;
+  return `<section class="dist-panel" data-block="box-lines" aria-label="Game distributions"><h3>Check a line</h3><p>Includes overtime. Margin = home points minus away points; a positive margin favors home.</p>${(['total','margin'] as const).map(kind=>{
+    const d=score.distributions![kind];return `<p>${kind==='total'?'Total':'Home margin'}: mean ${d.mean.toFixed(1)}; median ${d.median.toFixed(1)}; 10–90% ${d.p10.toFixed(1)} to ${d.p90.toFixed(1)}; 5–95% ${d.p05.toFixed(1)} to ${d.p95.toFixed(1)}.</p><label>${kind} line <input type="number" step="0.5" data-game-line="${kind}"></label><p data-line-result="${kind}" role="status">Enter a line.</p>`;
   }).join('')}</section>`;
 }
 
@@ -433,10 +433,7 @@ export function renderBoxScore(
   const shown = score;
   const expected = shown.away.players.some((player) => player.expectation);
   const eventId = textOf(rate?.event_id) || textOf(game.event_id);
-  const note =
-    expected
-        ? 'Each row is that player\'s average across all 10,000 games, including games they sit, so minutes still sum to the team budget. The player panel expected line uses only draws with minutes. The range under each stat is that player\'s own 10th to 90th percentile. It is not one box score.'
-        : 'This box score is the simulated game nearest the median combined score. The range under each score is the 5th to 95th percentile.';
+  const note = 'Averages from 10,000 simulated games. The range under a stat is the 10th to 90th percentile.';
   const charts = chartsPanel(game, score);
   const lines = distributionPanel(score);
   const toggles = [
@@ -448,9 +445,6 @@ export function renderBoxScore(
   ];
   const awayName = teamTitle(game.away) || 'Away';
   const homeName = teamTitle(game.home) || 'Home';
-  const thin = score.thin_rotation
-    ? '<p class="note" role="status">Thin rotation: labelled replacement-level minutes fill remaining spots from league-average rates. Those lines are not invented player stats.</p>'
-    : '';
   return `<div class="box-view" data-event="${escapeHtml(eventId)}" style="${paletteStyle(game.away, game.home)}">
       <div class="toolbar">
         <button type="button" data-back>Back to slate</button>
@@ -475,9 +469,7 @@ export function renderBoxScore(
       ${boxTable('home', game.home, shown.home, sort.home, expected)}
       </div>
       <div data-block="box-notes">
-      ${thin}
       <p class="note">${note}</p>
-      <p class="note">The minutes column totals team-minutes: five players on the floor at once. Regulation is 240 (5 × 48). Overtime is 265 (5 × 53). It is not the length of the game.</p>
       </div>
     </div>`;
 }
@@ -818,36 +810,23 @@ export function renderPropResults(
   const side = form.side === 'over' ? 'Over' : 'Under';
   const caption = `${side} ${form.line} ${MARKET_LABEL[form.market]}`;
   const fair = quote.modelProbability === null ? 'not in the data' : (formatFairPrice(quote.modelProbability, price.style) ?? 'not in the data');
-  const error = quote.standardError === null ? '' : ` Sampling noise about ±${(quote.standardError * 1.96 * 100).toFixed(1)} pp.`;
   const modelWidth = quote.modelProbability === null ? 0 : Math.max(0, Math.min(100, quote.modelProbability * 100));
   const bookWidth = Math.max(0, Math.min(100, quote.breakEven * 100));
-  const oppositeNote =
-    form.opposite.trim() !== '' && opposite === null
-      ? '<p>The opposite price was not valid in this format, so the no-vig price is left out.</p>'
-      : '';
-  const noVig = quote.noVig === null ? '' : `<p>No-vig price on this side: ${percent(quote.noVig)}. That is not the break-even of the price you would bet.</p>`;
-  const calibratedNote = quote.calibrated
-    ? `<p class="prop-note" data-calibrated>Calibrated chance. The simulations alone put this side at ${percent(quote.calibrated.raw)}. Settled lines like it have landed closer to even, so the map for this stat moves that to ${percent(quote.calibrated.mapped)}, and the model chance weighs it ${Math.round(quote.calibrated.w * 100)}% against the no-vig price.</p>`
-    : '';
   return `<div class="prop-results" data-verdict="${verdict.verdict.toLowerCase()}">
     <p class="prop-caption">${escapeHtml(caption)}</p>
     <p class="verdict-mark ${verdict.verdict.toLowerCase()}">${verdict.verdict}</p>
     ${stats}
-    ${calibratedNote}
-    <p class="verdict-why"><span class="why-kicker">Why this call</span>${escapeHtml(verdict.text)}</p>
     <p class="stat-group-label">Model against the book</p>
     <div class="prop-compare" role="img" aria-label="Model ${quote.modelProbability === null ? 'not graded' : percent(quote.modelProbability)} versus book ${percent(quote.breakEven)}">
       <div class="prop-row"><span>Model</span><span class="prop-track"><span class="prop-fill model" style="width:${modelWidth}%"></span></span><span class="prop-pct">${modelPct}</span></div>
       <div class="prop-row"><span>Book</span><span class="prop-track"><span class="prop-fill book" style="width:${bookWidth}%"></span></span><span class="prop-pct">${bookPct}</span></div>
     </div>
     <details class="prop-advanced">
-      <summary>Grade, fair price, and sampling noise</summary>
+      <summary>Grade and fair price</summary>
       <p>Expected return per $1 risked ${(quote.expectedReturn * 100).toFixed(1)}%</p>
       <p>Read as ${escapeHtml(price.label)}</p>
       <p>Model fair price ${escapeHtml(fair)}</p>
-      <p>${quote.grade.wins} wins, ${quote.grade.losses} losses, ${quote.grade.pushes} pushes, ${quote.grade.voids} did not play, out of ${sample.min.length}.${error}</p>
-      ${oppositeNote}
-      ${noVig}
+      <p>${quote.grade.wins} wins, ${quote.grade.losses} losses, ${quote.grade.pushes} pushes, ${quote.grade.voids} did not play, out of ${sample.min.length}.</p>
     </details>
   </div>`;
 }

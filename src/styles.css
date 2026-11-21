@@ -271,7 +271,8 @@ button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 button.ghost,
 [data-back],
 [data-close],
-[data-theme-toggle] {
+[data-theme-toggle],
+[data-layout-toggle] {
   background: transparent;
   color: var(--text);
   border: 1px solid var(--border-strong);
@@ -281,7 +282,8 @@ button.ghost,
 button.ghost:hover:not(:disabled),
 [data-back]:hover,
 [data-close]:hover,
-[data-theme-toggle]:hover {
+[data-theme-toggle]:hover,
+[data-layout-toggle]:hover {
   border-color: var(--muted);
   box-shadow: none;
 }
@@ -290,7 +292,8 @@ button.ghost:disabled { background: transparent; border-color: var(--border); }
 
 [data-back],
 [data-close],
-[data-theme-toggle] {
+[data-theme-toggle],
+[data-layout-toggle] {
   margin-top: 0;
   padding: 7px 14px;
   font-size: 0.8125rem;
@@ -3025,8 +3028,6 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
   .logo,
   .logo > img { width: 44px; height: 44px; }
 
-  table { min-width: 52rem; }
-
   .lineup-row { grid-template-columns: auto minmax(0, 1fr); }
 
   .lineup-row .choice-group { grid-column: 1 / -1; justify-self: start; }
@@ -3232,6 +3233,7 @@ html {
   .projection-game { min-height: 4.25rem; }
   .lean-row { padding: 12px 14px; }
   [data-theme-toggle],
+  [data-layout-toggle],
   [data-back],
   [data-close],
   [data-block-toggle],
@@ -3746,13 +3748,13 @@ html {
 /* NFL box score rows: photo, name, then the position. */
 .team-box .who-cell .player-btn { text-align: left; }
 
-/* Projections views: Players, Defense and Matchups. */
+/* Projections views: Players and Defense. */
 
 .proj-modes {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
-  max-width: 26rem;
+  max-width: 18rem;
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -3953,3 +3955,180 @@ body { background: var(--bg); }
 /* Esports: what a player did reads green over his projection and red under it. */
 .esports-table .pct[data-result="over"] { color: var(--accent); font-weight: 700; }
 .esports-table .pct[data-result="under"] { color: var(--danger); font-weight: 700; }
+
+/* Phone is a narrow column. A viewport at most 800px stacks tables even when the saved mode is laptop. */
+
+html[data-layout="phone"] .wrap {
+  width: min(100%, 430px);
+  max-width: min(100%, 430px);
+  margin-left: auto;
+  margin-right: auto;
+  padding: 14px 12px 28px;
+}
+
+html[data-layout="phone"] .topbar-inner,
+html[data-layout="phone"] .topbar-tools { flex-wrap: wrap; }
+
+html[data-layout="phone"] .history-bars { min-width: 0; width: 100%; }
+
+html[data-layout="phone"] .game-strip {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
+html[data-layout="phone"] .projection-controls .market-pills {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
+html[data-layout="phone"] .pick-grid { grid-template-columns: minmax(0, 1fr); }
+
+@media (max-width: 460px) {
+  html[data-layout="phone"] .wrap {
+    width: 100%;
+    max-width: 100%;
+  }
+}
+
+html[data-layout="phone"] .table-scroll,
+html[data-layout="phone"] .sort-bar { overflow-x: visible; }
+
+html[data-layout="phone"] .sort-bar { flex-wrap: wrap; }
+
+html[data-layout="phone"] table {
+  min-width: 0;
+  width: 100%;
+}
+
+html[data-layout="phone"] th,
+html[data-layout="phone"] td,
+html[data-layout="phone"] .dvp-table th,
+html[data-layout="phone"] .dvp-table td { white-space: normal; }
+
+html[data-layout="phone"] thead,
+html[data-layout="phone"] tbody,
+html[data-layout="phone"] tr { display: block; }
+
+html[data-layout="phone"] thead tr {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+html[data-layout="phone"] tbody th,
+html[data-layout="phone"] tbody th:first-child,
+html[data-layout="phone"] thead th:first-child {
+  position: static;
+  display: block;
+  width: 100%;
+  white-space: normal;
+}
+
+html[data-layout="phone"] thead th { width: auto; }
+
+html[data-layout="phone"] tbody td,
+html[data-layout="phone"] .dvp-table td,
+html[data-layout="phone"] .dvp-table td.dvp-pace {
+  display: grid;
+  grid-template-columns: minmax(6.5rem, 42%) minmax(0, 1fr);
+  gap: 2px 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
+}
+
+html[data-layout="phone"] tbody td[data-col]::before {
+  content: attr(data-col);
+}
+
+html[data-layout="phone"] tbody td:not([data-col])[data-label]::before {
+  content: attr(data-label);
+}
+
+html[data-layout="phone"] tbody td[data-col]::before,
+html[data-layout="phone"] tbody td:not([data-col])[data-label]::before {
+  grid-column: 1;
+  align-self: center;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+html[data-layout="phone"] tbody td:is([data-col], [data-label]) > * {
+  grid-column: 2;
+  justify-self: end;
+  text-align: right;
+}
+
+@media (max-width: 800px) {
+  .table-scroll { overflow-x: visible; }
+  .sort-bar { flex-wrap: wrap; }
+
+  table {
+    min-width: 0;
+    width: 100%;
+  }
+
+  th,
+  td,
+  .dvp-table th,
+  .dvp-table td { white-space: normal; }
+
+  thead,
+  tbody,
+  tr { display: block; }
+
+  thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 8px;
+  }
+
+  tbody th,
+  tbody th:first-child,
+  thead th:first-child {
+    position: static;
+    display: block;
+    width: 100%;
+    white-space: normal;
+  }
+
+  thead th { width: auto; }
+
+  tbody td,
+  .dvp-table td,
+  .dvp-table td.dvp-pace {
+    display: grid;
+    grid-template-columns: minmax(6.5rem, 42%) minmax(0, 1fr);
+    gap: 2px 8px;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+    text-align: left;
+  }
+
+  tbody td[data-col]::before { content: attr(data-col); }
+  tbody td:not([data-col])[data-label]::before { content: attr(data-label); }
+
+  tbody td[data-col]::before,
+  tbody td:not([data-col])[data-label]::before {
+    grid-column: 1;
+    align-self: center;
+    color: var(--muted);
+    font-family: var(--sans);
+    font-size: 0.6875rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  tbody td:is([data-col], [data-label]) > * {
+    grid-column: 2;
+    justify-self: end;
+    text-align: right;
+  }
+}

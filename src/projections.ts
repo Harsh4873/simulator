@@ -27,7 +27,7 @@ import {
   type TeammateSplit,
 } from './projection-context.ts';
 import { bookKey, type BookLine } from './book-lines.ts';
-import { EXTREME_CLAIM, liveTierFor, rankLeans, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
+import { EXTREME_CLAIM, rankLeans, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
 import { quoteCalibrationFor, type PropCalibrationArtifact, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
 import { americanBreakEven, gradeProp, noVigFromBreakEven, parseBookPrice, quoteProp, valueAt, type PlayerSample, type PropMarket } from './props.ts';
 import type { Simulation } from './simulate.ts';
@@ -54,8 +54,8 @@ export type HistorySplit = 'all' | 'home' | 'away';
 /** The board shows every game still to play, or one game. */
 export type BoardScope = 'all' | 'game';
 export type BoardSort = 'projection' | 'over' | 'under' | 'matchup';
-/** Players is the card board; Defense ranks tonight's defenses by position; Matchups is the team report. */
-export type ProjectionMode = 'players' | 'defense' | 'matchups';
+/** Players is the card board. Defense ranks tonight's defenses by position. */
+export type ProjectionMode = 'players' | 'defense';
 /** Keeps the cards whose opponent is soft (ranked 21st to 30th in what it allows) or tough (1st to 10th) at the player's position. */
 export type DvpFilter = 'all' | 'soft' | 'tough';
 /** One defense and position picked from the Defense view. */
@@ -103,8 +103,6 @@ export interface ProjectionView {
   /** How many cards the every-game board shows before its Show all button. Unset shows them all. */
   boardLimit?: number | null;
   mode?: ProjectionMode;
-  /** The Matchups body, rendered from a file the view does not carry. */
-  modeBody?: string;
   dvpFilter?: DvpFilter;
   dvpFocus?: DvpFocus | null;
   /** The position column the Defense view is ordered by. */
@@ -114,7 +112,6 @@ export interface ProjectionView {
 export const PROJECTION_MODES: readonly { value: ProjectionMode; label: string }[] = [
   { value: 'players', label: 'Players' },
   { value: 'defense', label: 'Defense' },
-  { value: 'matchups', label: 'Matchups' },
 ];
 
 export function isProjectionMode(value: string): value is ProjectionMode {
@@ -634,7 +631,7 @@ function pickCardHtml(row: BoardRow, form: PropFormState, selected: boolean, sid
           <span class="pick-side" data-side="over"${leanTo === 'over' ? ' data-lead' : ''}><span class="pick-side-name">Over</span><span class="pick-pct">${row.over || '—'}</span>${row.over ? price(row.book?.over_odds) : ''}</span>
           <span class="pick-meter" aria-hidden="true"><span class="pick-meter-fill" style="width:${((row.overRate ?? 0) * 100).toFixed(1)}%"></span></span>
           <span class="pick-side" data-side="under"${leanTo === 'under' ? ' data-lead' : ''}><span class="pick-side-name">Under</span><span class="pick-pct">${row.under || '—'}</span>${row.under ? price(row.book?.under_odds) : ''}</span>
-        </span>${row.anchor ? `<span class="pick-anchor" title="The chance shown weighs the simulation against the price, the way graded lines have settled">Over: sim ${percent(row.anchor.raw)} · price ${percent(row.anchor.market)}</span>` : ''}`
+        </span>${row.anchor ? `<span class="pick-anchor" title="Simulated chance and the posted price">Over: sim ${percent(row.anchor.raw)} · price ${percent(row.anchor.market)}</span>` : ''}`
       : '';
   const spark = row.values.length ? `<span class="pick-spark">${sparkBarsSvg(row.values, row.line, `${row.name}: ${marketLabel(form.market)} in simulated games he played`)}</span>` : '';
   const hits = hasHistory
@@ -815,13 +812,13 @@ export function defenseModeHtml(view: ProjectionView): string {
         const [value, rank] = row.cells[slot];
         const tone = rankTone(rank, true);
         const title = `${abbr} allows ${value.toFixed(1)} ${stat} a game to ${SLOT_WORD[slot]}: ${ordinal(rank)} of 30, where 30th allows the most. Show the ${sideAbbr(row.offense)} ${slot === 'all' ? 'players' : SLOT_WORD[slot]} facing it.`;
-        return `<td><button type="button" class="dvp-cell" data-tone="${tone}" data-dvp-team="${escapeHtml(row.defense.team_id)}" data-dvp-slot="${slot}" data-dvp-event="${escapeHtml(row.game.event_id)}" title="${escapeHtml(title)}"><strong>${value.toFixed(1)}</strong><small>${ordinal(rank)}</small></button></td>`;
+        return `<td data-label="${escapeHtml(SLOT_NAME[slot])}"><button type="button" class="dvp-cell" data-tone="${tone}" data-dvp-team="${escapeHtml(row.defense.team_id)}" data-dvp-slot="${slot}" data-dvp-event="${escapeHtml(row.game.event_id)}" title="${escapeHtml(title)}"><strong>${value.toFixed(1)}</strong><small>${ordinal(rank)}</small></button></td>`;
       }).join('');
       const [pace, paceRank] = row.pace;
       return `<tr>
           <th scope="row"><span class="dvp-team">${logoImg(row.defense)}<span class="dvp-team-copy"><span class="dvp-abbr">${escapeHtml(abbr)}</span><span class="dvp-vs">vs ${escapeHtml(sideAbbr(row.offense))} · ${escapeHtml(clockText(row.game.start_time))}</span></span></span></th>
           ${cells}
-          <td class="dvp-pace" data-tone="${rankTone(paceRank, false)}" title="${escapeHtml(`${pace.toFixed(1)} possessions per 48 minutes, ${ordinal(paceRank)} fastest of 30`)}"><strong>${pace.toFixed(1)}</strong><small>${ordinal(paceRank)}</small></td>
+          <td class="dvp-pace" data-label="Pace" data-tone="${rankTone(paceRank, false)}" title="${escapeHtml(`${pace.toFixed(1)} possessions per 48 minutes, ${ordinal(paceRank)} fastest of 30`)}"><strong>${pace.toFixed(1)}</strong><small>${ordinal(paceRank)}</small></td>
         </tr>`;
     })
     .join('');
@@ -1274,7 +1271,7 @@ function onOffPanelHtml(
   const matesById = new Map(rate.players.filter((p) => p.team_id === player.team_id).map((p) => [p.athlete_id, p]));
   const activeSplit = defaultOnOffMate(onOff, rate, player, overrides, selectedMateId);
   const [totalMin, totalUsg] = onOff.overall;
-  const intro = `<p class="section-copy">Usage is the share of his team's plays he finishes — a shot, a free-throw trip, or a turnover — counted over the reconstructed minutes he is on the court. Across these ${onOff.games} games (${totalMin} min) it is <strong>${totalUsg.toFixed(1)}%</strong>.</p>`;
+  const intro = `<p class="section-copy">Usage is the share of his team's plays he finishes — a shot, a free-throw trip, or a turnover — counted over the minutes on the court. Across these ${onOff.games} games (${totalMin} min) it is <strong>${totalUsg.toFixed(1)}%</strong>.</p>`;
   if (!activeSplit) {
     return `<section class="projection-card onoff-panel" data-block="proj-onoff" aria-label="On and off court usage">
         <div class="section-head">
@@ -1282,7 +1279,7 @@ function onOffPanelHtml(
           <span class="meta-pill">${onOff.games} games with rebuilt lineups · ${escapeHtml(onOff.season_label)}</span>
         </div>
         ${intro}
-        <p class="prop-note">A teammate split needs at least 20 reconstructed minutes both on and off the court.</p>
+        <p class="prop-note">A teammate split needs at least 20 minutes on the court both on and off.</p>
       </section>`;
   }
 
@@ -1369,7 +1366,7 @@ function onOffPanelHtml(
             <tbody>${allRows}</tbody>
           </table>
         </div>
-        <p class="field-hint">Min is reconstructed minutes shared and apart. P/36 is points per 36 on-court minutes. A split needs 20 minutes on each side before it appears.</p>
+        <p class="field-hint">Min is minutes on the court shared and apart. P/36 is points per 36 on-court minutes. A split needs 20 minutes on each side before it appears.</p>
       </details>
     </section>`;
 }
@@ -1395,17 +1392,18 @@ export function gameLogRowsHtml(
         else resCell = `<span class="result-pill under">under ${(val - graded).toFixed(1)}</span>`;
       }
       const outcome = row.teamPts > row.oppPts ? 'W' : 'L';
+      const statLabel = escapeHtml(marketShort(form.market));
       return `<tr>
           <th scope="row">${escapeHtml(shortCalendarDate(row.date))}</th>
-          <td>${row.home ? 'vs ' : '@ '}${escapeHtml(oppAbbr)}</td>
-          <td>${outcome} ${row.teamPts}-${row.oppPts}</td>
-          <td>${row.min.toFixed(0)}</td>
-          <td class="log-stat">${escapeHtml(valText)}</td>
-          <td>${row.fgm}-${row.fga}</td>
-          <td>${row.tpm}-${row.tpa}</td>
-          <td>${row.ftm}-${row.fta}</td>
-          <td>${row.usg === null ? '—' : `${row.usg.toFixed(1)}%`}</td>
-          <td>${resCell}</td>
+          <td data-label="Opp">${row.home ? 'vs ' : '@ '}${escapeHtml(oppAbbr)}</td>
+          <td data-label="Score">${outcome} ${row.teamPts}-${row.oppPts}</td>
+          <td data-label="Min">${row.min.toFixed(0)}</td>
+          <td class="log-stat" data-label="${statLabel}">${escapeHtml(valText)}</td>
+          <td data-label="FG">${row.fgm}-${row.fga}</td>
+          <td data-label="3PT">${row.tpm}-${row.tpa}</td>
+          <td data-label="FT">${row.ftm}-${row.fta}</td>
+          <td data-label="USG%">${row.usg === null ? '—' : `${row.usg.toFixed(1)}%`}</td>
+          <td data-label="Result">${resCell}</td>
         </tr>`;
     })
     .join('');
@@ -1720,17 +1718,9 @@ export function calibrationStatusHtml(status: CalibrationStatus | null | undefin
   return `<p class="prop-note" data-calibration-status>Prop calibration: ${escapeHtml(parts.join('; '))}. A calibrated chance is the simulation moved by a map fitted on earlier settled lines, then weighed ${weight}% against the no-vig price.</p>`;
 }
 
-function leanRowHtml(lean: RankedLean, record: PickRecord | null | undefined): string {
+function leanRowHtml(lean: RankedLean): string {
   const side = lean.side === 'over' ? 'Over' : 'Under';
   const odds = lean.side === 'over' ? lean.over_odds : lean.under_odds;
-  const tier = liveTierFor(record, lean.side, lean.claimed);
-  const measured = lean.drift === 'red'
-    ? '<span class="lean-measured edge-down">Calibration for this stat missed on recent games by more than noise explains, so its leans are not listed until a refit passes</span>'
-    : lean.claimed >= EXTREME_CLAIM
-    ? `<span class="lean-measured edge-down">A gap of ${Math.round(EXTREME_CLAIM * 100)} points or more is too large to trust. It usually means the price or the card is missing news${tier && tier.n > 0 ? `: ${tier.n.toLocaleString('en-US')} graded gaps this size hit ${escapeHtml(percent(tier.wins / tier.n))}` : ''}</span>`
-    : tier && tier.pooled > 0
-      ? `<span class="lean-measured ${tier.edge > 0 ? 'edge-up' : 'edge-down'}">Leans this strong: ${points(tier.edge)} against the price, ${tier.pooled.toLocaleString('en-US')} graded</span>`
-      : '<span class="lean-measured">No graded leans of this strength yet</span>';
   const modelWidth = Math.max(0, Math.min(100, lean.model * 100)).toFixed(1);
   const needAt = Math.max(0, Math.min(100, lean.need * 100)).toFixed(1);
   return `<li><button type="button" class="lean-row" data-projection-player="${escapeHtml(lean.athlete_id)}" data-projection-event="${escapeHtml(lean.event_id)}" data-lean-market="${escapeHtml(lean.market)}" data-lean-side="${lean.side}">
@@ -1742,30 +1732,14 @@ function leanRowHtml(lean: RankedLean, record: PickRecord | null | undefined): s
       <span class="lean-meter" aria-hidden="true"><span class="lean-meter-fill" data-side="${lean.side}" style="width:${modelWidth}%"></span><span class="lean-meter-need" style="left:${needAt}%"></span></span>
       <span class="lean-meta">${escapeHtml(lean.matchup)} · projection ${lean.projection.toFixed(1)} in ${lean.minutes.toFixed(0)} min${lean.play < 0.9 ? ` · plays in ${escapeHtml(percent(lean.play))} of simulations, and a sit-out voids the line` : ''}</span>
       <span class="lean-odds">Model ${escapeHtml(percent(lean.model))}${rawSideShare(lean) !== null ? ` calibrated, ${escapeHtml(percent(rawSideShare(lean)!))} in the raw simulation` : ''} · price needs ${escapeHtml(percent(lean.need))}${lean.also ? ` · ${lean.also} more of his lines ${lean.also === 1 ? 'leans' : 'lean'} ${lean.side}` : ''}</span>
-      ${measured}
     </button></li>`;
 }
 
-function sideSummary(record: PickRecord | null | undefined, side: 'over' | 'under'): { n: number; edge: number } | null {
-  if (!record?.tiersLive?.length) return null;
-  let n = 0;
-  let sum = 0;
-  for (const tier of record.tiersLive) {
-    if (tier.side !== side || tier.lo === null) continue;
-    n += tier.n;
-    sum += tier.wins - tier.need * tier.n;
-  }
-  return n ? { n, edge: sum / n } : null;
-}
-
-function leanColumnHtml(title: string, side: 'over' | 'under', rows: readonly RankedLean[], count: number, players: number, record: PickRecord | null | undefined, anyLeans: boolean): string {
-  const summary = sideSummary(record, side);
+function leanColumnHtml(title: string, side: 'over' | 'under', rows: readonly RankedLean[], count: number, players: number): string {
   let body: string;
   if (rows.length) {
     const more = players > rows.length ? `<p class="prop-note">${count} ${side} leans across ${players} players clear the bar. Each player's strongest is shown for the first ${rows.length}; the board for a game has the rest.</p>` : '';
-    body = `<ul>${rows.map((row) => leanRowHtml(row, record)).join('')}</ul>${more}`;
-  } else if (summary && summary.edge < 0 && anyLeans) {
-    body = `<p class="prop-note">No ${side} lean is listed. ${title} leans have settled ${points(summary.edge)} against the posted price across ${summary.n.toLocaleString('en-US')} graded leans, so a high ${side} percentage here has not been a reason to take it.</p>`;
+    body = `<ul>${rows.map((row) => leanRowHtml(row)).join('')}</ul>${more}`;
   } else {
     body = `<p class="prop-note">No ${side} lean clears the bar right now.</p>`;
   }
@@ -1848,54 +1822,32 @@ export interface LeanPanelInput {
 }
 
 export function leanPanelInner(input: LeanPanelInput): string {
-  const book = input.book?.trim() || 'sportsbook';
   const head = '<div class="leans-head"><h2>Top leans</h2><p class="section-sub">The model\'s side at posted lines for games that have not started. The bar is the model chance; the tick is what the price needs.</p></div>';
-  const lede = `<details class="method-note"><summary>How leans are picked</summary><p class="section-sub">The simulation's side at the posted ${escapeHtml(book)} over/under lines, for games that have not started. A lean is listed only while graded leans of that side and strength have been beating the posted price. The model percentage is the claim. The measured line under it is how claims like it have settled.</p>${calibrationStatusHtml(input.calibration)}</details>`;
   if (!input.posted) {
-    return `${head}${lede}<p class="prop-note">No posted line is in for this slate yet. They usually arrive late morning Central, and this list fills at the next refresh.</p>${recordHtml(input.record)}`;
+    return `${head}<p class="prop-note">No posted line is in for this slate yet. They usually arrive late morning Central, and this list fills at the next refresh.</p>`;
   }
   if (!input.open) {
-    return `${head}${lede}<p class="prop-note">Every game with a posted line has started. Leans are logged before the tip and graded after the final.</p>${recordHtml(input.record)}`;
+    return `${head}<p class="prop-note">Every game with a posted line has started. Leans are logged before the tip and graded after the final.</p>`;
   }
   const board = rankLeans(input.leans, input.record);
   const waiting = input.waiting
     ? `<p class="section-sub">${input.waiting} ${input.waiting === 1 ? 'game is' : 'games are'} still simulating.</p>`
     : '';
-  const any = input.leans.length > 0;
-  const unlistedCount = board.unlisted.over.length + board.unlisted.under.length;
-  const unlisted = unlistedCount
-    ? `<details class="lean-unlisted">
-        <summary>Strongest model claims that are not listed (${unlistedCount})</summary>
-        <p class="prop-note">These are the simulation's largest gaps to the posted price on sides that have not been beating it. They are shown so the claim and its record can be read together.</p>
-        <div class="lean-columns">
-          <div><h3>Under</h3>${board.unlisted.under.length ? `<ul>${board.unlisted.under.map((row) => leanRowHtml(row, input.record)).join('')}</ul>` : '<p class="prop-note">None.</p>'}</div>
-          <div><h3>Over</h3>${board.unlisted.over.length ? `<ul>${board.unlisted.over.map((row) => leanRowHtml(row, input.record)).join('')}</ul>` : '<p class="prop-note">None.</p>'}</div>
-        </div>
-      </details>`
-    : '';
-  return `${head}${lede}${waiting}<div class="lean-columns">${leanColumnHtml('Under', 'under', board.listed.under, board.counts.under, board.players.under, input.record, any)}${leanColumnHtml('Over', 'over', board.listed.over, board.counts.over, board.players.over, input.record, any)}</div>${unlisted}${recordHtml(input.record)}`;
+  return `${head}${waiting}<div class="lean-columns">${leanColumnHtml('Under', 'under', board.listed.under, board.counts.under, board.players.under)}${leanColumnHtml('Over', 'over', board.listed.over, board.counts.over, board.players.over)}</div>`;
 }
 
-/** How claims like the one in the form have settled, shown under the verdict. */
+/** The settled-leans paragraph used to sit under a priced line. The page no longer prints it. */
 export function measuredNoteHtml(
   sample: PlayerSample | null,
   form: PropFormState,
   record: PickRecord | null | undefined,
   calibration?: PropPanelCalibration | null,
 ): string {
-  if (!sample || !record || form.odds.trim() === '') return '';
-  const line = validPropLine(form.line);
-  const price = parseBookPrice(form.odds, form.style);
-  if (line === null || !price) return '';
-  const opposite = form.opposite.trim() === '' ? null : parseBookPrice(form.opposite, form.style);
-  if (form.opposite.trim() !== '' && !opposite) return '';
-  const quote = quoteProp(sample, form.market, form.side, line, price, opposite, quoteCalibrationFor(calibration, form.market, form.side));
-  if (!quote || quote.edge === null) return '';
-  const tier = liveTierFor(record, form.side, quote.edge);
-  if (!tier || tier.pooled <= 0 || quote.edge >= EXTREME_CLAIM) return '';
-  const side = form.side === 'over' ? 'Over' : 'Under';
-  const claim = tier.lo === null ? `${side} sides the posted price already beats` : `${side} claims of ${escapeHtml(tierLabel(tier))} points against the price`;
-  return `<p class="prop-note measured-note">${claim} have settled <strong class="${tier.edge > 0 ? 'edge-up' : 'edge-down'}">${escapeHtml(points(tier.edge))}</strong> against it across ${tier.pooled.toLocaleString('en-US')} graded leans.</p>`;
+  void sample;
+  void form;
+  void record;
+  void calibration;
+  return '';
 }
 
 export function postedLineHtml(book: BookLine | null, form: PropFormState): string {
@@ -1971,15 +1923,12 @@ function introHtml(mode: ProjectionMode): string {
   const note =
     mode === 'defense'
       ? 'How tonight\'s defenses hold each position. Pick a stat, then tap a number for the players in that matchup.'
-      : mode === 'matchups'
-        ? 'Each game in words: recent results, opponents, injuries and points allowed by position.'
-        : 'Every player, 10,000 simulated games. Pick a stat, then tap a player for the full breakdown.';
+      : 'Every player, 10,000 simulated games. Pick a stat, then tap a player for the full breakdown.';
   return `<header class="projection-intro">
         <div class="projection-titles">
           <h2>Projections</h2>
           <p class="projection-note">${note}</p>
         </div>
-        <details class="method-note"><summary>How this works</summary><p class="note">A simulator, not a betting ticket. 10,000 simulated games paired with ESPN box-score history and reconstructed lineup stints. Posted lines and prices are compared after the games are drawn; the simulator does not read them, or the spread under a game.</p></details>
       </header>
       ${modeSwitchHtml(mode)}`;
 }
@@ -1991,12 +1940,6 @@ export function renderProjections(view: ProjectionView): string {
       ${introHtml(mode)}
       <div class="projection-controls">${marketPills(view.form, null, [])}</div>
       ${defenseModeHtml(view)}
-    </div>`;
-  }
-  if (mode === 'matchups') {
-    return `<div class="projection-page" data-proj-view="${mode}">
-      ${introHtml(mode)}
-      <div class="proj-mode-body">${view.modeBody ?? ''}</div>
     </div>`;
   }
   const scope: BoardScope = view.scope ?? (view.eventId ? 'game' : 'all');

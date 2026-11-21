@@ -220,7 +220,8 @@ test('CS2 reads a map at a time with maps 1-2 beside it, and a result reads agai
   // An older file's maps 1-2 number does not read against a map's average.
   assert.match(html, /<span class="pct" data-actual>Played 9\.5</);
   assert.match(html, /title="Plain average 15\.2 a map"/);
-  assert.match(html, /kills 10% closer than his plain average, 81% inside the range/);
+  assert.equal(parsed.model.checks?.[0]?.coverage, 0.81);
+  assert.doesNotMatch(html, /How these projections work/);
   // A maps 1-2 band on a per-game number, or a broken band, fails the file.
   const broken = JSON.parse(JSON.stringify(doc));
   broken.titles[0].matches[0].players[0].props[0].projection.maps12.p10 = 50;

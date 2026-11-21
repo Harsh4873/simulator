@@ -506,7 +506,7 @@ test('injuries keep unknown, skip a null cap, and defense rows are not a bet', (
   assert.match(renderMatchups(null, slate, card), /The report is not for this card\./);
 });
 
-test('Projections holds the Matchups report as a view, and it does not draw or read lineup edits', async () => {
+test('an old #board link opens Projections on Players, and the page does not fetch matchups', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'sim-matchups-'));
   const { window, document } = parseHTML(readFileSync('index.html', 'utf8'));
   const globals = globalThis as unknown as Record<string, unknown>;
@@ -515,6 +515,9 @@ test('Projections holds the Matchups report as a view, and it does not draw or r
   }
   Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => ({ matches: false }) });
   window.scrollTo = () => {};
+  const loc = { hash: '#board' };
+  Object.defineProperty(window, 'location', { configurable: true, value: loc });
+  Object.defineProperty(globalThis, 'location', { configurable: true, value: loc });
   globals.CSS = { escape: (value: string) => value };
   const reads: string[] = [];
   globals.localStorage = { getItem: (key: string) => { reads.push(key); return null; }, setItem: () => {} };
@@ -544,7 +547,6 @@ test('Projections holds the Matchups report as a view, and it does not draw or r
     game.start_time = new Date(now.getTime() + 3_600_000).toISOString();
   });
   delete card.model_hash;
-  const matchups = buildMatchups(slate, card, []);
   const picks = {
     schema_version: 1,
     generated_at: card.generated_at,
@@ -556,16 +558,16 @@ test('Projections holds the Matchups report as a view, and it does not draw or r
     leans: [],
     record: { tiers: [] },
   };
+  const fetched: string[] = [];
   globals.fetch = async (url: string) => {
+    fetched.push(String(url));
     const body = String(url).endsWith('/slate.json')
       ? JSON.stringify(slate)
       : String(url).endsWith('/rate-card.json')
         ? JSON.stringify(card)
-        : String(url).endsWith('/matchups.json')
-          ? JSON.stringify(matchups)
-          : String(url).endsWith('/picks.json')
-            ? JSON.stringify(picks)
-            : '';
+        : String(url).endsWith('/picks.json')
+          ? JSON.stringify(picks)
+          : '';
     return new Response(body, { status: body ? 200 : 404 });
   };
   const flush = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -573,37 +575,35 @@ test('Projections holds the Matchups report as a view, and it does not draw or r
     await build({ entryPoints: ['src/main.ts'], bundle: true, format: 'esm', outfile: join(dir, 'app.mjs'), loader: { '.css': 'empty' }, logLevel: 'silent' });
     await import(pathToFileURL(join(dir, 'app.mjs')).href);
     await flush();
-    // The Board tab is gone: its Matchups report is a view inside Projections.
     assert.equal(document.querySelector('[data-desk-tab="board"]'), null);
     assert.equal(document.querySelector('#board'), null);
-    document.querySelector<HTMLButtonElement>('[data-desk-tab="projections"]')?.click();
-    await flush();
+    assert.equal(fetched.some((url) => url.endsWith('/matchups.json')), false);
     const mode = (value: string) => document.querySelector<HTMLButtonElement>(`#projections [data-proj-mode="${value}"]`);
+    assert.equal(mode('matchups'), null);
     assert.equal(mode('players')?.getAttribute('aria-pressed'), 'true');
     assert.equal(mode('prices'), null, 'the Prices view is gone');
     assert.equal(document.querySelector('[data-desk-tab="projections"]')?.getAttribute('aria-selected'), 'true');
     assert.equal(document.querySelector('[data-desk-tab="games"]')?.getAttribute('aria-selected'), 'false');
+    const page = document.querySelector('#projections')?.textContent ?? '';
+    assert.equal(page.includes('NO BET'), false);
+    assert.equal(page.includes('Not a predicted score'), false);
     const drawn = workers;
     reads.length = 0;
-    mode('matchups')?.click();
+    mode('defense')?.click();
     await flush();
     assert.equal(workers, drawn);
     assert.equal(reads.includes('simulator.lineups'), false);
-    assert.equal(mode('matchups')?.getAttribute('aria-pressed'), 'true');
+    assert.equal(mode('defense')?.getAttribute('aria-pressed'), 'true');
     assert.equal(mode('players')?.getAttribute('aria-pressed'), 'false');
-    assert.equal(document.querySelector('#projections [data-verdict]')?.textContent, 'NO BET');
-    assert.equal((document.querySelector('#projections')?.textContent ?? '').includes('odds-player'), false);
-    assert.match(document.querySelector('#projections')?.textContent ?? '', /Not a predicted score/);
-    assert.equal((document.querySelector('#projections')?.textContent ?? '').includes('Simulating 10,000'), false);
-    // Without defense numbers on the card, the Defense view says so instead of drawing an empty table.
-    mode('defense')?.click();
-    await flush();
     assert.match(document.querySelector('#projections')?.textContent ?? '', /Defense numbers are not on this card yet/);
     mode('players')?.click();
     await flush();
+    assert.equal(mode('players')?.getAttribute('aria-pressed'), 'true');
     assert.equal(workers, drawn);
+    assert.equal(fetched.some((url) => url.endsWith('/matchups.json')), false);
   } finally {
     globalThis.setInterval = timer;
+    delete (globalThis as Record<string, unknown>).location;
     rmSync(dir, { recursive: true, force: true });
   }
 });

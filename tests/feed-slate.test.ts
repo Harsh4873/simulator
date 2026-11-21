@@ -148,7 +148,7 @@ test('a finished esports game shows each player\'s projection and what he did, a
   assert.match(html, /<th scope="col">Kills<span class="th-sub">maps 1-2<\/span><\/th>/);
   assert.match(html, /title="Plain average 18\.2 a map"><span class="stat">36<\/span><span class="pct">26–47<\/span>/);
   assert.match(html, /<tr class="team-row"><th colspan="3" scope="rowgroup">GamerLegion<\/th><\/tr>/);
-  assert.match(html, /<details class="method-note"><summary>How these projections work<\/summary>/);
+  assert.doesNotMatch(html, /How these projections work/);
   // An older file's maps 1-2 number does not read against a map's average, so the result carries no over or under.
   assert.match(html, /<span class="pct" data-actual>Played 21\.5<\/span>/);
   assert.match(html, /data-result>Final</);

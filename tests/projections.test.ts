@@ -132,7 +132,6 @@ test('played means, model chances, and priced copy stay on the prop grader', () 
   const chips = /data-teammates[\s\S]*?<\/div>\s*<\/div>/.exec(html)?.[0] ?? '';
   assert.match(chips, new RegExp(mate.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.equal(chips.includes('+2.0'), false);
-  assert.match(html, /A simulator, not a betting ticket/);
   assert.match(html, /Means from the draws this player actually played/);
   const simulated = [...simulation.away.players, ...simulation.home.players].find((item) => item.athlete_id === player.athlete_id);
   const share = `${((simulated?.expectation?.playRate ?? Number.NaN) * 100).toFixed(1)}%`;
@@ -764,9 +763,9 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     assert.match(sides(), /Top leans/);
     assert.ok(sides().includes(star.name));
     assert.ok(sides().includes(`Under ${starLine} PTS -110`));
-    assert.match(sides(), /Leans this strong: \+\d+\.\d pp against the price, 300 graded/);
+    assert.doesNotMatch(sides(), /Leans this strong/);
     assert.match(sides(), /No over lean clears the bar right now/);
-    assert.match(sides(), /Record: 300 graded leans/);
+    assert.doesNotMatch(sides(), /Record: 300 graded leans/);
     assert.equal(workers, 0);
     // The board opens on every game at once. With a posted line on the slate it lists the players who have one, as a
     // card with his photo, the posted line and its book, before any game has been drawn here.
@@ -819,7 +818,7 @@ test('DOM interactions on #projections drive search, markets, history splits, on
     assert.equal(formValue('[data-prop-odds]'), '-110');
     assert.equal(formValue('[data-prop-opposite]'), '-112');
     assert.ok(document.querySelector('#projections [data-prop-side][value="under"]')?.hasAttribute('checked'));
-    assert.match(document.querySelector('[data-measured]')?.textContent ?? '', /Under claims of \d+ to \d+ points against the price have settled \+\d+\.\d pp/);
+    assert.equal((document.querySelector('[data-measured]')?.textContent ?? '').trim(), '');
     // Typing another line offers the posted one back.
     const lineInput = document.querySelector<HTMLInputElement>('#projections [data-prop-line]')!;
     lineInput.value = '22.5';
@@ -1019,31 +1018,30 @@ test('board and lean accuracy fixes: posted lines, no self-placed hooks, measure
   const panel = leanPanelInner({ leans, waiting: 0, record, book: 'DraftKings', open: true, posted: true });
   const [underCol, overCol] = panel.split('<h3>Over</h3>');
   assert.equal(underCol.includes(underLean.name), underLean.claimed >= 0.03);
-  assert.match(overCol.split('<details')[0], /No over lean is listed\. Over leans have settled -\d+\.\d pp against the posted price across 300 graded leans/);
-  assert.equal(overCol.split('<details')[0].includes(overLean.name), false);
-  assert.match(panel, /Strongest model claims that are not listed/);
-  assert.match(panel, /Record: 600 graded leans/);
-  assert.match(panel, /600 were logged live before the tip/);
+  assert.match(overCol, /No over lean clears the bar right now/);
+  assert.equal(overCol.includes(overLean.name), false);
+  assert.doesNotMatch(panel, /Strongest model claims that are not listed/);
+  assert.doesNotMatch(panel, /Record: 600 graded leans/);
+  assert.doesNotMatch(panel, /logged live before the tip/);
+  assert.doesNotMatch(panel, /settled .* graded leans/);
   const replayed = buildRecord([recordFile('2026-10-30', 'replay', graded)]);
   const replayPanel = leanPanelInner({ leans, waiting: 0, record: replayed, book: 'DraftKings', open: true, posted: true });
   assert.equal(replayPanel.split('<h3>Over</h3>')[0]?.includes(underLean.name), false);
-  assert.match(replayPanel, /rebuilt from archived pre-tip inputs with the current model/);
-  assert.match(replayPanel, /0 were logged live before the tip/);
+  assert.doesNotMatch(replayPanel, /rebuilt from archived pre-tip inputs/);
+  assert.doesNotMatch(replayPanel, /logged live before the tip/);
   if (underLean.claimed >= 0.03) {
     assert.match(underCol, new RegExp(`data-projection-player="${underLean.athlete_id}"[^>]*data-lean-market="pts" data-lean-side="under"`));
-    assert.match(underCol, /Leans this strong: \+\d+\.\d pp against the price, 300 graded/);
+    assert.doesNotMatch(underCol, /Leans this strong/);
   }
   assert.match(leanPanelInner({ leans: [], waiting: 2, record, book: 'DraftKings', open: true, posted: true }), /2 games are still simulating/);
   assert.match(leanPanelInner({ leans: [], waiting: 0, record, book: null, open: false, posted: false }), /No posted line is in for this slate yet/);
   assert.match(leanPanelInner({ leans: [], waiting: 0, record: null, book: 'DraftKings', open: false, posted: true }), /Every game with a posted line has started/);
-  // The same measured number sits under a priced line in the form.
   const note = measuredNoteHtml(sim.playerDraws.get(roleB.athlete_id)!, { market: 'pts', side: 'under', line: String(highLine), style: 'american', odds: '-120', opposite: '' }, record);
-  assert.match(note, /Under claims of [\d+ to]+ points against the price have settled/);
-  // A gap of 25 points or more gets the reliability note in its row instead of a record to lean on.
+  assert.equal(note, '');
   const extremeLean = { ...underLean, athlete_id: 'x', name: 'Stale Price', claimed: 0.41, model: 0.95 };
   const extremePanel = leanPanelInner({ leans: [extremeLean], waiting: 0, record, book: 'DraftKings', open: true, posted: true });
-  assert.equal(extremePanel.split('<details')[0].includes('Stale Price'), false);
-  assert.match(extremePanel, /A gap of 25 points or more is too large to trust/);
+  assert.equal(extremePanel.includes('Stale Price'), false);
+  assert.doesNotMatch(extremePanel, /A gap of 25 points or more is too large to trust/);
   assert.equal(measuredNoteHtml(sim.playerDraws.get(roleB.athlete_id)!, { market: 'pts', side: 'under', line: String(highLine), style: 'american', odds: '', opposite: '' }, record), '');
 
   // 3. Team-changed newcomer with 0 prior-season games and 0 current-team games gets newcomer prior and cameo cap, not phantom 20 min.

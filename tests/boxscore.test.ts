@@ -316,7 +316,6 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   const held = rowFor(html, '3');
   assert.equal(held.includes('data-bucket'), false);
   assert.match(held, />out</);
-  assert.equal(html.includes('10th'), false);
   assert.equal(html.includes('90–'), false);
   assert.equal(html.includes('p10'), false);
   assert.equal(html.includes('p90'), false);
@@ -325,15 +324,15 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   assert.equal(html.includes('undefined'), false);
   assert.equal(html.includes('<a '), false);
   assert.equal(html.includes('Mid-CDF'), false);
-  assert.match(html, /This box score is the simulated game nearest the median combined score\./);
-  assert.equal(html.includes('This box score is the simulated game at the 95th percentile of the combined score.'), false);
-  assert.match(html, /The minutes column totals team-minutes: five players on the floor at once\. Regulation is 240 \(5 × 48\)\. Overtime is 265 \(5 × 53\)\. It is not the length of the game\./);
+  assert.match(html, /Averages from 10,000 simulated games\. The range under a stat is the 10th to 90th percentile\./);
+  assert.equal(html.includes('This box score is the simulated game nearest the median combined score.'), false);
+  assert.equal(html.includes('The minutes column totals team-minutes'), false);
   assert.match(html, /240 team-minutes · 5 × 48/);
   assert.equal(html.includes('not a five-man lineup'), false);
   assert.equal(html.includes('265 minutes'), false);
   assert.equal(html.includes('265 team-minutes'), false);
   const tableAt = html.indexOf('<table');
-  const noteAt = html.indexOf('This box score is the simulated game nearest the median combined score');
+  const noteAt = html.indexOf('Averages from 10,000 simulated games');
   assert.ok(tableAt >= 0 && noteAt > tableAt);
   assert.equal(html.includes('Brighter blue'), false);
   assert.equal(html.includes('data-bucket'), false);

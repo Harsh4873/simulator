@@ -711,11 +711,12 @@ test('the prop panel says when a chance is calibrated, and the leans panel says 
   const form = { market: 'pts' as const, side: 'over' as const, line: '17.5', style: 'american' as const, odds: '-110', opposite: '-110' };
   const panel = { table: new Map([['points' as const, artifact('points', 'fitted')]]), modelVersion: LEGACY_LEDGER_FAMILY, tipDate: '2026-11-20', artifacts: [artifact('points', 'fitted')], cutoff: '2026-11-20' };
   const html = renderPropResults(score, 'p', form, { minutes_weight: 1, shooting_games: 20, thin_sample: false }, null, panel);
-  assert.match(html, /data-calibrated/);
-  assert.match(html, /simulations alone put this side at 70%/);
-  assert.doesNotMatch(renderPropResults(score, 'p', form, { minutes_weight: 1, shooting_games: 20, thin_sample: false }, null, null), /data-calibrated/);
-  // A page-only release changes the card hash, not the family, so the map keeps applying.
-  assert.match(renderPropResults(score, 'p', form, { minutes_weight: 1, shooting_games: 20, thin_sample: false }, null, { ...panel, modelVersion: 'possessions-v10' }), /^(?![\s\S]*data-calibrated)/);
+  assert.match(html, /Model chance/);
+  assert.match(html, /Book break-even/);
+  assert.doesNotMatch(html, /no-vig/);
+  assert.doesNotMatch(html, /log loss/);
+  assert.doesNotMatch(renderPropResults(score, 'p', form, { minutes_weight: 1, shooting_games: 20, thin_sample: false }, null, null), /no-vig/);
+  assert.doesNotMatch(renderPropResults(score, 'p', form, { minutes_weight: 1, shooting_games: 20, thin_sample: false }, null, { ...panel, modelVersion: 'possessions-v10' }), /no-vig|log loss/);
 });
 
 test('walk-forward scores each day only with maps fitted on earlier days, and keeps the last ten days', () => {

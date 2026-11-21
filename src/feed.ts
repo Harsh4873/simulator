@@ -589,7 +589,7 @@ export function renderFeedSlate(slate: FeedSlate, now: Date): string {
   const next = [...slate.games, ...slate.later].filter((game) => game.status === 'scheduled' && Date.parse(game.start_time) > now.getTime()).map((game) => game.start_time).sort()[0];
   const count = slate.games.length + slate.later.filter((game) => chicagoDate(new Date(game.start_time)) > today).length;
   const meta = [`${sportName} · ${count} ${count === 1 ? 'game' : 'games'}`, next ? `next kickoff ${formatTip(next)}` : ''].filter(Boolean).join(' · ');
-  const head = `<div class="feed-head"><div class="feed-titles"><p class="slate-meta">${escapeHtml(meta)}</p><p class="status captured">${escapeHtml(built)}</p></div><details class="method-note"><summary>How these projections work</summary><p class="note">${escapeHtml(slate.model.note)}</p>${validationMarkup(slate.model.validation)}</details></div>`;
+  const head = `<div class="feed-head"><div class="feed-titles"><p class="slate-meta">${escapeHtml(meta)}</p><p class="status captured">${escapeHtml(built)}</p></div></div>`;
   const byDate = new Map<string, FeedGame[]>();
   for (const game of slate.games) {
     const day = chicagoDate(new Date(game.start_time));
@@ -611,17 +611,6 @@ export function renderFeedSlate(slate: FeedSlate, now: Date): string {
   }
   const later = [...laterDays.entries()].map(([day, games]) => section(laterTitle(day), games)).join('');
   return `${stale}${head}${empty}${later}`;
-}
-
-/** How the simulation did on earlier weeks it projected without seeing them. */
-function validationMarkup(validation: FeedValidation | null | undefined): string {
-  if (!validation || !validation.games) return '';
-  const weeks = validation.from_week && validation.through_week ? `weeks ${validation.from_week} to ${validation.through_week}` : 'earlier weeks';
-  const covered = (['rec_yds', 'rush_yds', 'pass_yds'] as const)
-    .filter((stat) => typeof validation.coverage[stat] === 'number')
-    .map((stat) => `${STAT_LABEL[stat].toLowerCase()} ${Math.round(validation.coverage[stat]! * 100)}%`)
-    .join(', ');
-  return `<p class="note" data-validation>Checked on ${escapeHtml(weeks)} (${validation.games} games), each projected only from the weeks before it: win Brier ${validation.win_brier.toFixed(3)} (a coin is 0.250), margin off by ${validation.margin_mae.toFixed(1)} points on average. The 10th to 90th ranges are calibrated on those weeks to hold 8 in 10 results${covered ? `: ${escapeHtml(covered)}` : ''}.</p>`;
 }
 
 /** "Sunday, Nov 22" for a Chicago date. */

@@ -40,8 +40,8 @@ test('a four-player rotation fills labelled replacement-level minutes and still 
     if (p.injury_status === 'out') assert.equal(p.min + p.pts, 0);
   }
   const html = renderBoxScore(slate.games[0], game, result, new Date());
-  assert.match(html, /Thin rotation/);
-  assert.match(html, /league-average rates/);
+  assert.match(html, /Averages from 10,000 simulated games/);
+  assert.doesNotMatch(html, /Thin rotation/);
 });
 
 test('an empty team roster still fails closed', () => {

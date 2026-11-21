@@ -462,21 +462,22 @@ const SCOPE_LABEL: Record<EsportsProjection['scope'], string> = { map: 'a map', 
  * One stat for one player: the projection's median and its 10th to 90th range, maps 1 and 2 together for a CS2 best of
  * three, and once played what he did, on the projection's own scale. The plain average sits in the cell's title.
  */
-function projectionCell(prop: EsportsProp | undefined, perMap: boolean): string {
-  if (!prop) return '<td>—</td>';
+function projectionCell(prop: EsportsProp | undefined, perMap: boolean, label: string): string {
+  const named = ` data-label="${escapeHtml(label)}"`;
+  if (!prop) return `<td${named}>—</td>`;
   const played = typeof prop.actual === 'number' && Number.isFinite(prop.actual) ? prop.actual : null;
   const average = prop.mean === null ? 'Plain average not fitted yet' : `Plain average ${formatStat(prop.mean)}${perMap ? ' a map' : ''}`;
   const projection = prop.projection;
   if (!projection) {
     const did = played === null ? '' : `<span class="pct" data-actual>Played ${escapeHtml(actualText(played))}</span>`;
-    return `<td title="${escapeHtml(average)}"><span class="stat">${escapeHtml(formatStat(prop.mean))}</span>${did}</td>`;
+    return `<td${named} title="${escapeHtml(average)}"><span class="stat">${escapeHtml(formatStat(prop.mean))}</span>${did}</td>`;
   }
   // An older file's CS2 number is over maps 1 and 2 while what he did is a map's average, so it reads against nothing.
   const comparable = projection.scope !== 'maps12';
   const result = played === null || !comparable ? '' : played > projection.p50 ? 'over' : played < projection.p50 ? 'under' : 'push';
   const did = played === null ? '' : `<span class="pct" data-actual${result ? ` data-result="${result}"` : ''}>Played ${escapeHtml(actualText(played))}</span>`;
   const pair = projection.maps12 ? `<span class="pct" data-maps12>Maps 1–2 ${Math.round(projection.maps12.p50)} · ${Math.round(projection.maps12.p10)}–${Math.round(projection.maps12.p90)}</span>` : '';
-  return `<td data-projection title="${escapeHtml(average)}"><span class="stat">${Math.round(projection.p50)}</span><span class="pct">${Math.round(projection.p10)}–${Math.round(projection.p90)}</span>${pair}${did}</td>`;
+  return `<td${named} data-projection title="${escapeHtml(average)}"><span class="stat">${Math.round(projection.p50)}</span><span class="pct">${Math.round(projection.p10)}–${Math.round(projection.p90)}</span>${pair}${did}</td>`;
 }
 
 /** Upcoming, live or final. Files from before the status field show nothing extra. */
@@ -510,7 +511,7 @@ function renderMatch(match: EsportsMatch, now: Date, perMap: boolean, table = tr
       const players = match.players.filter((player) => player.team === team);
       if (!players.length) return '';
       const rows = players
-        .map((player) => `<tr><th scope="row">${escapeHtml(player.name)}</th>${stats.map((stat) => projectionCell(player.props.find((prop) => prop.stat === stat), perMap)).join('')}</tr>`)
+        .map((player) => `<tr><th scope="row">${escapeHtml(player.name)}</th>${stats.map((stat) => projectionCell(player.props.find((prop) => prop.stat === stat), perMap, STAT_LABEL[stat])).join('')}</tr>`)
         .join('');
       return `<tr class="team-row"><th colspan="${stats.length + 1}" scope="rowgroup">${escapeHtml(team)}</th></tr>${rows}`;
     })
@@ -523,35 +524,12 @@ function renderMatch(match: EsportsMatch, now: Date, perMap: boolean, table = tr
   </article>`;
 }
 
-/** How the projections did on the same players' earlier games, one line per title, against his plain average. */
-function checksMarkup(checks: readonly EsportsCheck[] | undefined): string {
-  if (!checks?.length) return '';
-  const titles = [...new Set(checks.map((check) => check.title))];
-  const parts = titles.flatMap((title) => {
-    const mine = checks.filter((check) => check.title === title && check.rows > 0);
-    // A title whose feed returned no history this run was not checked; it says so on its own section instead.
-    if (!mine.length) return [];
-    const rows = Math.max(...mine.map((check) => check.rows), 0);
-    const stats = mine
-      .map((check) => {
-        const inside = `${Math.round(check.coverage * 100)}% inside the range`;
-        if (!check.baseline_mae || !(check.mae > 0)) return `${STAT_LABEL[check.stat].toLowerCase()} ${inside}`;
-        const change = Math.round((1 - check.mae / check.baseline_mae) * 100);
-        const versus = change > 0 ? `${change}% closer than his plain average` : change < 0 ? `${-change}% further off than his plain average` : 'as close as his plain average';
-        return `${STAT_LABEL[check.stat].toLowerCase()} ${versus}, ${inside}${check.opponent === false ? ', opponent left out because it did not help' : ''}`;
-      })
-      .join('; ');
-    return `${title} (${rows.toLocaleString('en-US')} earlier ${title === 'CS2' ? 'series' : 'games'}): ${stats}`;
-  });
-  return `<p class="note" data-checks>Checked by projecting each earlier game from the ones before it. ${escapeHtml(parts.join('. '))}.</p>`;
-}
-
 export function renderEsports(doc: EsportsDocument, now: Date): string {
   const sources = doc.titles.map((title) => title.source).join(', ');
   const built = `Published ${formatTip(doc.generated_at)} · ${sources}`;
   const matches = doc.titles.reduce((sum, title) => sum + title.matches.length, 0);
   const meta = `Esports · ${matches} ${matches === 1 ? 'match' : 'matches'} across ${doc.titles.map((title) => title.title).join(', ')}`;
-  const head = `<div class="feed-head"><div class="feed-titles"><p class="slate-meta">${escapeHtml(meta)}</p><p class="status captured">${escapeHtml(built)}</p></div><details class="method-note"><summary>How these projections work</summary><p class="note">${escapeHtml(doc.model.note)}</p>${checksMarkup(doc.model.checks)}</details></div>`;
+  const head = `<div class="feed-head"><div class="feed-titles"><p class="slate-meta">${escapeHtml(meta)}</p><p class="status captured">${escapeHtml(built)}</p></div></div>`;
   const sections = doc.titles.map((title) => {
     // When the feed returned no player history this run, every row would read "not fitted": say so once instead.
     const blank = title.matches.every((match) => match.players.every((player) => player.props.every((prop) => !prop.projection && prop.mean === null)));

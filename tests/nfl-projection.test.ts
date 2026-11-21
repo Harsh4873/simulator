@@ -203,13 +203,11 @@ test('the NFL page shows the simulated score, the player table, and the walk-for
   assert.match(html, /<span class="feed-proj-line">MIA 18 <span class="feed-proj-dash">–<\/span> 31 BUF<\/span>/);
   assert.match(html, /<span>MIA 13%<\/span><span>BUF by 12\.9<\/span><span>BUF 87%<\/span>/);
   assert.match(html, /role="img" aria-label="Win chance MIA 13%, BUF 87%"/);
-  // The method and the walk-forward check fold away under the header instead of opening the page.
-  assert.match(html, /<details class="method-note"><summary>How these projections work<\/summary>/);
+  assert.doesNotMatch(html, /How these projections work/);
   assert.match(html, /<summary>Player projections<\/summary>/);
   assert.match(html, /Josh Allen/);
   assert.match(html, /Pass yds<\/p><p class="tile-value">225<\/p><p class="tile-sub">119 to 336/);
   assert.match(html, /Questionable · plays in 75% of draws · anytime TD 23%/);
-  assert.match(html, /Checked on weeks 4 to 11 \(103 games\)/);
   assert.equal(/odds|spread|moneyline/i.test(html), false);
   // A broken projection block fails the file, as a price would.
   const broken = JSON.parse(JSON.stringify(slate));

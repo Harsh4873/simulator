@@ -426,7 +426,8 @@ test('a large model gap is not a lean when graded gaps of that side and size hav
   const form = { market: 'pts' as const, side: 'over' as const, line: '17.5', style: 'american' as const, odds: '-110', opposite: '' };
   const over = renderPropResults(score, 'p', form, player, record);
   assert.match(over, /data-verdict="pass"/);
-  assert.match(over, /points short of the posted price across 250 graded leans/);
+  assert.doesNotMatch(over, /Why this call/);
+  assert.doesNotMatch(over, /points short of the posted price across 250 graded leans/);
   // The same rows rebuilt as replay do not attach a measured veto.
   const replayOver = renderPropResults(score, 'p', form, player, buildRecord([file('2026-10-30', 'replay', settled)]));
   assert.match(replayOver, /data-verdict="lean"/);

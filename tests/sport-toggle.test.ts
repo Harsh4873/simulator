@@ -15,7 +15,6 @@ const KNOWN_DATA = [
   '/manifest.json',
   '/health.json',
   '/picks.json',
-  '/matchups.json',
   '/prop-calibration.json',
   '/sims/index.json',
   '/nfl.json',
@@ -101,6 +100,7 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
     globals.CSS = { escape: (value: string) => value };
     const session = new Map<string, string>();
     if (seed) session.set('simulator.sport', seed);
+    const local = new Map<string, string>();
     const localKeys: string[] = [];
     globals.sessionStorage = {
       getItem: (key: string) => session.get(key) ?? null,
@@ -109,8 +109,9 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
       },
     };
     globals.localStorage = {
-      getItem: () => null,
-      setItem: (key: string) => {
+      getItem: (key: string) => local.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        local.set(key, value);
         localKeys.push(key);
       },
     };
@@ -148,7 +149,7 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
     await build({ entryPoints: ['src/main.ts'], bundle: true, format: 'esm', outfile: join(dir, 'app.mjs'), loader: { '.css': 'empty' }, logLevel: 'silent' });
     await import(pathToFileURL(join(dir, 'app.mjs')).href);
     await flush();
-    return { document, window, session, localKeys, fetched };
+    return { document, window, session, local, localKeys, fetched };
   }
   const key = (document: ReturnType<typeof parseHTML>['document'], window: ReturnType<typeof parseHTML>['window'], selector: string, name: string) => {
     const target = document.querySelector(selector);
@@ -253,6 +254,18 @@ test('the sport switch keeps the NBA slate and parks the other two', async () =>
     assert.ok(document.querySelector('button[data-event]'));
     assert.equal(document.querySelector('.brand .sub')?.textContent, 'Today and yesterday, Chicago time');
     assert.match(document.querySelector('.foot')?.textContent ?? '', /10,000/);
+    const layout = document.querySelector<HTMLButtonElement>('[data-layout-toggle]');
+    assert.ok(layout);
+    layout.click();
+    assert.equal(document.documentElement.dataset.layout, 'phone');
+    assert.equal(page.local.get('simulator.layout'), 'phone');
+    assert.equal(layout.textContent, 'Phone');
+    assert.equal(layout.getAttribute('aria-pressed'), 'true');
+    layout.click();
+    assert.equal(document.documentElement.dataset.layout, 'laptop');
+    assert.equal(page.local.get('simulator.layout'), 'laptop');
+    assert.equal(layout.textContent, 'Laptop');
+    assert.equal(layout.getAttribute('aria-pressed'), 'false');
     assert.equal(document.querySelector('.desk-tabs')?.hasAttribute('hidden'), false);
     assert.equal(document.querySelector('[data-fresh]')?.hasAttribute('hidden'), false);
     assert.equal(checked(document), 'nba');
