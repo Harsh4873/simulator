@@ -3934,6 +3934,7 @@ body { background: var(--bg); }
 .pick-grid .pick-hit:hover:not(:disabled) { box-shadow: none; }
 
 .pick-anchor { color: var(--muted); font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+.pick-open { display: block; margin-top: 2px; color: var(--muted); font-size: 0.6875rem; font-variant-numeric: tabular-nums; font-weight: 650; }
 
 /* The section toggles stay one tap away instead of a row of buttons over the page. */
 .section-picker { justify-self: start; }
@@ -3966,6 +3967,12 @@ html[data-layout="phone"] .wrap {
   padding: 14px 12px 28px;
 }
 
+html[data-layout="phone"] .topbar-inner {
+  width: min(100%, 430px);
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
 html[data-layout="phone"] .topbar-inner,
 html[data-layout="phone"] .topbar-tools { flex-wrap: wrap; }
 
@@ -3984,7 +3991,8 @@ html[data-layout="phone"] .projection-controls .market-pills {
 html[data-layout="phone"] .pick-grid { grid-template-columns: minmax(0, 1fr); }
 
 @media (max-width: 460px) {
-  html[data-layout="phone"] .wrap {
+  html[data-layout="phone"] .wrap,
+  html[data-layout="phone"] .topbar-inner {
     width: 100%;
     max-width: 100%;
   }
@@ -4038,16 +4046,16 @@ html[data-layout="phone"] .dvp-table td.dvp-pace {
   text-align: left;
 }
 
-html[data-layout="phone"] tbody td[data-col]::before {
-  content: attr(data-col);
-}
-
-html[data-layout="phone"] tbody td:not([data-col])[data-label]::before {
+html[data-layout="phone"] tbody td[data-label]::before {
   content: attr(data-label);
 }
 
-html[data-layout="phone"] tbody td[data-col]::before,
-html[data-layout="phone"] tbody td:not([data-col])[data-label]::before {
+html[data-layout="phone"] tbody td:not([data-label])[data-col]::before {
+  content: attr(data-col);
+}
+
+html[data-layout="phone"] tbody td[data-label]::before,
+html[data-layout="phone"] tbody td:not([data-label])[data-col]::before {
   grid-column: 1;
   align-self: center;
   color: var(--muted);
@@ -4111,11 +4119,11 @@ html[data-layout="phone"] tbody td:is([data-col], [data-label]) > * {
     text-align: left;
   }
 
-  tbody td[data-col]::before { content: attr(data-col); }
-  tbody td:not([data-col])[data-label]::before { content: attr(data-label); }
+  tbody td[data-label]::before { content: attr(data-label); }
+  tbody td:not([data-label])[data-col]::before { content: attr(data-col); }
 
-  tbody td[data-col]::before,
-  tbody td:not([data-col])[data-label]::before {
+  tbody td[data-label]::before,
+  tbody td:not([data-label])[data-col]::before {
     grid-column: 1;
     align-self: center;
     color: var(--muted);

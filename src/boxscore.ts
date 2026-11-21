@@ -35,6 +35,11 @@ const COLUMNS: { key: ColumnKey; label: string }[] = [
 
 const COLUMN_KEYS = new Set<string>(COLUMNS.map((column) => column.key));
 
+function colAttrs(key: string): string {
+  const label = COLUMNS.find((column) => column.key === key)?.label ?? key.toUpperCase();
+  return `data-col="${key}" data-label="${label}"`;
+}
+
 export type SortDirection = 'asc' | 'desc';
 
 export interface BoxSort {
@@ -166,9 +171,9 @@ function heldLabel(player: Pick<SimulatedPlayer, 'minutes_weight' | 'injury_stat
 
 function toneCell(key: ColumnKey, value: number, held: string | null): string {
   if (held !== null && TONE_KEYS.has(key)) {
-    return `<td data-col="${key}"><span class="stat">${value}</span><span class="pct">${escapeHtml(held)}</span></td>`;
+    return `<td ${colAttrs(key)}><span class="stat">${value}</span><span class="pct">${escapeHtml(held)}</span></td>`;
   }
-  return `<td data-col="${key}">${value}</td>`;
+  return `<td ${colAttrs(key)}>${value}</td>`;
 }
 
 function heldSpan(value: number, held: string | null): string {
@@ -187,16 +192,16 @@ function expectedValue(player: SimulatedPlayer, key: ColumnKey): number | null {
 
 function expectedCell(player: SimulatedPlayer, key: ColumnKey): string {
   const value = expectedValue(player, key);
-  if (value === null) return `<td data-col="${key}">—</td>`;
+  if (value === null) return `<td ${colAttrs(key)}>—</td>`;
   const shown = value.toFixed(1);
   if (key === 'min' && player.expectation) {
-    return `<td data-col="min"><span class="stat">${shown}</span><span class="pct">${player.expectation.minP10}–${player.expectation.minP90}</span></td>`;
+    return `<td ${colAttrs('min')}><span class="stat">${shown}</span><span class="pct">${player.expectation.minP10}–${player.expectation.minP90}</span></td>`;
   }
   if (key === 'pts' && player.expectation) {
-    return `<td data-col="pts"><span class="stat">${shown}</span><span class="pct">${player.expectation.ptsP10}–${player.expectation.ptsP90}</span></td>`;
+    return `<td ${colAttrs('pts')}><span class="stat">${shown}</span><span class="pct">${player.expectation.ptsP10}–${player.expectation.ptsP90}</span></td>`;
   }
   const band=player.expectation?.bands?.[key];
-  return `<td data-col="${key}">${shown}${band?`<span class="pct">${band.p10}–${band.p90}</span>`:''}</td>`;
+  return `<td ${colAttrs(key)}>${shown}${band?`<span class="pct">${band.p10}–${band.p90}</span>`:''}</td>`;
 }
 
 function playerRow(player: SimulatedPlayer, expected: boolean): string {
@@ -215,7 +220,7 @@ function playerRow(player: SimulatedPlayer, expected: boolean): string {
 function footerRow(side: string, team: SimulatedTeam): string {
   const sums = columnSums(team.players);
   const cells = COLUMNS.map((column) => {
-    return `<td data-col="${column.key}">${sums[column.key]}</td>`;
+    return `<td ${colAttrs(column.key)}>${sums[column.key]}</td>`;
   }).join('');
   return `<tr data-footer="${side}"><th scope="row">Total</th>${cells}</tr>`;
 }
@@ -261,9 +266,9 @@ function teamSection(side: string, team: SimulatedTeam, sort: BoxSort, expected:
   }
   const cells = COLUMNS.map((column) => {
     if (column.key === 'fgm' || column.key === 'fga' || column.key === 'tpm' || column.key === 'tpa' || column.key === 'ftm' || column.key === 'fta') {
-      return `<td data-col="${column.key}">—</td>`;
+      return `<td ${colAttrs(column.key)}>—</td>`;
     }
-    return `<td data-col="${column.key}">${Math.round(totals[column.key])}</td>`;
+    return `<td ${colAttrs(column.key)}>${Math.round(totals[column.key])}</td>`;
   }).join('');
   return `${rows}<tr data-footer="${side}"><th scope="row">Expected</th>${cells}</tr>`;
 }
@@ -514,12 +519,6 @@ function findLine(score: Simulation, athleteId: string): SimulatedPlayer | null 
   );
 }
 
-function shockFor(score: Simulation, teamId: string): number | undefined {
-  if (teamId === score.away.team_id) return score.away.volumeShock;
-  if (teamId === score.home.team_id) return score.home.volumeShock;
-  return undefined;
-}
-
 interface WhyNote {
   text: string;
   kind: string;
@@ -535,17 +534,10 @@ function whyNotes(row: CardRow | null): WhyNote[] {
   if (games2026 !== undefined && games2027 !== undefined) {
     push(`Prior season (2026): ${games2026} games. This season (2027): ${games2027} games.`, 'sample', 'Seasons');
   }
-  const scale=readNumber(row,'points_scale');
-  if(scale!==undefined)push(`Attempts scale: ${scale.toFixed(3)} from the exposure-weighted points blend.`, 'usage', 'Shot volume');
   const conditional=readNumber(row,'minutes_mean');
-  if(conditional!==undefined)push(`Conditional minute target: ${conditional.toFixed(1)} before the team-minute allocation.`, 'minutes', 'Minute target');
+  if(conditional!==undefined)push(`Minutes: ${conditional.toFixed(1)}.`, 'minutes', 'Minutes');
   const restriction=readNumber(row,'minutes_restriction');
-  if(restriction!==undefined)push(`Reported full-game minute cap: ${restriction}.`, 'minutes', 'Minute cap');
-  if(row&&'evidence' in row&&row.evidence){
-    const evidence=row.evidence as import('./model-evidence.ts').PlayerEvidence;
-    const kickers = { minutes: 'Minutes evidence', shooting: 'Shooting evidence', reb: 'Rebound evidence', ast: 'Assist evidence' } as const;
-    for(const key of ['minutes','shooting','reb','ast'] as const){const e=evidence[key];push(`${key}: ${e.state}; weighted exposure ${e.exposure.toFixed(1)}, prior contribution ${(100*e.prior_fraction).toFixed(1)}%, last observation ${e.last_observed??'unknown'}.`, 'evidence', kickers[key]);}
-  }
+  if(restriction!==undefined)push(`Minute cap: ${restriction}.`, 'minutes', 'Minute cap');
   const games = readNumber(row, 'games');
   const shooting = readNumber(row, 'shooting_games');
   const missing = readBoolean(row, 'missing_shooting');
@@ -553,7 +545,7 @@ function whyNotes(row: CardRow | null): WhyNote[] {
     push(`Shooting sample: ${shooting} games.`, 'shooting', 'Shooting sample');
   }
   if (shooting === 0 || missing === true) {
-    push('Missing shooting: shot mix and accuracy use team/position priors. Counting-game points, including zeros, blend continuously with the shooting prior according to exposure.', 'shooting', 'Shooting prior');
+    push('Shot mix uses the usual rates for his position until more games are in.', 'shooting', 'Shooting');
   }
   if (games2026 === 0 && games2027 !== undefined && games2027 < 8) {
     push('Thin sample: no games in 2026 and fewer than 8 in 2027.', 'sample', 'Thin sample');
@@ -562,20 +554,14 @@ function whyNotes(row: CardRow | null): WhyNote[] {
   const status = readString(row, 'injury_status');
   const questionable = readBoolean(row, 'questionable_widen');
   if (weight === 0 && status !== undefined) {
-    push(
-      `Out of the rotation (${status}). This player's line is fixed at zero because the card gives them no minutes.`,
-      'out',
-      'Out of rotation',
-    );
+    push(`Out of the rotation (${status}). Projected for 0 minutes.`, 'out', 'Out');
   }
   if (questionable === true) {
-    push('Uncertain availability reduces participation and widens minutes conditional on playing. These status probabilities are uncalibrated scenario priors.', 'availability', 'Uncertain availability');
+    push('Uncertain availability. The chance of playing is lower and the minute range is wider.', 'availability', 'Availability');
   }
-  if (weight === 1 && questionable === false) push('No absence flag on the card.', 'availability', 'No absence flag');
+  if (weight === 1 && questionable === false) push('No injury tag.', 'availability', 'Availability');
   const participation=readNumber(row,'play_probability');
-  if(participation!==undefined)push(`Input P(play): ${(participation*100).toFixed(1)}%. Joint draws are conditioned on a feasible rotation; the simulated play share can differ.`, 'availability', 'Chance of playing');
-  const role=readString(row,'minutes_source');
-  if(role)push(role, 'role', 'Minutes fit');
+  if(participation!==undefined)push(`Chance of playing: ${(participation*100).toFixed(1)}%.`, 'availability', 'Playing');
   if (status === undefined) push('Injury status is not in the data.', 'availability', 'Injury status');
   push(
     'The table shows this player\'s average across all 10,000 games. A 40-point game can still happen in the tail. It is not the line from one draw.',
@@ -586,42 +572,28 @@ function whyNotes(row: CardRow | null): WhyNote[] {
 }
 
 function whyMarkup(notes: WhyNote[]): string {
-  const legend = notes.some((note) => note.kind === 'evidence')
-    ? '<p class="why-legend">Each evidence line is one stat family. The state says whether this player\'s games or the prior is in charge. Exposure is the weighted game count, the prior percentage is how hard the baseline still pulls, and the timestamp is the last game counted.</p>'
-    : '';
   const items = notes
     .map((note) => `<p class="why-item why-${note.kind}"><span class="why-kicker">${escapeHtml(note.kicker)}</span>${escapeHtml(note.text)}</p>`)
     .join('');
-  return `<div class="why">${legend}${items}</div>`;
+  return `<div class="why">${items}</div>`;
 }
 
 function rateItem(label: string, value: string): string {
   return `<li class="rate-row">${escapeHtml(`${label}: ${value}`)}</li>`;
 }
 
-function samplingList(row: CardRow | null, score: Simulation, shock: number | undefined): string {
+function samplingList(row: CardRow | null, score: Simulation): string {
   const periods = periodCount(score);
   const teamMinutes = score.overtime ? 240 + 25 * periods : 240;
   const playerMinutes = score.overtime ? 48 + 5 * periods : 48;
-  const scaled = `scaled to ${teamMinutes} team-minutes (5 × ${playerMinutes})`;
   const minutes = readNumber(row, 'minutes_mean');
   const minutesLabel = minutes === undefined ? 'not in the data' : minutes.toFixed(1);
   const items = [
-    `<li class="rate-row">${escapeHtml(`Shrunk minutes rate: ${minutesLabel}. Active rates are ${scaled}, and this line is one share of that budget.`)}</li>`,
+    `<li class="rate-row">${escapeHtml(`Projected minutes: ${minutesLabel}. The lineup adds to ${teamMinutes} team-minutes (5 × ${playerMinutes}).`)}</li>`,
   ];
   for (const line of RATE_LINES) {
     const value = readNumber(row, line.key);
     items.push(rateItem(line.label, value === undefined ? 'not in the data' : value.toFixed(3)));
-  }
-  if (typeof shock === 'number' && Number.isFinite(shock)) {
-    items.push(
-      `<li class="rate-row">${escapeHtml(`Team volume shock this draw: ${shock.toFixed(2)}. Legacy volume multiplier; possession-model cards instead use shared pace and opponent-adjusted efficiency.`)}</li>`,
-    );
-  } else {
-    items.push('<li class="rate-row">Team volume shock is not in the data.</li>');
-  }
-  if (score.overtime) {
-    items.push(`<li class="rate-row">${escapeHtml(`This draw used ${teamMinutes} team-minutes (5 × ${playerMinutes}).`)}</li>`);
   }
   return `<ul class="rates">${items.join('')}</ul>`;
 }
@@ -858,7 +830,7 @@ export function propFormMarkup(form: PropFormState): string {
   return `<form class="prop-form" data-prop-form>
     <label class="field"><span class="field-label">Market</span><select data-prop-market>${options}</select></label>
     <fieldset class="side-toggle">
-      <legend class="field-label">Bet direction</legend>
+      <legend class="field-label">Side</legend>
       <div class="side-options">
         <label class="side-opt"><input type="radio" name="prop-side" value="over" data-prop-side${form.side === 'over' ? ' checked' : ''}><span>Over</span></label>
         <label class="side-opt"><input type="radio" name="prop-side" value="under" data-prop-side${form.side === 'under' ? ' checked' : ''}><span>Under</span></label>
@@ -912,8 +884,8 @@ export function renderPlayerPanel(
       <div role="tabpanel" id="forecast-panel" aria-labelledby="forecast-tab" data-panel-view="forecast"${forecastHidden}>
         ${viewToggles([
           { id: 'panel-line', label: 'Line' },
-          { id: 'panel-why', label: 'Why' },
-          { id: 'panel-rates', label: 'Rates' },
+          { id: 'panel-why', label: 'Playing' },
+          { id: 'panel-rates', label: 'Per minute' },
         ])}
         <section class="panel-section" data-block="panel-line">
           <h3>${line.expectation ? 'Expected line' : 'One simulated draw'}</h3>
@@ -921,14 +893,14 @@ export function renderPlayerPanel(
           ${line.expectation ? expectedLine(line) : drawnLine(line)}
         </section>
         <section class="panel-section" data-block="panel-why">
-          <h3>Why</h3>
-          <p class="panel-lede">Games in the sample, how hard the prior still pulls, and the chance of playing.</p>
+          <h3>Playing time</h3>
+          <p class="panel-lede">Games played, minutes, and whether he is expected to play.</p>
           ${whyMarkup(whyNotes(row))}
         </section>
         <section class="panel-section" data-block="panel-rates">
-          <h3>Shrunk rates on the card</h3>
-          <p class="panel-lede">Per-minute rates after the prior is blended in. The simulator then gives this player a share of the team minute budget.</p>
-          ${samplingList(row, shown, shockFor(shown, line.team_id))}
+          <h3>Per minute</h3>
+          <p class="panel-lede">Shots and passes per minute, before the lineup is set.</p>
+          ${samplingList(row, shown)}
         </section>
       </div>
       <div role="tabpanel" id="props-panel" aria-labelledby="props-tab" data-panel-view="props"${propsHidden}>

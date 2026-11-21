@@ -14,6 +14,8 @@ export interface BookLine {
   /** When the feed last saw this price. */
   priced_at: string;
   book: string;
+  /** The book's opening number when it differs from the current line. */
+  open_line?: number;
   /** Scheduled tip from the feed row, when it carried one. */
   tip?: string | null;
 }
@@ -82,6 +84,8 @@ export function parseBookLines(text: string): BookLine[] {
     if (!Number.isFinite(line) || line < 0 || line > 200 || !Number.isInteger(line * 2)) continue;
     // A price stamped at or after the tip is not a pre-game price, whatever the row says.
     if (tip && Date.parse(pricedAt) >= Date.parse(tip)) continue;
+    const opened = typeof row.open_line === 'number' ? row.open_line : NaN;
+    const openLine = Number.isFinite(opened) && opened >= 0 && opened <= 200 && Number.isInteger(opened * 2) && opened !== line ? opened : undefined;
     lines.push({
       event_id: eventId,
       athlete_id: athleteId,
@@ -91,6 +95,7 @@ export function parseBookLines(text: string): BookLine[] {
       under_odds: under,
       priced_at: pricedAt,
       book: String(row.provider ?? '').trim().slice(0, 40) || 'sportsbook',
+      ...(openLine !== undefined ? { open_line: openLine } : {}),
       tip,
     });
   }

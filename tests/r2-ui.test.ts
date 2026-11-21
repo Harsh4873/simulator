@@ -48,7 +48,7 @@ test('current sampler expected columns, bands, progress and displayed score anno
  assert.equal(html.includes('Mid-CDF'),false);
  const p=card.games[0].players[0];
  const panel=renderPlayerPanel(slate.games[0],card.games[0],sim,p.athlete_id,'forecast');
- assert.ok(panel.includes('Conditional minute target:'));
+ assert.ok(panel.includes('Minutes:'));
 });
 test('artifact and privacy boundaries fail on prohibited fixtures',()=>{
  assert.throws(()=>validatePublicText('contact='+'person'+'@'+'example.net'),/email/);

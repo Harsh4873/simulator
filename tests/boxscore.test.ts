@@ -306,12 +306,12 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   const away = html.split('data-footer="away"')[1]?.split('</tr>')[0] ?? '';
   const sums = columnSums(model.away.players);
   for (const key of ['min', 'fgm', 'fga', 'tpm', 'tpa', 'ftm', 'fta', 'pts', 'reb', 'ast'] as const) {
-    assert.match(away, new RegExp(`data-col="${key}">${sums[key]}<`));
+    assert.match(away, new RegExp(`data-col="${key}" data-label="[A-Z0-9]+">${sums[key]}<`));
   }
   const regular = rowFor(html, '1');
-  assert.match(regular, /data-col="min">30<\/td>/);
-  assert.match(regular, /data-col="fga">12</);
-  assert.match(regular, /data-col="pts">17<\/td>/);
+  assert.match(regular, /data-col="min" data-label="MIN">30<\/td>/);
+  assert.match(regular, /data-col="fga" data-label="FGA">12</);
+  assert.match(regular, /data-col="pts" data-label="PTS">17<\/td>/);
   assert.match(regular, /<button type="button" class="player-btn" data-athlete="1">/);
   const held = rowFor(html, '3');
   assert.equal(held.includes('data-bucket'), false);
@@ -402,7 +402,7 @@ test('the panel opens, swaps, and closes from the player button', () => {
   assert.match(open, /Away Name/);
   assert.match(open, /Away · Away Name at Home Name/);
   assert.match(open, /data-block-toggle="panel-line"/);
-  assert.match(open, /Conditional minute target:/);
+  assert.match(open, /Minutes: 32\.0\./);
   assert.match(open, /PG/);
   assert.match(open, /Guard/);
   assert.match(open, /The table shows this player's average across all 10,000 games\./);
@@ -438,25 +438,24 @@ test('thin sample follows the 2026 and 2027 counts', () => {
   assert.match(thin, /Prior season \(2026\): 0 games\. This season \(2027\): 7 games\./);
   assert.match(thin, /Thin sample: no games in 2026 and fewer than 8 in 2027\./);
   assert.match(thin, /Shooting sample: 5 games\./);
-  assert.match(thin, /No absence flag on the card\./);
+  assert.match(thin, /No injury tag\./);
   assert.equal(thin.includes('Shot rates are the team and position prior.'), false);
-  assert.match(thin, /Shrunk minutes rate: 32\.0\./);
-  assert.match(thin, /scaled to 240 team-minutes \(5 × 48\)/);
-  assert.match(thin, /Team volume shock this draw: 1\.25\./);
+  assert.match(thin, /Projected minutes: 32\.0\./);
+  assert.match(thin, /The lineup adds to 240 team-minutes \(5 × 48\)/);
+  assert.equal(thin.includes('Team volume shock'), false);
   assert.equal(thin.includes('265 minutes'), false);
   assert.equal(thin.includes('265 team-minutes'), false);
   assert.equal(thin.includes('Overtime. This draw used 265 minutes.'), false);
   const eight = renderPlayerPanel(game, card, model, '9');
   assert.match(eight, /Prior season \(2026\): 0 games\. This season \(2027\): 8 games\./);
   assert.equal(eight.includes('Thin sample: no games in 2026 and fewer than 8 in 2027.'), false);
-  assert.match(eight, /Uncertain availability reduces participation/);
-  assert.equal(eight.includes('No absence flag on the card.'), false);
+  assert.match(eight, /Uncertain availability\. The chance of playing is lower/);
+  assert.equal(eight.includes('No injury tag.'), false);
   const out = renderPlayerPanel(game, card, model, '3');
   assert.match(out, /Out of the rotation \(out\)\./);
   assert.equal(out.includes('data-bucket'), false);
   const overtime = renderPlayerPanel(game, card, score(true), '1');
-  assert.match(overtime, /This draw used 265 team-minutes \(5 × 53\)\./);
-  assert.match(overtime, /scaled to 265 team-minutes \(5 × 53\)/);
+  assert.match(overtime, /The lineup adds to 265 team-minutes \(5 × 53\)/);
   assert.equal(overtime.includes('265 minutes'), false);
   assert.equal(overtime.includes('scaled to 240 team-minutes'), false);
 });
@@ -472,7 +471,7 @@ test('a player with no shooting sample is told the shot rates are the prior', ()
     model,
     '2',
   );
-  assert.match(flagged, /Missing shooting:/);
+  assert.match(flagged, /Shot mix uses the usual rates for his position/);
   const unlabeled = renderPlayerPanel(
     game,
     {
@@ -482,7 +481,7 @@ test('a player with no shooting sample is told the shot rates are the prior', ()
     model,
     '2',
   );
-  assert.match(unlabeled, /Missing shooting:/);
+  assert.match(unlabeled, /Shot mix uses the usual rates for his position/);
 });
 
 test('missing optional fields do not throw', () => {
@@ -505,9 +504,9 @@ test('missing optional fields do not throw', () => {
   assert.match(html, /<dt>PTS<\/dt><dd>17<\/dd>/);
   assert.match(html, /Injury status is not in the data\./);
   assert.match(html, /Position is not in the data\./);
-  assert.match(html, /Shrunk minutes rate: not in the data\./);
+  assert.match(html, /Projected minutes: not in the data\./);
   assert.match(html, /Field-goal attempts per minute: not in the data/);
-  assert.match(html, /Team volume shock is not in the data\./);
+  assert.equal(html.includes('Team volume shock'), false);
   assert.equal(html.includes('Thin sample:'), false);
   assert.equal(html.includes('undefined'), false);
   const missing = renderPlayerPanel(game, { players: [] }, model, '1');

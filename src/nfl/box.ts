@@ -169,7 +169,7 @@ function table(title: string, columns: Column[], lead: Column['key'], min: numbe
           const line = lines[index]!;
           const shown = column.yards ? String(Math.round(line.mean)) : line.mean.toFixed(1);
           const did = played && typeof played[column.key as FeedStat] === 'number' ? `<span class="pct" data-actual>Played ${played[column.key as FeedStat]}</span>` : '';
-          return `<td data-col="${column.key}"><span class="stat">${shown}</span><span class="pct">${line.p10}–${line.p90}</span>${did}</td>`;
+          return `<td data-col="${column.key}" data-label="${escapeHtml(column.label)}"><span class="stat">${shown}</span><span class="pct">${line.p10}–${line.p90}</span>${did}</td>`;
         })
         .join('');
       return `<tr><th scope="row"><span class="who-cell">${avatarMarkup(player.name, player.id, nflHeadshotUrl(player.id))}<button type="button" class="player-btn" data-nfl-athlete="${escapeHtml(player.id)}">${escapeHtml(player.name)}</button><span class="side-role">${escapeHtml(player.position)}</span>${statusMark(player)}</span></th>${cells}</tr>`;
@@ -178,7 +178,7 @@ function table(title: string, columns: Column[], lead: Column['key'], min: numbe
   const totals = columns
     .map((column, index) => {
       const sum = rows.reduce((total, row) => total + row.lines[index]!.mean, 0);
-      return `<td data-col="${column.key}">${column.yards ? Math.round(sum) : sum.toFixed(1)}</td>`;
+      return `<td data-col="${column.key}" data-label="${escapeHtml(column.label)}">${column.yards ? Math.round(sum) : sum.toFixed(1)}</td>`;
     })
     .join('');
   return `<h3 class="stat-group-label">${escapeHtml(title)}</h3><div class="table-scroll"><table><thead><tr><th>Player</th>${head}</tr></thead><tbody>${body}<tr data-footer><th scope="row">Expected</th>${totals}</tr></tbody></table></div>`;

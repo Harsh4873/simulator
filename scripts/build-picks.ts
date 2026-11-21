@@ -100,7 +100,11 @@ export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: nu
   for (const [eventId, map] of [...byEvent].sort(([a], [b]) => a.localeCompare(b))) {
     lines[eventId] = [...map.values()]
       .sort((a, b) => a.athlete_id.localeCompare(b.athlete_id) || a.market.localeCompare(b.market))
-      .map((line) => [line.athlete_id, line.market as PropMarket, line.line, line.over_odds, line.under_odds, line.priced_at]);
+      .map((line) => {
+        const row: [string, PropMarket, number, number, number, string, number?] = [line.athlete_id, line.market as PropMarket, line.line, line.over_odds, line.under_odds, line.priced_at];
+        if (line.open_line !== undefined && line.open_line !== line.line) row[6] = line.open_line;
+        return row;
+      });
   }
 
   const summary = calibrationSummary(input.calibration);

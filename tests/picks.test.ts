@@ -92,6 +92,11 @@ test('only two-sided pre-game totals are read from the price feed, and the lates
   assert.equal(currentLines(lines, '2026-11-02T21:00:00Z').get(key)?.line, 17.5);
   assert.equal(currentLines(lines, '2026-11-02T19:00:00Z').size, 0);
   assert.equal(lines[0].tip, '2026-11-03T00:00:00Z');
+  assert.equal(lines[0].open_line, undefined);
+  const moved = parseBookLines(feedRow({ open_line: 16.5 }));
+  assert.equal(moved[0]?.open_line, 16.5);
+  assert.equal(parseBookLines(feedRow({ open_line: 17.5 }))[0]?.open_line, undefined);
+  assert.equal(parseBookLines(feedRow({ open_line: 17.25 }))[0]?.open_line, undefined);
 
   // A price the feed stopped seeing is a pulled market. Captures at 12:40, 21:10 and 23:00; this game tips at 00:00.
   const tip = '2026-11-03T00:00:00Z';

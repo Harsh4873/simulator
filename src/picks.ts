@@ -159,8 +159,8 @@ export interface PicksFile {
   model_hash: string | null;
   built_at: string;
   book: string | null;
-  /** Latest posted lines for games on the slate: [athlete_id, market, line, over, under, priced_at], by event. */
-  lines: Record<string, [string, PropMarket, number, number, number, string][]>;
+  /** Latest posted lines for games on the slate: [athlete_id, market, line, over, under, priced_at, open_line?], by event. */
+  lines: Record<string, [string, PropMarket, number, number, number, string, number?][]>;
   leans: Lean[];
   record: PickRecord;
   /** Map that was live for this card, when one applied. Old files omit it. */
@@ -546,8 +546,9 @@ export function linesByKey(file: Pick<PicksFile, 'lines' | 'book'> | null | unde
   const map = new Map<string, BookLine>();
   if (!file) return map;
   for (const [eventId, rows] of Object.entries(file.lines)) {
-    for (const [athleteId, market, line, over, under, pricedAt] of rows) {
+    for (const [athleteId, market, line, over, under, pricedAt, opened] of rows) {
       const entry: BookLine = { event_id: eventId, athlete_id: athleteId, market, line, over_odds: over, under_odds: under, priced_at: pricedAt, book: file.book ?? 'sportsbook' };
+      if (typeof opened === 'number' && opened !== line) entry.open_line = opened;
       map.set(bookKey(entry), entry);
     }
   }
@@ -572,7 +573,8 @@ export function parsePicksFile(text: string): PicksFile | null {
   for (const rows of Object.values(file.lines)) {
     if (!Array.isArray(rows)) return null;
     for (const row of rows) {
-      if (!Array.isArray(row) || row.length !== 6 || typeof row[0] !== 'string' || !MARKETS.has(String(row[1])) || !finite(row[2]) || row[2] < 0 || !odds(row[3]) || !odds(row[4]) || !stamp(row[5])) return null;
+      if (!Array.isArray(row) || (row.length !== 6 && row.length !== 7) || typeof row[0] !== 'string' || !MARKETS.has(String(row[1])) || !finite(row[2]) || row[2] < 0 || !odds(row[3]) || !odds(row[4]) || !stamp(row[5])) return null;
+      if (row.length === 7 && (!finite(row[6]) || row[6] < 0)) return null;
     }
   }
   for (const lean of file.leans) {

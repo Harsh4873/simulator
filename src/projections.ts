@@ -646,7 +646,7 @@ function pickCardHtml(row: BoardRow, form: PropFormState, selected: boolean, sid
         </span>
         <span class="pick-numbers">
           <span class="pick-stat pick-proj"><span class="pick-label">Projection</span>${projection}</span>
-          <span class="pick-stat pick-line"><span class="pick-label">${lineLabel}</span>${lineValue}</span>
+          <span class="pick-stat pick-line"><span class="pick-label">${lineLabel}</span>${lineValue}${row.book?.open_line != null ? `<span class="pick-open">Opened ${escapeHtml(lineText(row.book.open_line))}</span>` : ''}</span>
         </span>
         ${row.note ? `<span class="pick-note">${escapeHtml(row.note)}</span>` : spark}
         ${chances}
@@ -1853,7 +1853,8 @@ export function measuredNoteHtml(
 export function postedLineHtml(book: BookLine | null, form: PropFormState): string {
   if (!book) return '';
   const using = validPropLine(form.line) === book.line;
-  return `<p class="prop-note posted-line" data-posted-line>${escapeHtml(book.book)} has ${escapeHtml(lineText(book.line))} at over ${escapeHtml(americanText(book.over_odds))}, under ${escapeHtml(americanText(book.under_odds))}, priced ${escapeHtml(formatTip(book.priced_at))}.${using ? '' : ' <button type="button" class="ghost mini-action" data-use-posted>Use the posted line</button>'}</p>`;
+  const opened = book.open_line != null && book.open_line !== book.line ? ` Opened ${escapeHtml(lineText(book.open_line))}.` : '';
+  return `<p class="prop-note posted-line" data-posted-line>${escapeHtml(book.book)} has ${escapeHtml(lineText(book.line))} at over ${escapeHtml(americanText(book.over_odds))}, under ${escapeHtml(americanText(book.under_odds))}, priced ${escapeHtml(formatTip(book.priced_at))}.${opened}${using ? '' : ' <button type="button" class="ghost mini-action" data-use-posted>Use the posted line</button>'}</p>`;
 }
 
 function injuryReportHtml(rate: RateGame, game: SlateGame): string {

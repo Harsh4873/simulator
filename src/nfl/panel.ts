@@ -281,8 +281,8 @@ function forecast(box: NflBoxResult, player: PlanPlayer, share: number): string 
     </section>
     ${charts ? `<section class="panel-section" data-block="nfl-panel-charts"><h3>Distribution</h3><p class="panel-lede">How his ${escapeHtml(MARKETS[markets[0]!].label.toLowerCase())} spread across the games he plays.</p><div class="charts">${charts}</div></section>` : ''}
     <section class="panel-section" data-block="nfl-panel-why">
-      <h3>Why</h3>
-      <p class="panel-lede">His recent shares and rates, the inputs the games are played from.</p>
+      <h3>Playing time</h3>
+      <p class="panel-lede">Recent share of the offense, and his injury status.</p>
       ${whyList(player)}
     </section>`;
 }
@@ -402,7 +402,7 @@ export function renderNflPlayerPanel(game: FeedGame, box: NflBoxResult, playerId
         ${viewToggles([
           { id: 'nfl-panel-line', label: 'Line' },
           { id: 'nfl-panel-charts', label: 'Charts' },
-          { id: 'nfl-panel-why', label: 'Why' },
+          { id: 'nfl-panel-why', label: 'Playing' },
         ])}
         ${forecast(box, player, share)}
       </div>
