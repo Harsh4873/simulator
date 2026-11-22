@@ -89,6 +89,8 @@ export interface RatePlayer {
   active_season?: number;
   role_prior_games?: number;
   points_scale?: number;
+  /** Below 1, sim v2 tightens the gamma volume draws. Absent on the published card. */
+  sim_v2_variance_scale?: number;
   shooting_posterior?:Partial<Record<'share'|'fg2'|'tp'|'ft',[number,number]>>;
   skill_prior?:{source:string;role:string;strengths:Record<string,number>;accepted?:Partial<Record<string,boolean>>;older_history:string};
   evidence?: PlayerEvidence;

@@ -22,6 +22,7 @@ export function validateGame(game: RateGame): void {
       if (!Number.isFinite(p[key]) || p[key] < 0 || p[key] > 1) throw new Error(`Invalid ${key}`);
     }
     for(const key of ['stl_per_min','blk_per_min','tov_per_min','points_scale'] as const)if(p[key]!==undefined&&(!Number.isFinite(p[key])||p[key]!<0))throw new Error(`Invalid ${key}`);
+    if(p.sim_v2_variance_scale!==undefined&&(!(p.sim_v2_variance_scale>0)||p.sim_v2_variance_scale>1))throw new Error('Invalid sim v2 variance scale');
     if(p.orb_share!==undefined&&(!Number.isFinite(p.orb_share)||p.orb_share<0||p.orb_share>1))throw new Error('Invalid orb_share');
     if(p.minutes_restriction!=null&&(!Number.isFinite(p.minutes_restriction)||p.minutes_restriction<0||p.minutes_restriction>48))throw new Error('Invalid minutes restriction');
     if(p.injury_note!=null&&(typeof p.injury_note!=='string'||p.injury_note.length===0||p.injury_note.length>280))throw new Error('Invalid injury note');

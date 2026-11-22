@@ -22,7 +22,8 @@
     "validate-artifact": "node scripts/validate-artifact.mjs",
     "validate-privacy": "node scripts/validate-privacy.mjs",
     "replay": "node --experimental-strip-types scripts/archive-replay.ts",
-    "walk-forward": "node --experimental-strip-types scripts/walk-forward.ts"
+    "walk-forward": "node --experimental-strip-types scripts/walk-forward.ts",
+    "sim-v2": "node --experimental-strip-types scripts/sim-v2-compare.ts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",

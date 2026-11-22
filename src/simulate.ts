@@ -520,19 +520,35 @@ interface CountingStats {
   ast: number;
 }
 
+/** A scale below 1 raises the gamma shape, which tightens the volume multiplier. 1 is v1. */
+function volumePhi(base: number, player: RatePlayer): number {
+  const scale = player.sim_v2_variance_scale;
+  if (!(scale !== undefined && scale > 0 && scale < 1)) return base;
+  return base / (scale * scale);
+}
+
 function drawStats(player: RatePlayer, min: number, shock: number, rng: Rng): CountingStats {
   const volume = min * shock;
-  const fga = poisson(volume * player.fga_per_min * gammaMean1(PHI_FGA, rng), rng);
+  const fga = poisson(volume * player.fga_per_min * gammaMean1(volumePhi(PHI_FGA, player), rng), rng);
   const tpa = binomial(fga, player.tpa_given_fga, rng);
   const tpm = binomial(tpa, player.tp_pct, rng);
   const fg2m = binomial(fga - tpa, player.fg2_pct, rng);
   const fgm = fg2m + tpm;
-  const fta = poisson(volume * player.fta_per_min * gammaMean1(PHI_FTA, rng), rng);
+  const fta = poisson(volume * player.fta_per_min * gammaMean1(volumePhi(PHI_FTA, player), rng), rng);
   const ftm = binomial(fta, player.ft_pct, rng);
   const pts = 2 * (fgm - tpm) + 3 * tpm + ftm;
-  const reb = poisson(volume * player.reb_per_min * gammaMean1(PHI_REB, rng), rng);
-  const ast = poisson(volume * player.ast_per_min * gammaMean1(PHI_AST, rng), rng);
+  const reb = poisson(volume * player.reb_per_min * gammaMean1(volumePhi(PHI_REB, player), rng), rng);
+  const ast = poisson(volume * player.ast_per_min * gammaMean1(volumePhi(PHI_AST, player), rng), rng);
   return { fgm, fga, tpm, tpa, ftm, fta, pts, reb, ast };
+}
+
+/** Points from drawStats at a fixed minute total and a team shock of 1. The published game uses possessions instead. */
+export function samplePointsGivenMinutes(player: RatePlayer, minutes: number, draws: number, seed: number): number[] {
+  if (!Number.isInteger(draws) || draws < 1) throw new Error('draws must be a positive integer');
+  const rng = mulberry32(seed >>> 0);
+  const out: number[] = [];
+  for (let i = 0; i < draws; i += 1) out.push(drawStats(player, minutes, 1, rng).pts);
+  return out;
 }
 
 function addStats(line: DrawnPlayer, stats: CountingStats, minutes: number): void {
