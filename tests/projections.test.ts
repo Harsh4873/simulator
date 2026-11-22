@@ -164,6 +164,18 @@ test('played means, model chances, and priced copy stay on the prop grader', () 
   assert.equal(bars.includes('class="split"'), false);
 });
 
+test('the detail chart axis keeps the middle of the simulations and still shows the line', () => {
+  const values = [0, ...Array.from({ length: 200 }, () => 12), 40];
+  const centered = propBarsSvg(values, 11.5, 'Points');
+  assert.match(centered, /<text class="tick" x="2" y="124">12<\/text>/);
+  assert.match(centered, /<text class="tick" x="318" y="124" text-anchor="end">12<\/text>/);
+  assert.equal(centered.includes('>0<'), false);
+  assert.equal(centered.includes('>40<'), false);
+  const wideLine = propBarsSvg(values, 25.5, 'Points');
+  assert.match(wideLine, /text-anchor="end">26<\/text>/);
+  assert.match(wideLine, /class="prop-line"/);
+});
+
 test('search lists every matching player, and an invalid opposite hides the board edge', () => {
   assert.ok(slateGame);
   const needle = 'a';

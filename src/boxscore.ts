@@ -191,16 +191,32 @@ function expectedValue(player: SimulatedPlayer, key: ColumnKey): number | null {
 }
 
 function expectedCell(player: SimulatedPlayer, key: ColumnKey): string {
-  const value = expectedValue(player, key);
+  const all = player.expectation;
+  const source = all?.played ?? all;
+  const value = source
+    ? key === 'min'
+      ? source.minMean
+      : key === 'pts'
+        ? source.ptsMean
+        : key === 'reb'
+          ? source.rebMean
+          : key === 'ast'
+            ? source.astMean
+            : expectedValue(player, key)
+    : expectedValue(player, key);
   if (value === null) return `<td ${colAttrs(key)}>—</td>`;
   const shown = value.toFixed(1);
-  if (key === 'min' && player.expectation) {
-    return `<td ${colAttrs('min')}><span class="stat">${shown}</span><span class="pct">${player.expectation.minP10}–${player.expectation.minP90}</span></td>`;
+  if (source && (key === 'min' || key === 'pts')) {
+    const low = key === 'min' ? source.minP10 : source.ptsP10;
+    const high = key === 'min' ? source.minP90 : source.ptsP90;
+    return `<td ${colAttrs(key)}><span class="stat">${shown}</span><span class="pct">${low}–${high}</span></td>`;
   }
-  if (key === 'pts' && player.expectation) {
-    return `<td ${colAttrs('pts')}><span class="stat">${shown}</span><span class="pct">${player.expectation.ptsP10}–${player.expectation.ptsP90}</span></td>`;
+  if (source && (key === 'reb' || key === 'ast')) {
+    const low = key === 'reb' ? source.rebP10 : source.astP10;
+    const high = key === 'reb' ? source.rebP90 : source.astP90;
+    return `<td ${colAttrs(key)}><span class="stat">${shown}</span><span class="pct">${low}–${high}</span></td>`;
   }
-  const band=player.expectation?.bands?.[key];
+  const band=all?.bands?.[key];
   return `<td ${colAttrs(key)}>${shown}${band?`<span class="pct">${band.p10}–${band.p90}</span>`:''}</td>`;
 }
 
@@ -438,7 +454,7 @@ export function renderBoxScore(
   const shown = score;
   const expected = shown.away.players.some((player) => player.expectation);
   const eventId = textOf(rate?.event_id) || textOf(game.event_id);
-  const note = 'Averages from 10,000 simulated games. The range under a stat is the 10th to 90th percentile.';
+  const note = 'Averages from 10,000 simulated games. The range under minutes and points is the 10th to 90th percentile in games he plays.';
   const charts = chartsPanel(game, score);
   const lines = distributionPanel(score);
   const toggles = [

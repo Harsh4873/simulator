@@ -324,7 +324,7 @@ test('the scoreboard shows the median-nearest game and its interval', () => {
   assert.equal(html.includes('undefined'), false);
   assert.equal(html.includes('<a '), false);
   assert.equal(html.includes('Mid-CDF'), false);
-  assert.match(html, /Averages from 10,000 simulated games\. The range under a stat is the 10th to 90th percentile\./);
+  assert.match(html, /Averages from 10,000 simulated games\. The range under minutes and points is the 10th to 90th percentile in games he plays\./);
   assert.equal(html.includes('This box score is the simulated game nearest the median combined score.'), false);
   assert.equal(html.includes('The minutes column totals team-minutes'), false);
   assert.match(html, /240 team-minutes · 5 × 48/);

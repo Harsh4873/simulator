@@ -87,16 +87,26 @@ function chartText(value: string): string {
  */
 export function propBarsSvg(playedValues: ArrayLike<number>, line: number | null, label: string): string {
   const counts = new Map<number, number>();
+  const rounded: number[] = [];
   for (let index = 0; index < playedValues.length; index += 1) {
     const value = playedValues[index];
     if (!Number.isFinite(value)) continue;
     const stat = Math.round(value);
+    rounded.push(stat);
     counts.set(stat, (counts.get(stat) ?? 0) + 1);
   }
-  const stats = [...counts.keys()].sort((a, b) => a - b);
-  if (!stats.length) return '';
-  const lo = stats[0];
-  const hi = stats[stats.length - 1];
+  if (!rounded.length) return '';
+  rounded.sort((a, b) => a - b);
+  const at = (p: number) => rounded[Math.min(rounded.length - 1, Math.max(0, Math.round(p * (rounded.length - 1))))]!;
+  // One draw in 10,000 sets the old ends. The axis is the middle 98%, and it never goes below 0.
+  let lo = Math.max(0, at(0.01));
+  let hi = Math.max(lo, at(0.99));
+  if (line !== null && Number.isFinite(line)) {
+    const mark = Math.round(line);
+    if (mark < lo) lo = Math.max(0, mark);
+    if (mark > hi) hi = mark;
+  }
+  const stats = [...counts.keys()].filter((stat) => stat >= lo && stat <= hi).sort((a, b) => a - b);
   const W = 320;
   const H = 132;
   const top = 8;

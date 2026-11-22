@@ -124,6 +124,10 @@ export interface PlayedExpectation {
   ptsP10: number;
   ptsP90: number;
   ptsP95: number;
+  rebP10: number;
+  rebP90: number;
+  astP10: number;
+  astP90: number;
 }
 
 export interface PlayerExpectation extends PlayedExpectation {
@@ -878,6 +882,10 @@ function expectationFrom(series: ToneSeries | undefined): PlayerExpectation {
   const playedAssists = slice(assists);
   const playedMinuteBand = bandFrom(playedMinutes);
   const playedPointBand = bandFrom(playedPoints);
+  const playedReboundBand = bandFrom(playedRebounds);
+  const playedAssistBand = bandFrom(playedAssists);
+  const reboundBand = bandFrom(rebounds);
+  const assistBand = bandFrom(assists);
   const countMean = (key: 'fgm'|'fga'|'tpm'|'tpa'|'ftm'|'fta'|'stl'|'blk'|'tov', onlyPlayed: boolean) => {
     if (!series?.[key]) return undefined;
     const values = Array.from(series[key]!);
@@ -895,6 +903,10 @@ function expectationFrom(series: ToneSeries | undefined): PlayerExpectation {
     ptsP10: playedPointBand.p10,
     ptsP90: playedPointBand.p90,
     ptsP95: playedPointBand.p95,
+    rebP10: playedReboundBand.p10,
+    rebP90: playedReboundBand.p90,
+    astP10: playedAssistBand.p10,
+    astP90: playedAssistBand.p90,
   } : null;
   const result:PlayerExpectation={
     bands:series?Object.fromEntries(Object.entries(series).map(([key,values])=>[key,bandFrom(values)])):{},
@@ -910,6 +922,10 @@ function expectationFrom(series: ToneSeries | undefined): PlayerExpectation {
     ptsP10: pointBand.p10,
     ptsP90: pointBand.p90,
     ptsP95: pointBand.p95,
+    rebP10: reboundBand.p10,
+    rebP90: reboundBand.p90,
+    astP10: assistBand.p10,
+    astP90: assistBand.p90,
     played,
   };
   if(series)expectationCache.set(series,result);
