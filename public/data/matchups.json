@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-22T16:30:39Z",
-  "input_hash": "e0f37ebe05a9e5fe410f58408a5f98c11375fa0ecdcf3e5472bc525b54603e5f",
+  "generated_at": "2026-11-22T17:24:38Z",
+  "input_hash": "5101e16051845aa12dbdcaaf1b4d75914555c4af25fd975bd837dc1994f62fae",
   "model_hash": "e724daf550fd7fdc760808c2cd2ed92e68ca242892953ca9e64b9b497b399336",
   "model_version": "possessions-v9",
   "calibrated": false,
@@ -1148,10 +1148,10 @@
             "team_score": 124,
             "opponent_score": 103,
             "margin": 21,
-            "opponent_games": 15,
-            "opponent_net": 6.267,
-            "opponent_rank": 7,
-            "why": "comparable, rank distance 3"
+            "opponent_games": 16,
+            "opponent_net": 5.813,
+            "opponent_rank": 8,
+            "why": "comparable, rank distance 4"
           }
         ]
       },
@@ -1176,8 +1176,8 @@
             "team_score": 99,
             "opponent_score": 102,
             "margin": -3,
-            "opponent_games": 14,
-            "opponent_net": 6.643,
+            "opponent_games": 15,
+            "opponent_net": 6.267,
             "opponent_rank": 6,
             "why": "last 10 before tip; comparable, rank distance 3"
           },
@@ -1189,10 +1189,10 @@
             "team_score": 106,
             "opponent_score": 105,
             "margin": 1,
-            "opponent_games": 15,
-            "opponent_net": 6.267,
-            "opponent_rank": 7,
-            "why": "last 10 before tip; comparable, rank distance 4"
+            "opponent_games": 16,
+            "opponent_net": 5.813,
+            "opponent_rank": 8,
+            "why": "last 10 before tip; comparable, rank distance 5"
           },
           {
             "event_id": "401909999",
@@ -1202,10 +1202,10 @@
             "team_score": 106,
             "opponent_score": 98,
             "margin": 8,
-            "opponent_games": 15,
-            "opponent_net": 6.267,
-            "opponent_rank": 7,
-            "why": "last 10 before tip; comparable, rank distance 4"
+            "opponent_games": 16,
+            "opponent_net": 5.813,
+            "opponent_rank": 8,
+            "why": "last 10 before tip; comparable, rank distance 5"
           },
           {
             "event_id": "401909984",
@@ -1561,9 +1561,9 @@
             "team_score": 125,
             "opponent_score": 103,
             "margin": 22,
-            "opponent_games": 15,
-            "opponent_net": 6.267,
-            "opponent_rank": 7,
+            "opponent_games": 16,
+            "opponent_net": 5.813,
+            "opponent_rank": 8,
             "why": "last 10 before tip"
           },
           {
@@ -1671,8 +1671,8 @@
             "team_score": 131,
             "opponent_score": 94,
             "margin": 37,
-            "opponent_games": 15,
-            "opponent_net": -0.867,
+            "opponent_games": 16,
+            "opponent_net": -0.187,
             "opponent_rank": 17,
             "why": "last 10 before tip"
           },
@@ -1777,8 +1777,8 @@
             "margin": 14,
             "opponent_games": 15,
             "opponent_net": -8.067,
-            "opponent_rank": 27,
-            "why": "comparable, rank distance 3"
+            "opponent_rank": 26,
+            "why": "comparable, rank distance 4"
           },
           {
             "event_id": "401909877",
@@ -1790,8 +1790,8 @@
             "margin": 1,
             "opponent_games": 15,
             "opponent_net": -7.933,
-            "opponent_rank": 26,
-            "why": "comparable, rank distance 4"
+            "opponent_rank": 25,
+            "why": "comparable, rank distance 5"
           },
           {
             "event_id": "401909870",
@@ -1803,8 +1803,8 @@
             "margin": 35,
             "opponent_games": 15,
             "opponent_net": -8.067,
-            "opponent_rank": 27,
-            "why": "comparable, rank distance 3"
+            "opponent_rank": 26,
+            "why": "comparable, rank distance 4"
           }
         ]
       },
@@ -1831,8 +1831,8 @@
             "margin": -2,
             "opponent_games": 17,
             "opponent_net": 6.176,
-            "opponent_rank": 8,
-            "why": "last 10 before tip"
+            "opponent_rank": 7,
+            "why": "last 10 before tip; comparable, rank distance 5"
           },
           {
             "event_id": "401910018",
@@ -1868,10 +1868,10 @@
             "team_score": 107,
             "opponent_score": 120,
             "margin": -13,
-            "opponent_games": 15,
-            "opponent_net": 6.267,
-            "opponent_rank": 7,
-            "why": "last 10 before tip; comparable, rank distance 5"
+            "opponent_games": 16,
+            "opponent_net": 5.813,
+            "opponent_rank": 8,
+            "why": "last 10 before tip"
           },
           {
             "event_id": "401909964",
@@ -1907,8 +1907,8 @@
             "team_score": 109,
             "opponent_score": 124,
             "margin": -15,
-            "opponent_games": 16,
-            "opponent_net": 11.25,
+            "opponent_games": 17,
+            "opponent_net": 11.941,
             "opponent_rank": 1,
             "why": "last 10 before tip; comparable, rank distance 1"
           },
@@ -1922,8 +1922,8 @@
             "margin": -13,
             "opponent_games": 17,
             "opponent_net": 6.176,
-            "opponent_rank": 8,
-            "why": "last 10 before tip"
+            "opponent_rank": 7,
+            "why": "last 10 before tip; comparable, rank distance 5"
           },
           {
             "event_id": "401909913",
@@ -1933,8 +1933,8 @@
             "team_score": 115,
             "opponent_score": 100,
             "margin": 15,
-            "opponent_games": 15,
-            "opponent_net": -0.867,
+            "opponent_games": 16,
+            "opponent_net": -0.187,
             "opponent_rank": 17,
             "why": "last 10 before tip"
           },
@@ -1946,10 +1946,10 @@
             "team_score": 105,
             "opponent_score": 136,
             "margin": -31,
-            "opponent_games": 16,
-            "opponent_net": 10.188,
-            "opponent_rank": 3,
-            "why": "last 10 before tip; comparable, rank distance 1"
+            "opponent_games": 17,
+            "opponent_net": 9.059,
+            "opponent_rank": 4,
+            "why": "last 10 before tip; comparable, rank distance 2"
           },
           {
             "event_id": "401909879",
@@ -1959,8 +1959,8 @@
             "team_score": 103,
             "opponent_score": 130,
             "margin": -27,
-            "opponent_games": 16,
-            "opponent_net": 11.25,
+            "opponent_games": 17,
+            "opponent_net": 11.941,
             "opponent_rank": 1,
             "why": "comparable, rank distance 1"
           },
@@ -1972,23 +1972,10 @@
             "team_score": 112,
             "opponent_score": 123,
             "margin": -11,
-            "opponent_games": 16,
-            "opponent_net": 10.188,
-            "opponent_rank": 3,
-            "why": "comparable, rank distance 1"
-          },
-          {
-            "event_id": "401909852",
-            "date": "2026-10-23",
-            "opponent_id": "22",
-            "opponent": "POR",
-            "team_score": 120,
-            "opponent_score": 128,
-            "margin": -8,
-            "opponent_games": 15,
-            "opponent_net": 6.267,
-            "opponent_rank": 7,
-            "why": "comparable, rank distance 5"
+            "opponent_games": 17,
+            "opponent_net": 9.059,
+            "opponent_rank": 4,
+            "why": "comparable, rank distance 2"
           }
         ]
       }
@@ -2030,9 +2017,9 @@
             "team_score": 122,
             "opponent_score": 109,
             "margin": 13,
-            "opponent_games": 17,
-            "opponent_net": -7.353,
-            "opponent_rank": 24,
+            "opponent_games": 18,
+            "opponent_net": -8.222,
+            "opponent_rank": 27,
             "why": "last 10 before tip"
           },
           {
@@ -2043,8 +2030,8 @@
             "team_score": 105,
             "opponent_score": 93,
             "margin": 12,
-            "opponent_games": 16,
-            "opponent_net": 11.25,
+            "opponent_games": 17,
+            "opponent_net": 11.941,
             "opponent_rank": 1,
             "why": "last 10 before tip"
           },
@@ -2097,8 +2084,8 @@
             "margin": -5,
             "opponent_games": 17,
             "opponent_net": 6.176,
-            "opponent_rank": 8,
-            "why": "last 10 before tip; comparable, rank distance 4"
+            "opponent_rank": 7,
+            "why": "last 10 before tip; comparable, rank distance 5"
           },
           {
             "event_id": "401909922",
@@ -2136,7 +2123,7 @@
             "margin": 16,
             "opponent_games": 15,
             "opponent_net": -7.933,
-            "opponent_rank": 26,
+            "opponent_rank": 25,
             "why": "last 10 before tip"
           },
           {
@@ -2216,7 +2203,7 @@
             "margin": 7,
             "opponent_games": 17,
             "opponent_net": -12.353,
-            "opponent_rank": 29,
+            "opponent_rank": 30,
             "why": "last 10 before tip"
           },
           {
@@ -2229,7 +2216,7 @@
             "margin": -8,
             "opponent_games": 15,
             "opponent_net": -8.067,
-            "opponent_rank": 27,
+            "opponent_rank": 26,
             "why": "last 10 before tip"
           },
           {
@@ -2242,8 +2229,8 @@
             "margin": -10,
             "opponent_games": 17,
             "opponent_net": 6.176,
-            "opponent_rank": 8,
-            "why": "last 10 before tip; comparable, rank distance 1"
+            "opponent_rank": 7,
+            "why": "last 10 before tip; comparable, rank distance 2"
           },
           {
             "event_id": "401909939",
@@ -2255,7 +2242,7 @@
             "margin": 3,
             "opponent_games": 15,
             "opponent_net": -7.933,
-            "opponent_rank": 26,
+            "opponent_rank": 25,
             "why": "last 10 before tip"
           },
           {
@@ -2305,9 +2292,9 @@
             "team_score": 99,
             "opponent_score": 121,
             "margin": -22,
-            "opponent_games": 17,
-            "opponent_net": -7.353,
-            "opponent_rank": 24,
+            "opponent_games": 18,
+            "opponent_net": -8.222,
+            "opponent_rank": 27,
             "why": "last 10 before tip"
           },
           {
@@ -2376,9 +2363,9 @@
             "team_score": 126,
             "opponent_score": 120,
             "margin": 6,
-            "opponent_games": 17,
-            "opponent_net": -7.353,
-            "opponent_rank": 24,
+            "opponent_games": 18,
+            "opponent_net": -8.222,
+            "opponent_rank": 27,
             "why": "last 10 before tip"
           },
           {
@@ -2402,9 +2389,9 @@
             "team_score": 125,
             "opponent_score": 103,
             "margin": 22,
-            "opponent_games": 15,
-            "opponent_net": -13.2,
-            "opponent_rank": 30,
+            "opponent_games": 16,
+            "opponent_net": -12.312,
+            "opponent_rank": 29,
             "why": "last 10 before tip"
           },
           {
@@ -2415,8 +2402,8 @@
             "team_score": 112,
             "opponent_score": 113,
             "margin": -1,
-            "opponent_games": 14,
-            "opponent_net": -6.214,
+            "opponent_games": 15,
+            "opponent_net": -6.467,
             "opponent_rank": 22,
             "why": "last 10 before tip"
           },
@@ -2428,9 +2415,9 @@
             "team_score": 108,
             "opponent_score": 118,
             "margin": -10,
-            "opponent_games": 15,
-            "opponent_net": 6.267,
-            "opponent_rank": 7,
+            "opponent_games": 16,
+            "opponent_net": 5.813,
+            "opponent_rank": 8,
             "why": "last 10 before tip"
           },
           {
@@ -2441,9 +2428,9 @@
             "team_score": 103,
             "opponent_score": 123,
             "margin": -20,
-            "opponent_games": 15,
-            "opponent_net": 6.267,
-            "opponent_rank": 7,
+            "opponent_games": 16,
+            "opponent_net": 5.813,
+            "opponent_rank": 8,
             "why": "last 10 before tip"
           },
           {
@@ -2467,9 +2454,9 @@
             "team_score": 128,
             "opponent_score": 97,
             "margin": 31,
-            "opponent_games": 16,
-            "opponent_net": 10.188,
-            "opponent_rank": 3,
+            "opponent_games": 17,
+            "opponent_net": 9.059,
+            "opponent_rank": 4,
             "why": "last 10 before tip"
           },
           {
@@ -2506,8 +2493,8 @@
             "team_score": 96,
             "opponent_score": 120,
             "margin": -24,
-            "opponent_games": 15,
-            "opponent_net": -0.867,
+            "opponent_games": 16,
+            "opponent_net": -0.187,
             "opponent_rank": 17,
             "why": "comparable, rank distance 2"
           },
@@ -2562,7 +2549,7 @@
             "margin": 7,
             "opponent_games": 17,
             "opponent_net": -12.353,
-            "opponent_rank": 29,
+            "opponent_rank": 30,
             "why": "last 10 before tip"
           },
           {
@@ -2614,7 +2601,7 @@
             "margin": 6,
             "opponent_games": 17,
             "opponent_net": -7.412,
-            "opponent_rank": 25,
+            "opponent_rank": 24,
             "why": "last 10 before tip"
           },
           {
@@ -2625,9 +2612,9 @@
             "team_score": 114,
             "opponent_score": 108,
             "margin": 6,
-            "opponent_games": 15,
-            "opponent_net": -13.2,
-            "opponent_rank": 30,
+            "opponent_games": 16,
+            "opponent_net": -12.312,
+            "opponent_rank": 29,
             "why": "last 10 before tip"
           },
           {
@@ -2651,8 +2638,8 @@
             "team_score": 117,
             "opponent_score": 116,
             "margin": 1,
-            "opponent_games": 14,
-            "opponent_net": -6.214,
+            "opponent_games": 15,
+            "opponent_net": -6.467,
             "opponent_rank": 22,
             "why": "last 10 before tip"
           },
@@ -2666,8 +2653,8 @@
             "margin": -21,
             "opponent_games": 17,
             "opponent_net": 6.176,
-            "opponent_rank": 8,
-            "why": "last 10 before tip; comparable, rank distance 2"
+            "opponent_rank": 7,
+            "why": "last 10 before tip; comparable, rank distance 3"
           },
           {
             "event_id": "401909282",
@@ -2737,8 +2724,8 @@
             "margin": 2,
             "opponent_games": 15,
             "opponent_net": -7.933,
-            "opponent_rank": 26,
-            "why": "last 10 before tip; comparable, rank distance 3"
+            "opponent_rank": 25,
+            "why": "last 10 before tip; comparable, rank distance 2"
           },
           {
             "event_id": "401910010",
@@ -2761,8 +2748,8 @@
             "team_score": 115,
             "opponent_score": 105,
             "margin": 10,
-            "opponent_games": 14,
-            "opponent_net": 10.929,
+            "opponent_games": 15,
+            "opponent_net": 10.133,
             "opponent_rank": 2,
             "why": "last 10 before tip"
           },
@@ -2776,7 +2763,7 @@
             "margin": 8,
             "opponent_games": 17,
             "opponent_net": -12.353,
-            "opponent_rank": 29,
+            "opponent_rank": 30,
             "why": "last 10 before tip"
           },
           {
@@ -2789,8 +2776,8 @@
             "margin": 15,
             "opponent_games": 17,
             "opponent_net": -7.412,
-            "opponent_rank": 25,
-            "why": "last 10 before tip; comparable, rank distance 2"
+            "opponent_rank": 24,
+            "why": "last 10 before tip; comparable, rank distance 1"
           },
           {
             "event_id": "401909964",
@@ -2800,9 +2787,9 @@
             "team_score": 107,
             "opponent_score": 100,
             "margin": 7,
-            "opponent_games": 15,
-            "opponent_net": -13.2,
-            "opponent_rank": 30,
+            "opponent_games": 16,
+            "opponent_net": -12.312,
+            "opponent_rank": 29,
             "why": "last 10 before tip"
           },
           {
@@ -2852,8 +2839,8 @@
             "team_score": 97,
             "opponent_score": 108,
             "margin": -11,
-            "opponent_games": 14,
-            "opponent_net": 10.929,
+            "opponent_games": 15,
+            "opponent_net": 10.133,
             "opponent_rank": 2,
             "why": "last 10 before tip"
           }
@@ -2882,7 +2869,7 @@
             "margin": 4,
             "opponent_games": 15,
             "opponent_net": -8.067,
-            "opponent_rank": 27,
+            "opponent_rank": 26,
             "why": "last 10 before tip"
           },
           {
@@ -2906,9 +2893,9 @@
             "team_score": 120,
             "opponent_score": 136,
             "margin": -16,
-            "opponent_games": 16,
-            "opponent_net": 10.188,
-            "opponent_rank": 3,
+            "opponent_games": 17,
+            "opponent_net": 9.059,
+            "opponent_rank": 4,
             "why": "last 10 before tip"
           },
           {
@@ -3068,8 +3055,8 @@
             "team_score": 105,
             "opponent_score": 101,
             "margin": 4,
-            "opponent_games": 14,
-            "opponent_net": 10.929,
+            "opponent_games": 15,
+            "opponent_net": 10.133,
             "opponent_rank": 2,
             "why": "last 10 before tip"
           },
@@ -3094,10 +3081,10 @@
             "team_score": 116,
             "opponent_score": 108,
             "margin": 8,
-            "opponent_games": 17,
-            "opponent_net": -7.353,
-            "opponent_rank": 24,
-            "why": "last 10 before tip; comparable, rank distance 3"
+            "opponent_games": 18,
+            "opponent_net": -8.222,
+            "opponent_rank": 27,
+            "why": "last 10 before tip; comparable, rank distance 1"
           },
           {
             "event_id": "401909970",
@@ -3107,9 +3094,9 @@
             "team_score": 123,
             "opponent_score": 118,
             "margin": 5,
-            "opponent_games": 16,
-            "opponent_net": 10.188,
-            "opponent_rank": 3,
+            "opponent_games": 17,
+            "opponent_net": 9.059,
+            "opponent_rank": 4,
             "why": "last 10 before tip"
           },
           {
@@ -3136,7 +3123,7 @@
             "opponent_games": 16,
             "opponent_net": -3.625,
             "opponent_rank": 21,
-            "why": "last 10 before tip"
+            "why": "last 10 before tip; comparable, rank distance 5"
           },
           {
             "event_id": "401909931",
@@ -3159,9 +3146,9 @@
             "team_score": 110,
             "opponent_score": 118,
             "margin": -8,
-            "opponent_games": 15,
-            "opponent_net": 6.267,
-            "opponent_rank": 7,
+            "opponent_games": 16,
+            "opponent_net": 5.813,
+            "opponent_rank": 8,
             "why": "last 10 before tip"
           },
           {
@@ -3185,10 +3172,10 @@
             "team_score": 104,
             "opponent_score": 91,
             "margin": 13,
-            "opponent_games": 17,
-            "opponent_net": -7.353,
-            "opponent_rank": 24,
-            "why": "comparable, rank distance 3"
+            "opponent_games": 18,
+            "opponent_net": -8.222,
+            "opponent_rank": 27,
+            "why": "comparable, rank distance 1"
           },
           {
             "event_id": "401909859",
@@ -3198,10 +3185,10 @@
             "team_score": 141,
             "opponent_score": 135,
             "margin": 6,
-            "opponent_games": 17,
-            "opponent_net": -7.353,
-            "opponent_rank": 24,
-            "why": "comparable, rank distance 3"
+            "opponent_games": 18,
+            "opponent_net": -8.222,
+            "opponent_rank": 27,
+            "why": "comparable, rank distance 1"
           }
         ]
       },
@@ -3209,7 +3196,7 @@
         "team_id": "4",
         "games_before_tip": 15,
         "mean_margin": -8.067,
-        "rank": 27,
+        "rank": 26,
         "form": {
           "tag": "no-tag",
           "games": 10,
@@ -3241,7 +3228,7 @@
             "margin": 30,
             "opponent_games": 15,
             "opponent_net": -7.933,
-            "opponent_rank": 26,
+            "opponent_rank": 25,
             "why": "last 10 before tip"
           },
           {
@@ -3265,9 +3252,9 @@
             "team_score": 117,
             "opponent_score": 106,
             "margin": 11,
-            "opponent_games": 16,
-            "opponent_net": 9.75,
-            "opponent_rank": 4,
+            "opponent_games": 17,
+            "opponent_net": 9.706,
+            "opponent_rank": 3,
             "why": "last 10 before tip"
           },
           {
@@ -3291,8 +3278,8 @@
             "team_score": 119,
             "opponent_score": 124,
             "margin": -5,
-            "opponent_games": 16,
-            "opponent_net": 11.25,
+            "opponent_games": 17,
+            "opponent_net": 11.941,
             "opponent_rank": 1,
             "why": "last 10 before tip"
           },
@@ -3317,8 +3304,8 @@
             "team_score": 105,
             "opponent_score": 135,
             "margin": -30,
-            "opponent_games": 14,
-            "opponent_net": 6.643,
+            "opponent_games": 15,
+            "opponent_net": 6.267,
             "opponent_rank": 6,
             "why": "last 10 before tip"
           },
@@ -3343,8 +3330,8 @@
             "team_score": 111,
             "opponent_score": 125,
             "margin": -14,
-            "opponent_games": 14,
-            "opponent_net": 10.929,
+            "opponent_games": 15,
+            "opponent_net": 10.133,
             "opponent_rank": 2,
             "why": "last 10 before tip"
           },
@@ -3369,17 +3356,30 @@
       "verdict": "NO BET",
       "away": {
         "team_id": "6",
-        "games_before_tip": 15,
-        "mean_margin": -0.867,
+        "games_before_tip": 16,
+        "mean_margin": -0.187,
         "rank": 17,
         "form": {
           "tag": "no-tag",
           "games": 10,
-          "mean_margin": -2.3,
+          "mean_margin": -1.8,
           "losses": 5,
           "close_losses_to_strong": 1
         },
         "rows": [
+          {
+            "event_id": "401910025",
+            "date": "2026-11-21",
+            "opponent_id": "12",
+            "opponent": "LAC",
+            "team_score": 110,
+            "opponent_score": 100,
+            "margin": 10,
+            "opponent_games": 15,
+            "opponent_net": -6.467,
+            "opponent_rank": 22,
+            "why": "last 10 before tip; comparable, rank distance 2"
+          },
           {
             "event_id": "401910016",
             "date": "2026-11-18",
@@ -3391,7 +3391,7 @@
             "opponent_games": 16,
             "opponent_net": -0.937,
             "opponent_rank": 19,
-            "why": "last 10 before tip"
+            "why": "last 10 before tip; comparable, rank distance 5"
           },
           {
             "event_id": "401909989",
@@ -3401,8 +3401,8 @@
             "team_score": 94,
             "opponent_score": 131,
             "margin": -37,
-            "opponent_games": 14,
-            "opponent_net": 10.929,
+            "opponent_games": 15,
+            "opponent_net": 10.133,
             "opponent_rank": 2,
             "why": "last 10 before tip"
           },
@@ -3427,9 +3427,9 @@
             "team_score": 94,
             "opponent_score": 133,
             "margin": -39,
-            "opponent_games": 16,
-            "opponent_net": 9.75,
-            "opponent_rank": 4,
+            "opponent_games": 17,
+            "opponent_net": 9.706,
+            "opponent_rank": 3,
             "why": "last 10 before tip"
           },
           {
@@ -3443,7 +3443,7 @@
             "opponent_games": 16,
             "opponent_net": -3.625,
             "opponent_rank": 21,
-            "why": "last 10 before tip; comparable, rank distance 4"
+            "why": "last 10 before tip; comparable, rank distance 3"
           },
           {
             "event_id": "401909948",
@@ -3455,7 +3455,7 @@
             "margin": 37,
             "opponent_games": 15,
             "opponent_net": -7.933,
-            "opponent_rank": 26,
+            "opponent_rank": 25,
             "why": "last 10 before tip; comparable, rank distance 1"
           },
           {
@@ -3468,7 +3468,7 @@
             "margin": 12,
             "opponent_games": 17,
             "opponent_net": -7.412,
-            "opponent_rank": 25,
+            "opponent_rank": 24,
             "why": "last 10 before tip; comparable, rank distance 0"
           },
           {
@@ -3479,8 +3479,8 @@
             "team_score": 111,
             "opponent_score": 112,
             "margin": -1,
-            "opponent_games": 16,
-            "opponent_net": 11.25,
+            "opponent_games": 17,
+            "opponent_net": 11.941,
             "opponent_rank": 1,
             "why": "last 10 before tip"
           },
@@ -3492,23 +3492,10 @@
             "team_score": 100,
             "opponent_score": 115,
             "margin": -15,
-            "opponent_games": 15,
-            "opponent_net": -13.2,
-            "opponent_rank": 30,
+            "opponent_games": 16,
+            "opponent_net": -12.312,
+            "opponent_rank": 29,
             "why": "last 10 before tip; comparable, rank distance 5"
-          },
-          {
-            "event_id": "401909283",
-            "date": "2026-10-30",
-            "opponent_id": "10",
-            "opponent": "HOU",
-            "team_score": 116,
-            "opponent_score": 111,
-            "margin": 5,
-            "opponent_games": 17,
-            "opponent_net": 7.647,
-            "opponent_rank": 5,
-            "why": "last 10 before tip"
           },
           {
             "event_id": "401909844",
@@ -3521,7 +3508,7 @@
             "opponent_games": 16,
             "opponent_net": -3.625,
             "opponent_rank": 21,
-            "why": "comparable, rank distance 4"
+            "why": "comparable, rank distance 3"
           }
         ]
       },
@@ -3529,7 +3516,7 @@
         "team_id": "26",
         "games_before_tip": 17,
         "mean_margin": -7.412,
-        "rank": 25,
+        "rank": 24,
         "form": {
           "tag": "no-tag",
           "games": 10,
@@ -3561,7 +3548,7 @@
             "margin": 12,
             "opponent_games": 17,
             "opponent_net": 6.176,
-            "opponent_rank": 8,
+            "opponent_rank": 7,
             "why": "last 10 before tip"
           },
           {
@@ -3572,8 +3559,8 @@
             "team_score": 132,
             "opponent_score": 107,
             "margin": 25,
-            "opponent_games": 14,
-            "opponent_net": -6.214,
+            "opponent_games": 15,
+            "opponent_net": -6.467,
             "opponent_rank": 22,
             "why": "last 10 before tip; comparable, rank distance 5"
           },
@@ -3585,8 +3572,8 @@
             "team_score": 102,
             "opponent_score": 110,
             "margin": -8,
-            "opponent_games": 16,
-            "opponent_net": 11.25,
+            "opponent_games": 17,
+            "opponent_net": 11.941,
             "opponent_rank": 1,
             "why": "last 10 before tip"
           },
@@ -3637,9 +3624,9 @@
             "team_score": 100,
             "opponent_score": 115,
             "margin": -15,
-            "opponent_games": 16,
-            "opponent_net": 9.75,
-            "opponent_rank": 4,
+            "opponent_games": 17,
+            "opponent_net": 9.706,
+            "opponent_rank": 3,
             "why": "last 10 before tip"
           },
           {
@@ -3650,8 +3637,8 @@
             "team_score": 100,
             "opponent_score": 112,
             "margin": -12,
-            "opponent_games": 15,
-            "opponent_net": -0.867,
+            "opponent_games": 16,
+            "opponent_net": -0.187,
             "opponent_rank": 17,
             "why": "last 10 before tip; comparable, rank distance 0"
           },
@@ -3663,9 +3650,9 @@
             "team_score": 113,
             "opponent_score": 120,
             "margin": -7,
-            "opponent_games": 17,
-            "opponent_net": -7.353,
-            "opponent_rank": 24,
+            "opponent_games": 18,
+            "opponent_net": -8.222,
+            "opponent_rank": 27,
             "why": "last 10 before tip"
           }
         ]
@@ -3734,8 +3721,8 @@
             "team_score": 106,
             "opponent_score": 104,
             "margin": 2,
-            "opponent_games": 14,
-            "opponent_net": 6.643,
+            "opponent_games": 15,
+            "opponent_net": 6.267,
             "opponent_rank": 6,
             "why": "last 10 before tip; comparable, rank distance 0"
           },
@@ -3760,8 +3747,8 @@
             "team_score": 122,
             "opponent_score": 125,
             "margin": -3,
-            "opponent_games": 15,
-            "opponent_net": -0.867,
+            "opponent_games": 16,
+            "opponent_net": -0.187,
             "opponent_rank": 17,
             "why": "last 10 before tip"
           },
@@ -3786,10 +3773,10 @@
             "team_score": 107,
             "opponent_score": 103,
             "margin": 4,
-            "opponent_games": 16,
-            "opponent_net": 10.188,
-            "opponent_rank": 3,
-            "why": "last 10 before tip; comparable, rank distance 3"
+            "opponent_games": 17,
+            "opponent_net": 9.059,
+            "opponent_rank": 4,
+            "why": "last 10 before tip; comparable, rank distance 2"
           },
           {
             "event_id": "401909909",
@@ -3814,7 +3801,7 @@
             "margin": -8,
             "opponent_games": 15,
             "opponent_net": -7.933,
-            "opponent_rank": 26,
+            "opponent_rank": 25,
             "why": "last 10 before tip"
           },
           {
@@ -3834,17 +3821,30 @@
       },
       "home": {
         "team_id": "18",
-        "games_before_tip": 14,
-        "mean_margin": 6.643,
+        "games_before_tip": 15,
+        "mean_margin": 6.267,
         "rank": 6,
         "form": {
           "tag": "no-tag",
           "games": 10,
-          "mean_margin": 8.8,
-          "losses": 3,
+          "mean_margin": 9.4,
+          "losses": 2,
           "close_losses_to_strong": 0
         },
         "rows": [
+          {
+            "event_id": "401910024",
+            "date": "2026-11-21",
+            "opponent_id": "22",
+            "opponent": "POR",
+            "team_score": 97,
+            "opponent_score": 96,
+            "margin": 1,
+            "opponent_games": 16,
+            "opponent_net": 5.813,
+            "opponent_rank": 8,
+            "why": "last 10 before tip"
+          },
           {
             "event_id": "401910021",
             "date": "2026-11-19",
@@ -3853,9 +3853,9 @@
             "team_score": 102,
             "opponent_score": 99,
             "margin": 3,
-            "opponent_games": 16,
-            "opponent_net": 9.75,
-            "opponent_rank": 4,
+            "opponent_games": 17,
+            "opponent_net": 9.706,
+            "opponent_rank": 3,
             "why": "last 10 before tip"
           },
           {
@@ -3920,7 +3920,7 @@
             "margin": 32,
             "opponent_games": 17,
             "opponent_net": -12.353,
-            "opponent_rank": 29,
+            "opponent_rank": 30,
             "why": "last 10 before tip"
           },
           {
@@ -3946,8 +3946,8 @@
             "margin": 30,
             "opponent_games": 15,
             "opponent_net": -8.067,
-            "opponent_rank": 27,
-            "why": "last 10 before tip"
+            "opponent_rank": 26,
+            "why": "last 10 before tip; comparable, rank distance 5"
           },
           {
             "event_id": "401909910",
@@ -3959,21 +3959,21 @@
             "margin": 13,
             "opponent_games": 15,
             "opponent_net": -7.933,
-            "opponent_rank": 26,
-            "why": "last 10 before tip; comparable, rank distance 5"
+            "opponent_rank": 25,
+            "why": "last 10 before tip; comparable, rank distance 4"
           },
           {
-            "event_id": "401909280",
-            "date": "2026-10-30",
-            "opponent_id": "20",
-            "opponent": "PHI",
-            "team_score": 93,
-            "opponent_score": 98,
-            "margin": -5,
-            "opponent_games": 17,
-            "opponent_net": 2.941,
-            "opponent_rank": 11,
-            "why": "last 10 before tip"
+            "event_id": "401909886",
+            "date": "2026-10-28",
+            "opponent_id": "4",
+            "opponent": "CHI",
+            "team_score": 133,
+            "opponent_score": 127,
+            "margin": 6,
+            "opponent_games": 15,
+            "opponent_net": -8.067,
+            "opponent_rank": 26,
+            "why": "comparable, rank distance 5"
           },
           {
             "event_id": "401909863",
@@ -3996,17 +3996,30 @@
       "verdict": "NO BET",
       "away": {
         "team_id": "2",
-        "games_before_tip": 14,
-        "mean_margin": 10.929,
+        "games_before_tip": 15,
+        "mean_margin": 10.133,
         "rank": 2,
         "form": {
           "tag": "no-tag",
           "games": 10,
-          "mean_margin": 11.1,
-          "losses": 3,
+          "mean_margin": 9.9,
+          "losses": 4,
           "close_losses_to_strong": 0
         },
         "rows": [
+          {
+            "event_id": "401910028",
+            "date": "2026-11-21",
+            "opponent_id": "23",
+            "opponent": "SAC",
+            "team_score": 96,
+            "opponent_score": 97,
+            "margin": -1,
+            "opponent_games": 16,
+            "opponent_net": -12.312,
+            "opponent_rank": 29,
+            "why": "last 10 before tip"
+          },
           {
             "event_id": "401910015",
             "date": "2026-11-18",
@@ -4041,8 +4054,8 @@
             "team_score": 131,
             "opponent_score": 94,
             "margin": 37,
-            "opponent_games": 15,
-            "opponent_net": -0.867,
+            "opponent_games": 16,
+            "opponent_net": -0.187,
             "opponent_rank": 17,
             "why": "last 10 before tip; comparable, rank distance 2"
           },
@@ -4082,7 +4095,7 @@
             "margin": 20,
             "opponent_games": 17,
             "opponent_net": -12.353,
-            "opponent_rank": 29,
+            "opponent_rank": 30,
             "why": "last 10 before tip"
           },
           {
@@ -4108,7 +4121,7 @@
             "margin": 7,
             "opponent_games": 17,
             "opponent_net": -12.353,
-            "opponent_rank": 29,
+            "opponent_rank": 30,
             "why": "last 10 before tip"
           },
           {
@@ -4135,7 +4148,7 @@
             "opponent_games": 15,
             "opponent_net": -3.067,
             "opponent_rank": 20,
-            "why": "last 10 before tip; comparable, rank distance 1"
+            "why": "comparable, rank distance 1"
           }
         ]
       },
@@ -4160,10 +4173,10 @@
             "team_score": 98,
             "opponent_score": 126,
             "margin": -28,
-            "opponent_games": 16,
-            "opponent_net": 10.188,
-            "opponent_rank": 3,
-            "why": "last 10 before tip; comparable, rank distance 1"
+            "opponent_games": 17,
+            "opponent_net": 9.059,
+            "opponent_rank": 4,
+            "why": "last 10 before tip; comparable, rank distance 2"
           },
           {
             "event_id": "401910016",
@@ -4173,8 +4186,8 @@
             "team_score": 94,
             "opponent_score": 116,
             "margin": -22,
-            "opponent_games": 15,
-            "opponent_net": -0.867,
+            "opponent_games": 16,
+            "opponent_net": -0.187,
             "opponent_rank": 17,
             "why": "last 10 before tip"
           },
@@ -4186,9 +4199,9 @@
             "team_score": 94,
             "opponent_score": 115,
             "margin": -21,
-            "opponent_games": 17,
-            "opponent_net": -7.353,
-            "opponent_rank": 24,
+            "opponent_games": 18,
+            "opponent_net": -8.222,
+            "opponent_rank": 27,
             "why": "last 10 before tip"
           },
           {
@@ -4199,8 +4212,8 @@
             "team_score": 85,
             "opponent_score": 123,
             "margin": -38,
-            "opponent_games": 16,
-            "opponent_net": 11.25,
+            "opponent_games": 17,
+            "opponent_net": 11.941,
             "opponent_rank": 1,
             "why": "last 10 before tip; comparable, rank distance 1"
           },
@@ -4225,9 +4238,9 @@
             "team_score": 138,
             "opponent_score": 87,
             "margin": 51,
-            "opponent_games": 17,
-            "opponent_net": -7.353,
-            "opponent_rank": 24,
+            "opponent_games": 18,
+            "opponent_net": -8.222,
+            "opponent_rank": 27,
             "why": "last 10 before tip"
           },
           {
@@ -4277,10 +4290,23 @@
             "team_score": 124,
             "opponent_score": 112,
             "margin": 12,
-            "opponent_games": 14,
-            "opponent_net": -6.214,
+            "opponent_games": 15,
+            "opponent_net": -6.467,
             "opponent_rank": 22,
             "why": "last 10 before tip"
+          },
+          {
+            "event_id": "401909285",
+            "date": "2026-10-30",
+            "opponent_id": "13",
+            "opponent": "LAL",
+            "team_score": 112,
+            "opponent_score": 95,
+            "margin": 17,
+            "opponent_games": 17,
+            "opponent_net": 6.176,
+            "opponent_rank": 7,
+            "why": "comparable, rank distance 5"
           },
           {
             "event_id": "401909888",
@@ -4290,10 +4316,10 @@
             "team_score": 119,
             "opponent_score": 114,
             "margin": 5,
-            "opponent_games": 16,
-            "opponent_net": 9.75,
-            "opponent_rank": 4,
-            "why": "comparable, rank distance 2"
+            "opponent_games": 17,
+            "opponent_net": 9.706,
+            "opponent_rank": 3,
+            "why": "comparable, rank distance 1"
           },
           {
             "event_id": "401909850",
@@ -4303,10 +4329,23 @@
             "team_score": 108,
             "opponent_score": 111,
             "margin": -3,
-            "opponent_games": 16,
-            "opponent_net": 10.188,
-            "opponent_rank": 3,
-            "why": "comparable, rank distance 1"
+            "opponent_games": 17,
+            "opponent_net": 9.059,
+            "opponent_rank": 4,
+            "why": "comparable, rank distance 2"
+          },
+          {
+            "event_id": "401909092",
+            "date": "2026-10-21",
+            "opponent_id": "13",
+            "opponent": "LAL",
+            "team_score": 105,
+            "opponent_score": 127,
+            "margin": -22,
+            "opponent_games": 17,
+            "opponent_net": 6.176,
+            "opponent_rank": 7,
+            "why": "comparable, rank distance 5"
           }
         ]
       }
