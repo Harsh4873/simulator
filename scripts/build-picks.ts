@@ -61,7 +61,7 @@ function trimLean(lean: Lean): Lean {
 }
 
 function sameLines(a: PicksFile['lines'][string] | undefined, b: PicksFile['lines'][string]): boolean {
-  // The stamp moves with every capture. Only a changed line or price changes the comparison.
+  // Index 5 is the capture stamp and index 6 is the opening number. Neither is the price being compared.
   const strip = (rows: PicksFile['lines'][string]) => JSON.stringify(rows.map((row) => row.slice(0, 5)));
   return a !== undefined && strip(a) === strip(b);
 }
@@ -80,8 +80,8 @@ export interface PicksInput {
 }
 
 /**
- * Pure step: every file the job writes follows from these inputs. A game is simulated only before its tip and only
- * when its card or its posted lines changed since the previous run.
+ * Pure step: every file the job writes follows from these inputs. A game is simulated only before its tip, and only
+ * when its card or its posted lines changed, or a line it can log is not in the ledger yet.
  */
 export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: number; opened: number; refreshed: number; settled: number } {
   const { slate, card, feed, ledgers, events, previous, now } = input;
@@ -124,7 +124,13 @@ export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: nu
     if (game.status_state !== 'pre' || !(now.getTime() < tip) || !(Date.parse(cardAt) < tip)) continue;
     const ledger = ledgers.get(game.date) ?? emptyLedger(game.date);
     const known = new Set(ledger.rows.map(ledgerKey));
-    const logged = [...posted.values()].every((line) => known.has(`${line.event_id}:${line.athlete_id}:${line.market}`));
+    const roster = new Map(rate.players.map((player) => [player.athlete_id, player]));
+    // A posted price for a player who is out or off the card is never logged, so it must not force another draw.
+    const logged = [...posted.values()].every((line) => {
+      if (known.has(bookKey(line))) return true;
+      const player = roster.get(line.athlete_id);
+      return !player || player.replacement_level || player.minutes_weight === 0;
+    });
     if (sameCard && logged && sameLines(previous!.lines[game.event_id], lines[game.event_id])) {
       // Same card and same prices: the earlier comparison still stands, with the newer price stamp.
       for (const lean of previous!.leans) {

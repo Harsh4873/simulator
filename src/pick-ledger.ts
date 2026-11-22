@@ -106,23 +106,31 @@ export function refreshLast(file: LedgerFile, rows: readonly LedgerRow[]): numbe
 
 /**
  * The last price the feed posted before the tip, when it is later than the opening price. The feed stops refreshing
- * a game once it starts, so this is the last pre-game price it saw, not a confirmed closing line.
+ * a game once it starts, so this is the last pre-game price it saw, not a confirmed closing line. A quote stamped
+ * after the tip is not that price, and it must not hide an earlier one that still was.
  */
 export function updateClose(file: LedgerFile, feed: readonly BookLine[]): number {
-  const latest = new Map<string, BookLine>();
+  const byKey = new Map<string, BookLine[]>();
   for (const line of feed) {
     const key = bookKey(line);
-    const previous = latest.get(key);
-    if (!previous || Date.parse(line.priced_at) > Date.parse(previous.priced_at)) latest.set(key, line);
+    const list = byKey.get(key);
+    if (list) list.push(line);
+    else byKey.set(key, [line]);
   }
   let changed = 0;
   for (const row of file.rows) {
     if (row.result) continue;
-    const line = latest.get(`${row.e}:${row.a}:${row.m}`);
-    if (!line) continue;
-    const at = Date.parse(line.priced_at);
-    if (!(at < Date.parse(row.tip)) || !(at > Date.parse(row.close?.priced_at ?? row.open.priced_at))) continue;
-    row.close = { priced_at: line.priced_at, line: line.line, over: line.over_odds, under: line.under_odds };
+    const tip = Date.parse(row.tip);
+    let chosen: BookLine | undefined;
+    for (const line of byKey.get(`${row.e}:${row.a}:${row.m}`) ?? []) {
+      const at = Date.parse(line.priced_at);
+      if (!(at < tip)) continue;
+      if (!chosen || at > Date.parse(chosen.priced_at)) chosen = line;
+    }
+    if (!chosen) continue;
+    const at = Date.parse(chosen.priced_at);
+    if (!(at > Date.parse(row.close?.priced_at ?? row.open.priced_at))) continue;
+    row.close = { priced_at: chosen.priced_at, line: chosen.line, over: chosen.over_odds, under: chosen.under_odds };
     changed += 1;
   }
   return changed;

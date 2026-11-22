@@ -195,7 +195,8 @@ test('the ledger logs a line once before the tip, tracks the last posted price, 
   assert.equal(refreshLast(ledger, [{ ...later[0], a: 'unknown' }]), 0);
 
   // The price moved before the tip: that is the close. A stamp after the tip, or an older one, is ignored.
-  assert.equal(updateClose(ledger, [post(first.athlete_id, 18.5, '2026-11-02T23:10:00Z'), post(second.athlete_id, 9.5, '2026-11-03T00:10:00Z'), post(second.athlete_id, 8.5, '2026-11-02T19:00:00Z')]), 1);
+  // A quote stamped after the tip must not hide the last price that was still before it.
+  assert.equal(updateClose(ledger, [post(first.athlete_id, 18.5, '2026-11-02T23:10:00Z'), post(first.athlete_id, 19.5, '2026-11-03T01:00:00Z'), post(second.athlete_id, 9.5, '2026-11-03T00:10:00Z'), post(second.athlete_id, 8.5, '2026-11-02T19:00:00Z')]), 1);
   assert.deepEqual(ledger.rows[0].close, { priced_at: '2026-11-02T23:10:00Z', line: 18.5, over: -115, under: -105 });
   assert.equal(ledger.rows[1].close, undefined);
 
@@ -395,6 +396,50 @@ test('the picks step simulates only games that have not tipped, reuses an unchan
   const afterPull = buildPicks({ slate: liveSlate, card: liveCard, feed: [pulled], ledgers: fresh, events: new Map(), previous: null, now, draws });
   assert.deepEqual(Object.values(afterPull.picks.lines).flat().map((line) => line[0]), [second.athlete_id]);
   assert.deepEqual(fresh.get('2026-11-02')!.rows.map((item) => item.a), [second.athlete_id]);
+});
+
+test('a price for a player who is out does not force another simulation, and only the line or the odds do', () => {
+  assert.ok(ruledOut);
+  const now = new Date('2026-11-02T22:30:00Z');
+  const cardAt = '2026-11-02T22:00:00Z';
+  const liveCard = { ...card, generated_at: cardAt, model_hash: 'm1', input_hash: 'i1' };
+  const pre = { ...game, date: '2026-11-02', status_state: 'pre' as const, start_time: '2026-11-03T00:00:00Z' };
+  const base = (athleteId: string, line: number, over = -110, under = -110): BookLine => ({ event_id: pre.event_id, athlete_id: athleteId, market: 'pts', line, over_odds: over, under_odds: under, priced_at: '2026-11-02T20:00:00Z', book: 'DraftKings', tip: pre.start_time });
+  const feed: BookLine[] = [base(first.athlete_id, 17.5, 100, -120), base(ruledOut.athlete_id, 12.5)];
+  let calls = 0;
+  const draws: Draws = (_game, rateGame) => {
+    calls += 1;
+    return new Map(rateGame.players.map((player) => [player.athlete_id, sample([20, 20, 20, 20, 20, 20, 20, 10, 10, 10])]));
+  };
+  const ledgers = new Map<string, LedgerFile>();
+  const run = (previous: PicksFile | null, at: Date, lines: BookLine[]) => buildPicks({ slate: { ...slate, games: [pre] }, card: liveCard, feed: [lines], ledgers, events: new Map(), previous, now: at, draws });
+  const firstRun = run(null, now, feed);
+  assert.equal(calls, 1);
+  assert.deepEqual(ledgers.get('2026-11-02')!.rows.map((row) => row.a), [first.athlete_id]);
+  const again = run(firstRun.picks, new Date('2026-11-02T22:40:00Z'), feed);
+  assert.equal(calls, 1);
+  assert.equal(ledgers.get('2026-11-02')!.rows[0].last, undefined);
+  // A newer capture of the same price, or a new opening number, is not a new comparison.
+  const restamped = feed.map((line) => ({ ...line, priced_at: '2026-11-02T22:40:00Z' }));
+  const movedOpen = restamped.map((line) => (line.athlete_id === first.athlete_id ? { ...line, open_line: 16.5 } : line));
+  const withOpen = run(again.picks, new Date('2026-11-02T22:50:00Z'), movedOpen);
+  assert.equal(calls, 1);
+  assert.equal(linesByKey(withOpen.picks).get(`${pre.event_id}:${first.athlete_id}:pts`)?.open_line, 16.5);
+  assert.equal(parsePicksFile(serializePicks(withOpen.picks))?.lines[pre.event_id]?.find((row) => row[0] === first.athlete_id)?.[6], 16.5);
+  assert.equal(ledgers.get('2026-11-02')!.rows[0].open.line, 17.5);
+  assert.equal(ledgers.get('2026-11-02')!.rows[0].last, undefined);
+  // A changed price is. The opening snapshot stays the one that was logged first.
+  const repriced = movedOpen.map((line) => (line.athlete_id === first.athlete_id ? { ...line, over_odds: -105 } : line));
+  const afterOdds = run(withOpen.picks, new Date('2026-11-02T22:55:00Z'), repriced);
+  assert.equal(calls, 2);
+  assert.equal(ledgers.get('2026-11-02')!.rows[0].open.over, 100);
+  assert.equal(ledgers.get('2026-11-02')!.rows[0].last?.over, -105);
+  const movedLine = repriced.map((line) => (line.athlete_id === first.athlete_id ? { ...line, line: 18.5, priced_at: '2026-11-02T22:50:00Z' } : line));
+  const afterLine = run(afterOdds.picks, new Date('2026-11-02T22:58:00Z'), movedLine);
+  assert.equal(calls, 3);
+  assert.equal(afterLine.picks.leans.find((lean) => lean.athlete_id === first.athlete_id)?.line, 18.5);
+  assert.equal(ledgers.get('2026-11-02')!.rows[0].open.line, 17.5);
+  assert.equal(ledgers.get('2026-11-02')!.rows[0].last?.line, 18.5);
 });
 
 test('a malformed picks file is dropped whole, and the published artifact may carry picks.json only', () => {
