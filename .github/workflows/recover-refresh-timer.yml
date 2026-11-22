@@ -1,0 +1,35 @@
+name: Recover a dropped refresh timer
+
+# The timer is one long sleep. GitHub sometimes kills that job, the refresh never
+# starts, and nothing arms the next wait. The page then keeps the last card past
+# its deadline. A failed timer starts the refresh now. A newer timer cancels the
+# old one with conclusion cancelled, which is not a failure, so that does not
+# start a second refresh.
+
+on:
+  workflow_run:
+    workflows: ["Wait for the next simulator refresh"]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  recover:
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Start the refresh the timer did not reach
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          pending=$(gh run list --repo "$REPO" --workflow refresh-rate-card.yml --limit 8 --json status --jq '[.[] | select(.status=="queued" or .status=="in_progress" or .status=="waiting" or .status=="pending")] | length')
+          if [ "$pending" != "0" ]; then
+            echo "A refresh is already running"
+            exit 0
+          fi
+          gh workflow run refresh-rate-card.yml --repo "$REPO" --ref main -f trigger=timer

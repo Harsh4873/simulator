@@ -91,4 +91,10 @@ test('the refresh job re-arms the timer even after a failure, and the timer only
  assert.match(timer,/19200/);
  const window=readFileSync('scripts/refresh-window.ts','utf8');
  assert.match(window,/REFRESH_TRIGGER==='timer'/);
+ const recover=readFileSync('.github/workflows/recover-refresh-timer.yml','utf8');
+ assert.match(recover,/workflows: \["Wait for the next simulator refresh"\]/);
+ assert.match(recover,/github\.event\.workflow_run\.conclusion == 'failure'/);
+ assert.match(recover,/head_branch == 'main'/);
+ assert.match(recover,/gh workflow run refresh-rate-card.yml --repo "\$REPO" --ref main -f trigger=timer/);
+ assert.match(recover,/A refresh is already running/);
 });
