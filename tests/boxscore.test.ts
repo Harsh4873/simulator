@@ -510,7 +510,7 @@ test('missing optional fields do not throw', () => {
   assert.equal(html.includes('Thin sample:'), false);
   assert.equal(html.includes('undefined'), false);
   const missing = renderPlayerPanel(game, { players: [] }, model, '1');
-  assert.match(missing, /This player is not on the rate card\./);
+  assert.match(missing, /No season count or minute rate for this player\./);
   assert.match(missing, /Regular Player/);
 });
 

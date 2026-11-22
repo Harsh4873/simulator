@@ -351,7 +351,7 @@ export function decideVerdict(
     return pass('The simulations do not clear this line often enough to beat the sportsbook price.');
   }
   if (!context.onCard) {
-    return pass('This player is not on the rate card, so the price is hard to trust.');
+    return pass('No season count or minute rate for this player, so the price is hard to trust.');
   }
   if (usesShooting(market) && context.missingShooting) {
     return pass('Shot rates for this player are a prior, so this price is hard to trust.');

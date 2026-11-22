@@ -1471,8 +1471,15 @@ function onDeskClick(event: Event): void {
   }
   const player = target.closest('button[data-athlete]');
   if (!(player instanceof HTMLButtonElement)) return;
-  propForm = {...DEFAULT_PROP_FORM};
-  panelAthlete = nextPanelAthlete(panelAthlete, player.dataset.athlete ?? null);
+  const athlete = player.dataset.athlete ?? null;
+  propForm = { ...DEFAULT_PROP_FORM };
+  const posted = postedLine(view?.game.event_id ?? null, athlete, propForm.market);
+  if (posted) {
+    propForm.line = String(posted.line);
+    propForm.odds = String(posted.over_odds);
+    propForm.opposite = String(posted.under_odds);
+  }
+  panelAthlete = nextPanelAthlete(panelAthlete, athlete);
   syncPanel();
   if(panelAthlete)document.getElementById(`${panelTab}-tab`)?.focus();
 }

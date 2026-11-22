@@ -116,7 +116,7 @@ function renderCard(game: SlateGame, card: RateCard, now: Date, edits: number): 
   try { if(rate){validateGame(rate);ready=true;} } catch (error) { ready=false; if(error instanceof Error)unavailable=error.message; }
   const season = game.season_type && game.season_type !== 'regular' ? `<p class="tag">${escapeHtml(game.season_type)}</p>` : '';
   const spread = game.spread_caption ? `<p class="spread">${escapeHtml(game.spread_caption)}</p>` : '';
-  const thin = rate?.thin_rotation ? '<p class="tag">Thin rotation: replacement-level minutes fill remaining spots from league-average rates, not invented player stats.</p>' : '';
+  const thin = rate?.thin_rotation ? '<p class="tag">Thin rotation: the team is short-handed, so the open minutes use a typical player\'s production.</p>' : '';
   const label = ready ? 'Simulate' : escapeHtml(unavailable);
   const edited = edits ? `<p class="chip chip-edit">${edits} lineup change${edits === 1 ? '' : 's'}</p>` : '';
   const lineups = rate && rate.players.length ? `<button type="button" class="ghost" data-lineup="${escapeHtml(game.event_id)}">Lineups</button>` : '';

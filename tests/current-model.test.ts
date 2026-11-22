@@ -60,7 +60,7 @@ test('forecast panel renders aggregate expectations, not a representative score'
   assert.match(html,/<h3>Expected line<\/h3>/);
   const shown=p.expectation!.played?.ptsMean??p.expectation!.ptsMean;
   assert.ok(html.includes(shown.toFixed(1)));
-  assert.match(html,/Averages in the draws this player appeared/);
+  assert.match(html,/Averages from the games he plays/);
   assert.ok(!html.includes('>999<'));
 });
 test('chronological fitting excludes future and nonregular events',()=>{

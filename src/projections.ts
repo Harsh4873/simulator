@@ -508,7 +508,7 @@ function boardRows(
       headshot: player.headshot_url ?? null,
       minutes: player.minutes_mean,
       projection,
-      line: projection === null && simulation ? null : rowLine,
+      line: rowLine,
       book,
       over,
       under,
@@ -531,7 +531,8 @@ function hitChip(label: string, rows: readonly PlayerGameRow[], form: PropFormSt
   const sample = take === undefined ? valid : valid.slice(-take);
   const grade = gradeHistoricalSeries(sample, form.market, form.side, line);
   if (grade.decided === 0) return '';
-  return `<span class="hit-chip ${hitToneClass(grade.rate)}" title="${escapeHtml(`${form.side === 'under' ? 'Under' : 'Over'} ${line}: ${grade.wins} of ${grade.decided}`)}"><small>${escapeHtml(label)}</small><strong>${grade.wins}/${grade.decided}</strong></span>`;
+  const sideWord = form.side === 'under' ? 'Under' : 'Over';
+  return `<span class="hit-chip ${hitToneClass(grade.rate)}" title="${escapeHtml(`${sideWord} ${line}: ${grade.wins} of ${grade.decided}`)}"><small>${escapeHtml(label)}</small><strong>${grade.wins}/${grade.decided}</strong><em class="chip-tip">${escapeHtml(sideWord)}</em></span>`;
 }
 
 interface CardSides {
@@ -583,7 +584,7 @@ function dvpChip(row: BoardRow, form: PropFormState, opponent: TeamSide | null):
   const tone = rankTone(rank, true);
   const who = opponent ? sideAbbr(opponent) : 'His opponent';
   const title = `${who} allows ${value.toFixed(1)} ${defenseStatLabel(form.market)} a game to ${SLOT_WORD[row.slot]}: ${ordinal(rank)} of 30, where 30th allows the most.`;
-  return `<span class="dvp-chip" data-tone="${tone}" title="${escapeHtml(title)}"><small>${TONE_WORD[tone]} D</small><strong>${ordinal(rank)}</strong></span>`;
+  return `<span class="dvp-chip" data-tone="${tone}" title="${escapeHtml(title)}"><small>${TONE_WORD[tone]} D</small><strong>${ordinal(rank)}</strong><em class="chip-tip">${value.toFixed(1)} / game</em></span>`;
 }
 
 /** Whether a card passes the defense filter and the defense picked in the Defense view. */
@@ -626,16 +627,17 @@ function pickCardHtml(row: BoardRow, form: PropFormState, selected: boolean, sid
           : ''
       : '';
   const chances =
-    row.over || row.under
+    row.over || row.under || row.book
       ? `<span class="pick-odds">
-          <span class="pick-side" data-side="over"${leanTo === 'over' ? ' data-lead' : ''}><span class="pick-side-name">Over</span><span class="pick-pct">${row.over || '—'}</span>${row.over ? price(row.book?.over_odds) : ''}</span>
+          <span class="pick-side" data-side="over"${leanTo === 'over' ? ' data-lead' : ''}><span class="pick-side-name">Over</span><span class="pick-pct">${row.over || '—'}</span>${price(row.book?.over_odds)}</span>
           <span class="pick-meter" aria-hidden="true"><span class="pick-meter-fill" style="width:${((row.overRate ?? 0) * 100).toFixed(1)}%"></span></span>
-          <span class="pick-side" data-side="under"${leanTo === 'under' ? ' data-lead' : ''}><span class="pick-side-name">Under</span><span class="pick-pct">${row.under || '—'}</span>${row.under ? price(row.book?.under_odds) : ''}</span>
-        </span>${row.anchor ? `<span class="pick-anchor" title="Simulated chance and the posted price">Over: sim ${percent(row.anchor.raw)} · price ${percent(row.anchor.market)}</span>` : ''}`
+          <span class="pick-side" data-side="under"${leanTo === 'under' ? ' data-lead' : ''}><span class="pick-side-name">Under</span><span class="pick-pct">${row.under || '—'}</span>${price(row.book?.under_odds)}</span>
+        </span>${row.anchor ? `<span class="pick-anchor" title="Simulated chance and the posted price">Simulated over ${percent(row.anchor.raw)} · price to beat ${percent(row.anchor.market)}</span>` : ''}`
       : '';
   const spark = row.values.length ? `<span class="pick-spark">${sparkBarsSvg(row.values, row.line, `${row.name}: ${marketLabel(form.market)} in simulated games he played`)}</span>` : '';
+  const chipForm = leanTo === 'over' || leanTo === 'under' ? { ...form, side: leanTo } : form;
   const hits = hasHistory
-    ? [dvpChip(row, form, sides.opponent), hitChip('L5', row.games, form, row.line, 5), hitChip('L10', row.games, form, row.line, 10), hitChip('Home', row.games.filter((g) => g.home), form, row.line), hitChip('Away', row.games.filter((g) => !g.home), form, row.line)].join('')
+    ? [dvpChip(row, chipForm, sides.opponent), hitChip('L5', row.games, chipForm, row.line, 5), hitChip('L10', row.games, chipForm, row.line, 10), hitChip('Home', row.games.filter((g) => g.home), chipForm, row.line), hitChip('Away', row.games.filter((g) => !g.home), chipForm, row.line)].join('')
     : '';
   const edgeTone = row.edge.includes('+') ? ' edge-up' : row.edge.includes('-') || row.edge.includes('−') ? ' edge-down' : '';
   return `<li class="pick-card${selected ? ' is-selected' : ''}${row.note ? ' is-out' : ''}"${leanTo ? ` data-lean="${leanTo}"` : ''}>
@@ -703,7 +705,7 @@ export function projectionBoardHtml(
   const source = milestone
     ? 'Double-doubles and triple-doubles settle at 0.5. No price is posted for them here.'
     : posted.length
-      ? `Lines are the posted ${escapeHtml(posted[0].book!.book)} over/under for this stat. Each chance weighs the simulation against the price, and a side lights only when it still beats the price.`
+      ? `Lines are the posted ${escapeHtml(posted[0].book!.book)} over/under for this stat. A side lights when its chance beats the price.`
       : 'No posted line is in for this stat in this game, so only the projection is shown. Select a player to grade a line of your own.';
   const lineBadge = simulation
     ? `<p class="board-grade-note">${gradedLine !== null && athleteId ? `Selected player graded at <strong>${sideText} ${gradedLine}</strong>. ` : ''}${source}</p>`
@@ -745,7 +747,7 @@ export function slateBoardHtml(view: ProjectionView): string {
     if (!simulation) pending += 1;
     const athleteId = view.eventId === game.event_id ? view.athleteId : null;
     for (const row of boardRows(rate, simulation ?? null, view.form, athleteId, context, sort, view.lines, view.propCalibration)) {
-      if (row.note && row.athleteId !== view.athleteId) continue;
+      if (row.note && row.athleteId !== view.athleteId && row.book === null) continue;
       const player = rate.players.find((item) => item.athlete_id === row.athleteId);
       if (!player || player.replacement_level) continue;
       const keep = anyPosted ? row.book !== null : player.minutes_weight !== 0 && player.minutes_mean >= BOARD_MINUTES;
@@ -756,7 +758,7 @@ export function slateBoardHtml(view: ProjectionView): string {
   const milestone = view.form.market === 'dd' || view.form.market === 'td';
   const book = rows.find((row) => row.book)?.book?.book;
   const note = anyPosted && book
-    ? `Players with a posted ${escapeHtml(book)} line for ${escapeHtml(marketLabel(view.form.market).toLowerCase())}. Each chance weighs the simulation against the price, and a side lights only when it still beats the price.`
+    ? `Players with a posted ${escapeHtml(book)} line for ${escapeHtml(marketLabel(view.form.market).toLowerCase())}. A side lights when its chance beats the price.`
     : milestone
       ? 'Double-doubles and triple-doubles settle at 0.5.'
       : `No posted line is in for ${escapeHtml(marketLabel(view.form.market).toLowerCase())} yet, so the board shows every rotation player's projection.`;
@@ -964,7 +966,7 @@ function spotlightHtml(simulation: Simulation, athleteId: string, market: PropMa
     ? '<p class="prop-note">This stat is missing from the older card.</p>'
     : mean === null
       ? '<p class="prop-note">This player does not play in the simulations.</p>'
-      : `<p class="projection-headline"><span class="stat-group-label">${escapeHtml(marketLabel(market))} · 10k projection</span><span class="projection-value">${mean.toFixed(1)}</span></p>`;
+      : `<p class="projection-headline"><span class="stat-group-label">${escapeHtml(marketLabel(market))} · projection</span><span class="projection-value">${mean.toFixed(1)}</span></p>`;
   return `${headline}
     <div class="play-meter"><p class="play-meter-label"><span>Simulated play share</span><span class="play-meter-value">${share}</span></p><span class="play-track" aria-hidden="true"><span class="play-fill" style="width:${width}%"></span></span></div>`;
 }
@@ -1276,7 +1278,7 @@ function onOffPanelHtml(
     return `<section class="projection-card onoff-panel" data-block="proj-onoff" aria-label="On and off court usage">
         <div class="section-head">
           <h3 class="section-kicker">Who he shares the floor with</h3>
-          <span class="meta-pill">${onOff.games} games with rebuilt lineups · ${escapeHtml(onOff.season_label)}</span>
+          <span class="meta-pill">${onOff.games} games · ${escapeHtml(onOff.season_label)}</span>
         </div>
         ${intro}
         <p class="prop-note">A teammate split needs at least 20 minutes on the court both on and off.</p>
@@ -1313,13 +1315,13 @@ function onOffPanelHtml(
       const selected = split.mate_id === activeSplit.mate_id;
       return `<tr${selected ? ' class="is-selected"' : ''}>
           <th scope="row"><button type="button" class="projection-player" data-onoff-mate="${escapeHtml(split.mate_id)}" aria-pressed="${selected ? 'true' : 'false'}">${escapeHtml(name)}${note ? ` <small class="mate-inline-note">${escapeHtml(note)}</small>` : ''}</button></th>
-          <td>${split.on[0]}</td>
-          <td>${split.on[1].toFixed(1)}%</td>
-          <td>${split.on[2].toFixed(1)}</td>
-          <td>${split.off[0]}</td>
-          <td>${split.off[1].toFixed(1)}%</td>
-          <td>${split.off[2].toFixed(1)}</td>
-          <td class="${cls}">${signedDelta(delta)}</td>
+          <td data-label="On min">${split.on[0]}</td>
+          <td data-label="On USG%">${split.on[1].toFixed(1)}%</td>
+          <td data-label="On P/36">${split.on[2].toFixed(1)}</td>
+          <td data-label="Off min">${split.off[0]}</td>
+          <td data-label="Off USG%">${split.off[1].toFixed(1)}%</td>
+          <td data-label="Off P/36">${split.off[2].toFixed(1)}</td>
+          <td class="${cls}" data-label="Off ΔUSG">${signedDelta(delta)}</td>
         </tr>`;
     })
     .join('');
@@ -1327,7 +1329,7 @@ function onOffPanelHtml(
   return `<section class="projection-card onoff-panel" data-block="proj-onoff" aria-label="On and off court usage">
       <div class="section-head">
         <h3 class="section-kicker">Who he shares the floor with</h3>
-        <span class="meta-pill">${onOff.games} games with rebuilt lineups · ${escapeHtml(onOff.season_label)}</span>
+        <span class="meta-pill">${onOff.games} games · ${escapeHtml(onOff.season_label)}</span>
       </div>
       ${intro}
       <div class="mate-pills" role="group" aria-label="Teammates with reconstructed splits">${chipButtons}</div>
@@ -1345,13 +1347,13 @@ function onOffPanelHtml(
         <table class="onoff-compare">
           <thead><tr><th>Metric</th><th>With him</th><th>Without him</th></tr></thead>
           <tbody>
-            <tr><th scope="row">Usage %</th><td>${onUsg.toFixed(1)}%</td><td>${offUsg.toFixed(1)}%</td></tr>
-            <tr><th scope="row">Points / 36</th><td>${onPts.toFixed(1)}</td><td>${offPts.toFixed(1)}</td></tr>
-            <tr><th scope="row">Shots / 36</th><td>${onFga.toFixed(1)}</td><td>${offFga.toFixed(1)}</td></tr>
-            <tr><th scope="row">Rebounds / 36</th><td>${onReb.toFixed(1)}</td><td>${offReb.toFixed(1)}</td></tr>
-            <tr><th scope="row">Assists / 36</th><td>${onAst.toFixed(1)}</td><td>${offAst.toFixed(1)}</td></tr>
-            <tr><th scope="row">Turnovers / 36</th><td>${onTov.toFixed(1)}</td><td>${offTov.toFixed(1)}</td></tr>
-            <tr><th scope="row">Minutes</th><td>${onMin}</td><td>${offMin}</td></tr>
+            <tr><th scope="row">Usage %</th><td data-label="With him">${onUsg.toFixed(1)}%</td><td data-label="Without him">${offUsg.toFixed(1)}%</td></tr>
+            <tr><th scope="row">Points / 36</th><td data-label="With him">${onPts.toFixed(1)}</td><td data-label="Without him">${offPts.toFixed(1)}</td></tr>
+            <tr><th scope="row">Shots / 36</th><td data-label="With him">${onFga.toFixed(1)}</td><td data-label="Without him">${offFga.toFixed(1)}</td></tr>
+            <tr><th scope="row">Rebounds / 36</th><td data-label="With him">${onReb.toFixed(1)}</td><td data-label="Without him">${offReb.toFixed(1)}</td></tr>
+            <tr><th scope="row">Assists / 36</th><td data-label="With him">${onAst.toFixed(1)}</td><td data-label="Without him">${offAst.toFixed(1)}</td></tr>
+            <tr><th scope="row">Turnovers / 36</th><td data-label="With him">${onTov.toFixed(1)}</td><td data-label="Without him">${offTov.toFixed(1)}</td></tr>
+            <tr><th scope="row">Minutes</th><td data-label="With him">${onMin}</td><td data-label="Without him">${offMin}</td></tr>
           </tbody>
         </table>
       </div>
@@ -1654,7 +1656,7 @@ function gameStripHtml(view: ProjectionView, scope: BoardScope): string {
       const when = status === 'not started' ? clockText(item.start_time) : status === 'final' ? 'Final' : status === 'in progress' ? 'Live' : clockText(item.start_time);
       const title = `Away ${sideAbbr(item.away)} @ Home ${sideAbbr(item.home)} · ${placeLine(item)} · ${formatTip(item.start_time)}`;
       return `<button type="button" class="game-chip projection-game" data-projection-game="${escapeHtml(item.event_id)}" aria-pressed="${selected ? 'true' : 'false'}" title="${escapeHtml(title)}">
-          <span class="game-row-head"><span class="chip-logos">${logoImg(item.away)}${logoImg(item.home)}</span><span class="abbr">${escapeHtml(`${sideAbbr(item.away)} @ ${sideAbbr(item.home)}`)}</span>${ready ? '<span class="ready-dot" title="10,000 simulations cached">10k ready</span>' : ''}</span>
+          <span class="game-row-head"><span class="chip-logos">${logoImg(item.away)}${logoImg(item.home)}</span><span class="abbr">${escapeHtml(`${sideAbbr(item.away)} @ ${sideAbbr(item.home)}`)}</span>${ready ? '<span class="ready-dot" title="10,000 simulations already drawn">Simulated</span>' : ''}</span>
           <span class="tip">${escapeHtml(when)}</span>
         </button>`;
     })
@@ -1822,7 +1824,7 @@ export interface LeanPanelInput {
 }
 
 export function leanPanelInner(input: LeanPanelInput): string {
-  const head = '<div class="leans-head"><h2>Top leans</h2><p class="section-sub">The model\'s side at posted lines for games that have not started. The bar is the model chance; the tick is what the price needs.</p></div>';
+  const head = '<div class="leans-head"><h2>Top leans</h2><p class="section-sub">The stronger side at tonight\'s posted lines, for games that have not started.</p></div>';
   if (!input.posted) {
     return `${head}<p class="prop-note">No posted line is in for this slate yet. They usually arrive late morning Central, and this list fills at the next refresh.</p>`;
   }
@@ -1857,7 +1859,7 @@ export function postedLineHtml(book: BookLine | null, form: PropFormState): stri
   return `<p class="prop-note posted-line" data-posted-line>${escapeHtml(book.book)} has ${escapeHtml(lineText(book.line))} at over ${escapeHtml(americanText(book.over_odds))}, under ${escapeHtml(americanText(book.under_odds))}, priced ${escapeHtml(formatTip(book.priced_at))}.${opened}${using ? '' : ' <button type="button" class="ghost mini-action" data-use-posted>Use the posted line</button>'}</p>`;
 }
 
-function injuryReportHtml(rate: RateGame, game: SlateGame): string {
+function injuryReportHtml(rate: RateGame, game: SlateGame, omitEmpty = false): string {
   const sides = [
     { id: game.away.team_id, label: sideAbbr(game.away) },
     { id: game.home.team_id, label: sideAbbr(game.home) },
@@ -1885,8 +1887,9 @@ function injuryReportHtml(rate: RateGame, game: SlateGame): string {
       return `<div><p class="stat-group-label">${escapeHtml(side.label)}</p><ul>${items}</ul></div>`;
     })
     .join('');
-  const body = blocks || '<p class="prop-note">No one on this card is on the injury report.</p>';
-  return `<section class="injury-report" aria-label="Injury report"><h3>Injury report</h3><p class="section-sub">Designations on the published card. The simulator already sits players from this report.</p>${body}</section>`;
+  if (!blocks) return omitEmpty ? '' : `<section class="injury-report" aria-label="Injury report"><h3>Injury report</h3><p class="section-sub">Tonight's injury tags.</p><p class="prop-note">No one on this card is on the injury report.</p></section>`;
+  const matchup = `${sideAbbr(game.away)} at ${sideAbbr(game.home)}`;
+  return `<section class="injury-report" aria-label="Injury report"><h3>Injury report · ${escapeHtml(matchup)}</h3><p class="section-sub">Tonight's injury tags.</p>${blocks}</section>`;
 }
 
 /** Games that have not started and have at least one posted line: the only games a lean can be logged for. */
@@ -1950,7 +1953,14 @@ export function renderProjections(view: ProjectionView): string {
   const boardMeter = view.drawing && !view.athleteId && scope === 'game' ? inlineDrawingHtml(view.drawProgress) : '';
   const stat = marketLabel(view.form.market);
   const title = scope === 'game' && game ? `${stat} · ${sideAbbr(game.away)} @ ${sideAbbr(game.home)}` : `${stat} · every game`;
-  const injuries = scope === 'game' && game && rate ? injuryReportHtml(rate, game) : '';
+  const injuries = scope === 'game'
+    ? (game && rate ? injuryReportHtml(rate, game) : '')
+    : boardGames(view.slate, view.now)
+        .map((item) => {
+          const card = view.card.games.find((rateGame) => rateGame.event_id === item.event_id);
+          return card ? injuryReportHtml(card, item, true) : '';
+        })
+        .join('');
   const board =
     scope === 'all' || (game && rate)
       ? `${boardMeter}<section class="team-box projection-board" data-block="proj-board"><div class="board-head"><h2>${escapeHtml(title)}</h2></div><div data-projection-board>${boardInnerHtml({ ...view, scope })}</div>${injuries}</section>`

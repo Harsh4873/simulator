@@ -147,7 +147,7 @@ const RECEIVING: Column[] = [
 
 function statusMark(player: TeamPlan['players'][number]): string {
   if (!player.status) return '';
-  return ` <span class="chip" title="${escapeHtml(`${player.status}: plays in ${Math.round(player.play * 100)}% of draws`)}">${escapeHtml(player.status.slice(0, 1).toUpperCase())}</span>`;
+  return ` <span class="chip">${escapeHtml(player.status)} · ${Math.round(player.play * 100)}%</span>`;
 }
 
 /** Players with a real role in a table: an average of at least `min` of its lead stat. */

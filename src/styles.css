@@ -2736,6 +2736,7 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
 
 .hit-chip strong { font-size: 0.8rem; font-weight: 800; }
 .hit-chip small { font-size: 0.65rem; color: var(--muted); }
+.chip-tip { display: block; font-style: normal; font-size: 0.65rem; font-weight: 600; color: var(--muted); letter-spacing: 0; text-transform: none; }
 
 /* Right Sidebar Context & Games */
 
@@ -3208,7 +3209,7 @@ html {
   .projection-board th:last-child { padding-right: 10px; }
   .projection-player {
     display: block;
-    max-width: 7.5rem;
+    max-width: none;
     white-space: normal;
     overflow-wrap: anywhere;
     line-height: 1.2;
@@ -3782,9 +3783,10 @@ html {
 /* The opponent's defense on a card, and the filter above the cards. */
 
 .dvp-chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 5px;
+  display: inline-grid;
+  justify-items: center;
+  gap: 1px 5px;
+  grid-template-columns: auto auto;
   padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid var(--border);
@@ -3793,6 +3795,7 @@ html {
 
 .dvp-chip small { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; }
 .dvp-chip strong { font-size: 0.8rem; font-weight: 800; }
+.dvp-chip .chip-tip { grid-column: 1 / -1; }
 .dvp-chip[data-tone="fav"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .dvp-chip[data-tone="mid"] { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, var(--border)); background: color-mix(in srgb, var(--gold) 10%, transparent); }
 .dvp-chip[data-tone="tough"] { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); background: color-mix(in srgb, var(--danger) 10%, transparent); }
@@ -4073,6 +4076,14 @@ html[data-layout="phone"] tbody td:is([data-col], [data-label]) > * {
 }
 
 @media (max-width: 800px) {
+  .game-strip { flex-wrap: wrap; overflow-x: visible; }
+  .projection-controls .market-pills { flex-wrap: wrap; overflow-x: visible; }
+  .history-chart-wrap { overflow-x: visible; }
+  .history-bars { min-width: 0; width: 100%; }
+  .dvp-vs { display: block; }
+  .section-picker > summary,
+  .dvp-sort { min-height: 44px; }
+
   .table-scroll { overflow-x: visible; }
   .sort-bar { flex-wrap: wrap; }
 

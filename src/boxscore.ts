@@ -528,7 +528,7 @@ interface WhyNote {
 function whyNotes(row: CardRow | null): WhyNote[] {
   const notes: WhyNote[] = [];
   const push = (text: string, kind: string, kicker: string) => notes.push({ text, kind, kicker });
-  if (!row) push('This player is not on the rate card.', 'sample', 'Rate card');
+  if (!row) push('No season count or minute rate for this player.', 'sample', 'Player');
   const games2026 = readNumber(row, 'games_2026');
   const games2027 = readNumber(row, 'games_2027');
   if (games2026 !== undefined && games2027 !== undefined) {
@@ -564,7 +564,7 @@ function whyNotes(row: CardRow | null): WhyNote[] {
   if(participation!==undefined)push(`Chance of playing: ${(participation*100).toFixed(1)}%.`, 'availability', 'Playing');
   if (status === undefined) push('Injury status is not in the data.', 'availability', 'Injury status');
   push(
-    'The table shows this player\'s average across all 10,000 games. A 40-point game can still happen in the tail. It is not the line from one draw.',
+    'The table shows this player\'s average across all 10,000 games. One game can land far from this average.',
     'read',
     'Across 10,000 games',
   );
@@ -634,7 +634,7 @@ function expectedLine(line: SimulatedPlayer): string {
     <dl class="line line-compact">${shooting}</dl>
     <p class="stat-group-label">Steals and blocks</p>
     <dl class="line line-pair">${stocks}</dl>
-    <p class="line-read">Averages in the draws this player appeared (minutes greater than 0). Plays in ${share}% of draws. The roster table still counts sit-outs so team minutes sum to 240. Prop probabilities below exclude DNPs and pushes.</p>`;
+    <p class="line-read">Averages from the games he plays. He plays in ${share}% of them. A game he sits out is left out of the prop chances on the Prop Analyzer tab.</p>`;
 }
 
 function drawnLine(line: SimulatedPlayer): string {

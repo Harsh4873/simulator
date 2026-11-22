@@ -1272,7 +1272,7 @@ test('a defense filter keeps soft or tough matchups, a card shows its opponent a
   // Each card names its opponent's defense at his position: an away guard faces the soft home guard defense.
   const awayGuard = game.players.find((player) => player.team_id === game.away_team_id && player.position_group === 'Guard' && !player.replacement_level)!;
   const guardCard = everyone.split('<li class="pick-card').find((card) => card.includes(`data-projection-player="${awayGuard.athlete_id}"`))!;
-  assert.match(guardCard, /<span class="dvp-chip" data-tone="fav"[^>]*><small>Soft D<\/small><strong>28th<\/strong><\/span>/);
+  assert.match(guardCard, /<span class="dvp-chip" data-tone="fav"[^>]*><small>Soft D<\/small><strong>28th<\/strong><em class="chip-tip">[^<]+<\/em><\/span>/);
   // Soft keeps away guards (home allows them the most) and home forwards (away allows them the most), and no one else.
   const soft = ids(board('soft'));
   assert.ok(soft.length > 0);
@@ -1345,7 +1345,7 @@ test('a card at a posted line shows the chance anchored on its price and lights 
   const far = cardOf(line(Math.max(0.5, Math.floor(mean) - 4.5), -105, -115));
   assert.match(far, /data-lean="over"/);
   assert.match(far, /class="pick-edge edge-up">Over \+\d+\.\d pp</);
-  assert.match(far, /class="pick-anchor"[^>]*>Over: sim \d+(\.\d)?% · price \d+(\.\d)?%</);
+  assert.match(far, /class="pick-anchor"[^>]*>Simulated over \d+(\.\d)?% · price to beat \d+(\.\d)?%</);
   // A line at his projection with a heavy price on each side: no side clears, nothing lights and no edge shows.
   const even = cardOf(line(Math.floor(mean) + 0.5, -130, -130));
   assert.doesNotMatch(even, /data-lean=/);
