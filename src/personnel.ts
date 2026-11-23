@@ -4,6 +4,8 @@ import type { RatePlayer, TeamProfile } from './types.ts';
 export const PERSONNEL_FACTOR_MIN = 0.7;
 export const PERSONNEL_FACTOR_MAX = 1.25;
 export const REPLACEMENT_HEALTHY_BUFFER = 8;
+/** Draw-time emergency fill after foul-outs; not the pre-tip healthy-body buffer. */
+export const MAX_DRAW_REPLACEMENTS = 40;
 
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 const bound = (v: number) => Math.max(0, Math.min(1, v));
@@ -121,6 +123,20 @@ export function leagueReplacementRates(players: RatePlayer[]): RatePlayer | null
     minutes_restriction: null,
     replacement_level: true,
   };
+}
+
+/** Next labelled replacement-level line for a team, or null when none can be copied. */
+export function nextReplacementPlayer(
+  roster: RatePlayer[],
+  teamId: string,
+  playProbability = 1,
+  minutesMean = 8,
+): RatePlayer | null {
+  const template = leagueReplacementRates(roster);
+  if (!template) return null;
+  const index = roster.filter(p => p.team_id === teamId && p.replacement_level).length;
+  if (index >= MAX_DRAW_REPLACEMENTS) return null;
+  return replacementPlayer(teamId, index, template, playProbability, minutesMean);
 }
 
 export function replacementPlayer(

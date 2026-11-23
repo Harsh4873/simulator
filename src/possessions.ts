@@ -4,7 +4,7 @@ import {lateFoulState} from './free-throw-model.ts';
 import {usageWeights} from './usage-effects.ts';
 import {lineupLogEffect} from './lineup-effects.ts';
 import { minuteLineups } from './lineups.ts';
-import { personnelFactor } from './personnel.ts';
+import { nextReplacementPlayer, personnelFactor } from './personnel.ts';
 import { leadTilt } from './lead-effect.ts';
 import { concentrate } from './usage-concentration.ts';
 import type { DrawnPlayer } from './simulate.ts';
@@ -25,6 +25,37 @@ function sum(xs: readonly number[]): number {
   return total;
 }
 const bound = (v:number) => Math.max(0,Math.min(1,v));
+
+function emergencyDrawn(rate: RatePlayer): DrawnPlayer {
+  return {
+    athlete_id: rate.athlete_id,
+    name: rate.name,
+    team_id: rate.team_id,
+    injury_status: rate.injury_status,
+    minutes_weight: 1,
+    thin_sample: true,
+    games: 0,
+    games_2026: 0,
+    games_2027: 0,
+    shooting_games: 0,
+    replacement_level: true,
+    min: 0,
+    fgm: 0,
+    fga: 0,
+    tpm: 0,
+    tpa: 0,
+    ftm: 0,
+    fta: 0,
+    pts: 0,
+    reb: 0,
+    ast: 0,
+    stl: 0,
+    blk: 0,
+    tov: 0,
+    orb: 0,
+    drb: 0,
+  };
+}
 
 
 /** Largest share of a lineup's makes a player is credited with when turning an assist rate into a per-teammate-make propensity. */
@@ -63,30 +94,63 @@ export function drawPossessions(
     return Math.max(0,Math.floor(Math.min(periodLength,(rate.minutes_restriction??(thin?12:Infinity))-before[t][i])));
   }));
   const eligMask=[new Uint8Array(away.length),new Uint8Array(home.length)];
-  const adjust=(team:DrawnPlayer[],teamRates:RatePlayer[],isStarter:boolean[],stints:number[][],mins:number[],minute:number,t:number)=>{
-    const n=team.length,mask=eligMask[t],act=actual[t],cap=caps[t],bef=before[t],emerg=emergency[t];
-    mask.fill(0);
-    const eligible:number[]=[];
-    for(let i=0;i<n;i++){
-      if((bef[i]+mins[i]>0||emerg.has(i))&&(team[i].fouls??0)<6&&act[i]<cap[i]){eligible.push(i);mask[i]=1;}
+  const injectReplacement=(team:DrawnPlayer[],teamRates:RatePlayer[],isStarter:boolean[],mins:number[],t:number,minute:number):number|null=>{
+    const extra=nextReplacementPlayer(roster,team[0]?.team_id??'unknown');
+    if(!extra)return null;
+    roster.push(extra);
+    teamRates.push(extra);
+    isStarter.push(false);
+    team.push(emergencyDrawn(extra));
+    mins.push(0);
+    actual[t].push(0);
+    before[t].push(0);
+    caps[t].push(Math.max(0,periodLength-minute));
+    if(eligMask[t].length<team.length){
+      const next=new Uint8Array(team.length);
+      next.set(eligMask[t]);
+      eligMask[t]=next;
     }
+    return team.length-1;
+  };
+  const adjust=(team:DrawnPlayer[],teamRates:RatePlayer[],isStarter:boolean[],stints:number[][],mins:number[],minute:number,t:number)=>{
+    const act=actual[t],cap=caps[t],bef=before[t],emerg=emergency[t];
+    const collect=(into:number[],mask:Uint8Array)=>{
+      into.length=0;mask.fill(0);
+      for(let i=0;i<team.length;i++){
+        if((bef[i]+mins[i]>0||emerg.has(i))&&(team[i].fouls??0)<6&&act[i]<cap[i]){into.push(i);mask[i]=1;}
+      }
+    };
+    let mask=eligMask[t];
+    const eligible:number[]=[];
+    collect(eligible,mask);
     // A healthy coach-DNP can enter if a foul-out exhausts the sampled rotation.
     // A missed uncertain/injured availability draw never becomes an emergency substitute.
     if(eligible.length<5){
       const reserves:number[]=[];
-      for(let i=0;i<n;i++)if(!mask[i]&&bef[i]+mins[i]===0&&healthyReserve(team[i])&&(team[i].fouls??0)<6&&cap[i]-act[i]>=periodLength-minute)reserves.push(i);
+      for(let i=0;i<team.length;i++)if(!mask[i]&&bef[i]+mins[i]===0&&healthyReserve(team[i])&&(team[i].fouls??0)<6&&cap[i]-act[i]>=periodLength-minute)reserves.push(i);
       reserves.sort((a,b)=>teamRates[b].minutes_mean-teamRates[a].minutes_mean);
       while(eligible.length<5&&reserves.length){const i=reserves.shift()!;emerg.add(i);eligible.push(i);mask[i]=1;}
     }
     if(eligible.length<5){
       const sitters:number[]=[];
-      for(let i=0;i<n;i++)if(!mask[i]&&availablePlayer(team[i])&&(team[i].fouls??0)<6&&cap[i]-act[i]>=periodLength-minute)sitters.push(i);
+      for(let i=0;i<team.length;i++)if(!mask[i]&&availablePlayer(team[i])&&(team[i].fouls??0)<6&&cap[i]-act[i]>=periodLength-minute)sitters.push(i);
       sitters.sort((a,b)=>teamRates[b].minutes_mean-teamRates[a].minutes_mean);
       while(eligible.length<5&&sitters.length){const i=sitters.shift()!;emerg.add(i);eligible.push(i);mask[i]=1;}
     }
     if (eligible.length < 5) {
       const available:number[]=[];
-      for(let i=0;i<n;i++)if(availablePlayer(team[i])&&(team[i].fouls??0)<6&&(bef[i]+mins[i]>0||emerg.has(i)||healthyReserve(team[i])))available.push(i);
+      const collectAvailable=()=>{
+        available.length=0;
+        for(let i=0;i<team.length;i++)if(availablePlayer(team[i])&&(team[i].fouls??0)<6&&(bef[i]+mins[i]>0||emerg.has(i)||healthyReserve(team[i])))available.push(i);
+      };
+      collectAvailable();
+      while(available.length<5){
+        const idx=injectReplacement(team,teamRates,isStarter,mins,t,minute);
+        if(idx==null)break;
+        emerg.add(idx);
+        mask=eligMask[t];
+        collectAvailable();
+      }
       if (available.length < 5) throw new InsufficientRosterError(team[0].team_id);
       const remaining = periodLength-minute;
       const oldCaps = available.map(i=>Math.max(0,Math.min(remaining,cap[i]-act[i])));
@@ -138,7 +202,7 @@ export function drawPossessions(
   // Home minus away expected points per possession, set once both targets are solved.
   let edge=0;
   const attack = (off: DrawnPlayer[], def: DrawnPlayer[], p: RatePlayer[], q: RatePlayer[], mins: number[], defMins: number[], profile: TeamProfile, opponent: TeamProfile, venue: number, offStints:number[][], defStints:number[][], side: 1|-1) => {
-    const pLen = p.length, qLen = q.length;
+    const pLen = p.length;
     let shots = p.map((x,i)=>mins[i]*x.fga_per_min);
     let fts = p.map((x,i)=>mins[i]*x.fta_per_min);
     const creators = p.map((x,i)=>mins[i]*x.ast_per_min);
@@ -164,6 +228,21 @@ export function drawPossessions(
     const assistMean=plannedLineupMean(assistBase,offStints),tripLineupMean=plannedLineupMean(tripBase,offStints);
     const offBoardMean=plannedLineupMean(offBoardBase,offStints),defBoardMean=plannedLineupMean(defBoardBase,defStints);
     const makeRate=p.map(x=>(1-x.tpa_given_fga)*x.fg2_pct+x.tpa_given_fga*x.tp_pct);
+    const syncLength=()=>{
+      while(shots.length<p.length){
+        const x=p[shots.length];
+        shots.push(0);fts.push(0);creators.push(0);offensiveBoards.push(0);turnovers.push(0);
+        tripBase.push(concentrate(x.fta_per_min,tripExponent));
+        assistBase.push(concentrate(x.ast_per_min,assistExponent));
+        offBoardBase.push(concentrate(x.reb_per_min*(x.orb_share??1),reboundExponent));
+        makeRate.push((1-x.tpa_given_fga)*x.fg2_pct+x.tpa_given_fga*x.tp_pct);
+      }
+      while(defensiveBoards.length<q.length){
+        const x=q[defensiveBoards.length];
+        defensiveBoards.push(0);steals.push(0);blocks.push(0);
+        defBoardBase.push(concentrate(x.reb_per_min*(x.orb_share!==undefined?1-x.orb_share:1),reboundExponent));
+      }
+    };
     let tripScale=1,boardOdds=1,turnoversPositive=false;
     const ftModel=context.free_throws?.status==='fitted'?context.free_throws:null;
     const tripTypes=ftModel?.trip_types?.length?ftModel.trip_types:null;
@@ -210,6 +289,7 @@ export function drawPossessions(
       const minute=Math.min(periodLength-1,Math.floor(n*periodLength/possessions));
       if(minute!==lastMinute){
         lastMinute=minute;
+        syncLength();
         const active=offStints[minute],against=defStints[minute];
         const activeSet=new Set(active),againstSet=new Set(against);
         const activeOrdered=[...activeSet],againstOrdered=[...againstSet];
@@ -217,7 +297,7 @@ export function drawPossessions(
         defensiveBoards.fill(0);steals.fill(0);blocks.fill(0);
         const activeWeights=usageWeights(context.usage_effects,off[0].team_id,activeOrdered.map(i=>off[i].athlete_id),activeOrdered.map(i=>p[i].fga_per_min));
         for(let j=0;j<activeOrdered.length;j++)shots[activeOrdered[j]]=concentrate(activeWeights[j],shotExponent);
-        for(let i=0;i<pLen;i++)if(activeSet.has(i)){
+        for(let i=0;i<p.length;i++)if(activeSet.has(i)){
           fts[i]=tripBase[i];
           offensiveBoards[i]=offBoardBase[i];
           turnovers[i]=p[i].tov_per_min??0;
@@ -225,14 +305,14 @@ export function drawPossessions(
         // An assist rate counts only teammates' baskets, so divide out the player's own share of the unit's makes:
         // with the shooter skipped on each make, expected assists then follow the rate instead of losing that share twice.
         let unitMakes=0;
-        for(let i=0;i<pLen;i++)unitMakes+=shots[i]*makeRate[i];
-        for(let i=0;i<pLen;i++)if(activeSet.has(i)){
+        for(let i=0;i<p.length;i++)unitMakes+=shots[i]*makeRate[i];
+        for(let i=0;i<p.length;i++)if(activeSet.has(i)){
           const m=shots[i]*makeRate[i];
           creators[i]=assistBase[i]/(1-Math.min(MAX_OWN_MAKE_SHARE,unitMakes>0?m/unitMakes:0));
         }
         tripScale=tripLineupMean>0?sum(fts)/tripLineupMean:1;
         turnoversPositive=sum(turnovers)>0;
-        for(let i=0;i<qLen;i++)if(againstSet.has(i)){
+        for(let i=0;i<q.length;i++)if(againstSet.has(i)){
           defensiveBoards[i]=defBoardBase[i];
           steals[i]=q[i].stl_per_min??0;
           blocks[i]=q[i].blk_per_min??0;

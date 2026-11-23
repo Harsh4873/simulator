@@ -1,3 +1,10 @@
+import {
+  createLeaderAccumulator,
+  finalizeGameLeaders,
+  recordGameLeaders,
+  type GameLeaders,
+} from './game-leaders.ts';
+import { nextReplacementPlayer } from './personnel.ts';
 import { availablePlayer, fillThinRoster, healthyReserve, InsufficientRosterError, relaxMinuteCaps } from './roster-capacity.ts';
 import {discreteRead,summarizeDistribution,type DistributionSummary} from './distributions.ts';
 import { conditionalParticipants } from './availability.ts';
@@ -188,6 +195,8 @@ export interface Simulation {
   home: SimulatedTeam;
   upside: ScenarioView;
   playerDraws: Map<string, ToneSeries>;
+  /** Most-points / rebounds / assists from the same joint draws. Absent on older published files. */
+  leaders?: GameLeaders;
   /** Home points minus away points per draw, for a simulation that arrived as published counts (no per-draw scores). */
   margins?: number[];
   /** Set on a simulation rebuilt from a published summary: it is not stored in the browser, which can fetch it again. */
@@ -626,6 +635,17 @@ function extendSquad(state: SquadState, roster: RatePlayer[], playingIds: Set<st
     selected.add(reserve.athlete_id);
     playingIds.add(reserve.athlete_id);
   }
+  while (roster.filter(p => selected.has(p.athlete_id) && eligible(p)).length < 5) {
+    const extra = nextReplacementPlayer(roster, roster[0]?.team_id ?? 'unknown');
+    if (!extra) break;
+    roster.push(extra);
+    const line = restedLine(extra);
+    line.minutes_weight = 1;
+    state.lines.push(line);
+    byId.set(extra.athlete_id, line);
+    selected.add(extra.athlete_id);
+    playingIds.add(extra.athlete_id);
+  }
   const playing = playingRoster(roster, selected);
   if (playing.filter(eligible).length < 5) throw new InsufficientRosterError(roster[0]?.team_id ?? 'unknown');
   const originalCaps = playing.map((player) => {
@@ -732,6 +752,17 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
   })};
   const awayRoster = game.players.filter((player) => player.team_id === game.away_team_id);
   const homeRoster = game.players.filter((player) => player.team_id === game.home_team_id);
+  const absorbRoster = (into: RatePlayer[], extra: RatePlayer[]) => {
+    const have = new Set(into.map(player => player.athlete_id));
+    for (const player of extra) if (!have.has(player.athlete_id)) {
+      into.push(player);
+      have.add(player.athlete_id);
+    }
+  };
+  const refillTeam = (into: RatePlayer[], teamId: string) => {
+    into.length = 0;
+    for (const player of game.players) if (player.team_id === teamId) into.push(player);
+  };
   const playingIds = participation(awayRoster, homeRoster, rng);
   // Overtime keeps the gamma multiplier: five-minute periods have no fitted spread.
   const spread = game.context?.minutes_spread?.status === 'fitted' ? game.context.minutes_spread : undefined;
@@ -748,6 +779,8 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
   if(game.context) {
     possessions.push(Math.round(pace));
     checkpoints=drawPossessions(away.lines,home.lines,game.players,periodMinutes[0].away,periodMinutes[0].home,game.context,possessions[0],rng);
+    refillTeam(awayRoster, game.away_team_id);
+    refillTeam(homeRoster, game.home_team_id);
   }
   for(const line of [...away.lines,...home.lines]){regulationMinutes.set(`${line.team_id}:${line.athlete_id}`,line.min);if(line.min>0)playingIds.add(line.athlete_id);}
   let awayPts = teamPoints(away.lines);
@@ -758,14 +791,22 @@ export function drawGame(game: RateGame, rng: Rng): RevisedDraw {
   while (awayPts === homePts) {
     if (overtimePeriods >= MAX_OT_PERIODS) throw new Error('overtime did not separate the teams');
     overtimePeriods += 1;
-    const a = away.lines.map(p=>p.min), h = home.lines.map(p=>p.min);
+    const a = new Map(away.lines.map(p=>[p.athlete_id,p.min]));
+    const h = new Map(home.lines.map(p=>[p.athlete_id,p.min]));
     extendSquad(away, awayRoster, playingIds, overtimePeriods, rng, !!game.context);
     extendSquad(home, homeRoster, playingIds, overtimePeriods, rng, !!game.context);
-    const minutes = {away:away.lines.map((p,i)=>p.min-a[i]),home:home.lines.map((p,i)=>p.min-h[i])};
+    absorbRoster(game.players, awayRoster);
+    absorbRoster(game.players, homeRoster);
+    const minutes = {
+      away: away.lines.map(p=>p.min-(a.get(p.athlete_id)??0)),
+      home: home.lines.map(p=>p.min-(h.get(p.athlete_id)??0)),
+    };
     periodMinutes.push(minutes);
     if(game.context){
       const count=Math.max(1,Math.round(pace*5/48));possessions.push(count);
       drawPossessions(away.lines,home.lines,game.players,minutes.away,minutes.home,game.context,count,rng);
+      refillTeam(awayRoster, game.away_team_id);
+      refillTeam(homeRoster, game.home_team_id);
     }
     for(const line of [...away.lines,...home.lines])if(line.min>0)playingIds.add(line.athlete_id);
     awayPts = teamPoints(away.lines);
@@ -989,6 +1030,7 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
   const awayTotals = new Float64Array(iterations);
   const homeTotals = new Float64Array(iterations);
   const series = new Map<string, ToneSeries>();
+  const leaderAcc = createLeaderAccumulator(game.players);
   for (const player of game.players) series.set(player.athlete_id, blankSeries(iterations, !!game.context && player.stl_per_min !== undefined && player.blk_per_min !== undefined && player.tov_per_min !== undefined));
   const combinedTotals = new Array<number>(iterations);
 
@@ -1012,6 +1054,7 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
       bucket.reb[index] = line.reb;
       bucket.ast[index] = line.ast;
     }
+    recordGameLeaders([...draw.away, ...draw.home], leaderAcc);
   }
 
   const index = representativeIndex(awayTotals, homeTotals);
@@ -1049,5 +1092,6 @@ export function simulate(game: RateGame, baseSeed: number, iterations = ITERATIO
     home: chosen.home,
     upside,
     playerDraws: series,
+    leaders: finalizeGameLeaders(leaderAcc, iterations),
   };
 }

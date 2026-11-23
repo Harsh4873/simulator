@@ -27,6 +27,14 @@ import {
   type TeammateSplit,
 } from './projection-context.ts';
 import { bookKey, type BookLine } from './book-lines.ts';
+import {
+  LEADER_STATS,
+  leaderRaceIsClose,
+  leaderScore,
+  type GameLeaders,
+  type LeaderStat,
+  type LeaderTally,
+} from './game-leaders.ts';
 import { EXTREME_CLAIM, rankLeans, type Lean, type PickRecord, type RankedLean, type TierRecord } from './picks.ts';
 import { quoteCalibrationFor, type PropCalibrationArtifact, type PropCalibrationGroup, type PropPanelCalibration } from './prop-calibration.ts';
 import { americanBreakEven, gradeProp, noVigFromBreakEven, parseBookPrice, quoteProp, valueAt, type PlayerSample, type PropMarket } from './props.ts';
@@ -1859,7 +1867,7 @@ export function postedLineHtml(book: BookLine | null, form: PropFormState): stri
   return `<p class="prop-note posted-line" data-posted-line>${escapeHtml(book.book)} has ${escapeHtml(lineText(book.line))} at over ${escapeHtml(americanText(book.over_odds))}, under ${escapeHtml(americanText(book.under_odds))}, priced ${escapeHtml(formatTip(book.priced_at))}.${opened}${using ? '' : ' <button type="button" class="ghost mini-action" data-use-posted>Use the posted line</button>'}</p>`;
 }
 
-function injuryReportHtml(rate: RateGame, game: SlateGame, omitEmpty = false): string {
+function injuryReportHtml(rate: RateGame, game: SlateGame, omitEmpty = false, asOf?: string | null): string {
   const sides = [
     { id: game.away.team_id, label: sideAbbr(game.away) },
     { id: game.home.team_id, label: sideAbbr(game.home) },
@@ -1887,9 +1895,47 @@ function injuryReportHtml(rate: RateGame, game: SlateGame, omitEmpty = false): s
       return `<div><p class="stat-group-label">${escapeHtml(side.label)}</p><ul>${items}</ul></div>`;
     })
     .join('');
-  if (!blocks) return omitEmpty ? '' : `<section class="injury-report" aria-label="Injury report"><h3>Injury report</h3><p class="section-sub">Tonight's injury tags.</p><p class="prop-note">No one on this card is on the injury report.</p></section>`;
+  const stamp = asOf && Number.isFinite(Date.parse(asOf)) ? ` Card generated ${escapeHtml(formatTip(asOf))}.` : '';
+  const note = `Tonight's injury tags.${stamp} Missing tags are missing; they are not invented.`;
+  if (!blocks) return omitEmpty ? '' : `<section class="injury-report" aria-label="Injury report"><h3>Injury report</h3><p class="section-sub">${note}</p><p class="prop-note">No one on this card is on the injury report.</p></section>`;
   const matchup = `${sideAbbr(game.away)} at ${sideAbbr(game.home)}`;
-  return `<section class="injury-report" aria-label="Injury report"><h3>Injury report · ${escapeHtml(matchup)}</h3><p class="section-sub">Tonight's injury tags.</p>${blocks}</section>`;
+  return `<section class="injury-report" aria-label="Injury report"><h3>Injury report · ${escapeHtml(matchup)}</h3><p class="section-sub">${note}</p>${blocks}</section>`;
+}
+
+const LEADER_LABELS: Record<LeaderStat, string> = { pts: 'Points', reb: 'Rebounds', ast: 'Assists' };
+
+function leaderTeamAbbr(game: SlateGame, teamId: string): string {
+  if (teamId === game.away.team_id) return sideAbbr(game.away);
+  if (teamId === game.home.team_id) return sideAbbr(game.home);
+  return teamId;
+}
+
+function leaderColumnHtml(game: SlateGame, rows: readonly LeaderTally[], draws: number, stat: LeaderStat): string {
+  const shown = rows.filter(row => leaderScore(row, draws) > 0).slice(0, 5);
+  if (!shown.length) return `<div class="leader-col"><p class="stat-group-label">${escapeHtml(LEADER_LABELS[stat])}</p><p class="prop-note">No leader share in these draws.</p></div>`;
+  const close = leaderRaceIsClose(shown, draws);
+  const items = shown
+    .map((row, index) => {
+      const any = draws > 0 ? (row.sole + row.tied) / draws : 0;
+      const sole = draws > 0 ? row.sole / draws : 0;
+      const tie = draws > 0 ? row.tied / draws : 0;
+      return `<li class="leader-row"${index === 0 ? ' data-leader-top' : ''}>
+        <span class="leader-who"><strong>${escapeHtml(row.name)}</strong><span class="leader-meta">${escapeHtml(leaderTeamAbbr(game, row.team_id))} · mean ${row.mean.toFixed(1)}</span></span>
+        <span class="leader-chances"><span class="leader-any">${percent(any)} lead</span><span class="leader-split">${percent(sole)} sole · ${percent(tie)} tie</span></span>
+      </li>`;
+    })
+    .join('');
+  const race = close ? '<p class="prop-note">Top two are close. A higher projected average is not enough.</p>' : '';
+  return `<div class="leader-col"><p class="stat-group-label">${escapeHtml(LEADER_LABELS[stat])}</p><ol class="leader-list">${items}</ol>${race}</div>`;
+}
+
+export function gameLeadersHtml(game: SlateGame, leaders: GameLeaders | undefined, drawing: boolean): string {
+  if (drawing) return '';
+  if (!leaders || !(leaders.draws > 0)) {
+    return `<section class="game-leaders" data-block="proj-leaders" aria-label="Most in the game"><h3>Most in the game</h3><p class="section-sub">Share of the same 10,000 joint simulations. Ties are dead heats, not wins. Ranked by lead chance, not by projected averages.</p><p class="prop-note">Leader chances appear after this game's draws finish.</p></section>`;
+  }
+  const columns = LEADER_STATS.map(stat => leaderColumnHtml(game, leaders[stat], leaders.draws, stat)).join('');
+  return `<section class="game-leaders" data-block="proj-leaders" aria-label="Most in the game"><h3>Most in the game</h3><p class="section-sub">Share of ${leaders.draws.toLocaleString('en-US')} joint simulations of every player on both teams. Ties are dead heats, not wins. Ranked by lead chance, not by projected averages.</p><div class="leader-grid">${columns}</div><p class="prop-note">PASS on every most-in-game market: this card has no posted leader prices. A higher projected average is not a bet.</p></section>`;
 }
 
 /** Games that have not started and have at least one posted line: the only games a lean can be logged for. */
@@ -1953,17 +1999,19 @@ export function renderProjections(view: ProjectionView): string {
   const boardMeter = view.drawing && !view.athleteId && scope === 'game' ? inlineDrawingHtml(view.drawProgress) : '';
   const stat = marketLabel(view.form.market);
   const title = scope === 'game' && game ? `${stat} · ${sideAbbr(game.away)} @ ${sideAbbr(game.home)}` : `${stat} · every game`;
+  const asOf = view.card.generated_at;
   const injuries = scope === 'game'
-    ? (game && rate ? injuryReportHtml(rate, game) : '')
+    ? (game && rate ? injuryReportHtml(rate, game, false, asOf) : '')
     : boardGames(view.slate, view.now)
         .map((item) => {
           const card = view.card.games.find((rateGame) => rateGame.event_id === item.event_id);
-          return card ? injuryReportHtml(card, item, true) : '';
+          return card ? injuryReportHtml(card, item, true, asOf) : '';
         })
         .join('');
+  const leaders = scope === 'game' && game ? gameLeadersHtml(game, view.simulation?.leaders, view.drawing) : '';
   const board =
     scope === 'all' || (game && rate)
-      ? `${boardMeter}<section class="team-box projection-board" data-block="proj-board"><div class="board-head"><h2>${escapeHtml(title)}</h2></div><div data-projection-board>${boardInnerHtml({ ...view, scope })}</div>${injuries}</section>`
+      ? `${boardMeter}${leaders}<section class="team-box projection-board" data-block="proj-board"><div class="board-head"><h2>${escapeHtml(title)}</h2></div><div data-projection-board>${boardInnerHtml({ ...view, scope })}</div>${injuries}</section>`
       : '<p class="state">Pick a game above, or search a player. Historical trends load right away, and 10,000 simulations warm in the background.</p>';
   const aside = matchupAsideHtml(view, game, rate);
   const present = `${detail}${board}${aside}`;
@@ -1974,6 +2022,7 @@ export function renderProjections(view: ProjectionView): string {
       ['proj-history', 'History'],
       ['proj-onoff', 'Floor share'],
       ['proj-log', 'Game log'],
+      ['proj-leaders', 'Leaders'],
       ['proj-board', 'Board'],
       ['proj-matchup', 'Matchup'],
     ] as const

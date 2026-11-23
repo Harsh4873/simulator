@@ -72,7 +72,7 @@ test('a published game answers every over, under and projection question exactly
   }
   assert.ok(compared > 1000);
   // Everything the box score shows is carried as computed: scores, ranges, win shares, distributions, the shown draw.
-  for (const key of ['away', 'home', 'wins', 'forecast', 'distributions', 'index', 'budget', 'overtime', 'regulationAwayPts'] as const) {
+  for (const key of ['away', 'home', 'wins', 'forecast', 'distributions', 'index', 'budget', 'overtime', 'regulationAwayPts', 'leaders'] as const) {
     assert.deepEqual(JSON.parse(JSON.stringify(hydrated[key])), JSON.parse(JSON.stringify(live[key])), key);
   }
   assert.deepEqual([...hydrated.combinedTotals].sort((a, b) => a - b), [...live.combinedTotals].sort((a, b) => a - b));
