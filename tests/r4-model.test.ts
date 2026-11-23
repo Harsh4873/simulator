@@ -69,8 +69,11 @@ test('a healthy reserve can replace a foul-out without reviving an unavailable p
  const a=[48,48,48,48,48,0],h=[40,40,40,40,40,40];f.away.forEach((p,i)=>p.min=a[i]);f.away[0].fouls=5;f.away[5].injury_status='healthy';
  drawPossessions(f.away,f.home,f.roster,a,h,f.context,100,mulberry32(42));
  assert.equal(f.away[0].fouls,6);assert.ok(a[5]>0);assert.equal(a.reduce((x,y)=>x+y,0),240);
- const blocked=fixture();blocked.context=f.context;blocked.away.forEach((p,i)=>p.min=i<5?48:0);blocked.away[0].fouls=5;blocked.away[5].injury_status='out';blocked.away[5].minutes_weight=0;
- assert.throws(()=>drawPossessions(blocked.away,blocked.home,blocked.roster,[48,48,48,48,48,0],h,blocked.context,100,mulberry32(42)),/fewer than five/);
+  const blocked=fixture();blocked.context=f.context;blocked.away.forEach((p,i)=>p.min=i<5?48:0);blocked.away[0].fouls=5;blocked.away[5].injury_status='out';blocked.away[5].minutes_weight=0;
+  drawPossessions(blocked.away,blocked.home,blocked.roster,[48,48,48,48,48,0],h,blocked.context,100,mulberry32(42));
+  assert.equal(blocked.away[5].min,0);
+  assert.ok(blocked.away.some(p=>p.replacement_level&&p.min>0));
+  assert.equal(blocked.away.reduce((s,p)=>s+p.min,0),240);
 });
 test('fouls that cause substitutions retain their event and fractional exposure',async()=>{
  const {foulExposureRows}=await import('../src/game-state-model.ts');

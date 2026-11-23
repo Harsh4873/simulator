@@ -2466,6 +2466,74 @@ html[data-theme="light"] .choice-out input:checked + span { color: #ffffff; }
   color: var(--text);
 }
 
+.game-leaders {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.game-leaders h3 {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.leader-grid {
+  display: grid;
+  gap: 12px;
+}
+
+@media (min-width: 720px) {
+  .leader-grid {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+.leader-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.leader-row {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-2);
+}
+
+.leader-row[data-leader-top] {
+  border-color: var(--border-strong);
+}
+
+.leader-who {
+  display: grid;
+  gap: 2px;
+}
+
+.leader-meta,
+.leader-split {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.leader-chances {
+  display: grid;
+  gap: 1px;
+}
+
+.leader-any {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
 .hit-window {
   padding: 10px 8px;
   border-radius: 12px;
