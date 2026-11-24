@@ -1,240 +1,9 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-24T02:30:48Z",
-  "date": "2026-11-23",
+  "generated_at": "2026-11-24T06:05:44Z",
+  "date": "2026-11-24",
   "timezone": "America/Chicago",
   "games": [
-    {
-      "event_id": "401910029",
-      "date": "2026-11-22",
-      "start_time": "2026-11-22T20:30:00Z",
-      "season": 2027,
-      "season_type": "regular",
-      "status_state": "post",
-      "completed": true,
-      "away": {
-        "team_id": "8",
-        "name": "Detroit Pistons",
-        "abbreviation": "DET",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/det.png",
-        "color": "#1d428a",
-        "alternate_color": "#c8102e"
-      },
-      "home": {
-        "team_id": "1",
-        "name": "Atlanta Hawks",
-        "abbreviation": "ATL",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/atl.png",
-        "color": "#c8102e",
-        "alternate_color": "#fdb927"
-      },
-      "neutral_site": false,
-      "venue": {
-        "id": "1827",
-        "latitude": null,
-        "longitude": null,
-        "timezone": null
-      },
-      "spread_caption": null
-    },
-    {
-      "event_id": "401910030",
-      "date": "2026-11-22",
-      "start_time": "2026-11-22T23:00:00Z",
-      "season": 2027,
-      "season_type": "regular",
-      "status_state": "post",
-      "completed": true,
-      "away": {
-        "team_id": "25",
-        "name": "Oklahoma City Thunder",
-        "abbreviation": "OKC",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/okc.png",
-        "color": "#007ac1",
-        "alternate_color": "#ef3b24"
-      },
-      "home": {
-        "team_id": "14",
-        "name": "Miami Heat",
-        "abbreviation": "MIA",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/mia.png",
-        "color": "#98002e",
-        "alternate_color": "#000000"
-      },
-      "neutral_site": false,
-      "venue": {
-        "id": "3438",
-        "latitude": null,
-        "longitude": null,
-        "timezone": null
-      },
-      "spread_caption": null
-    },
-    {
-      "event_id": "401910031",
-      "date": "2026-11-22",
-      "start_time": "2026-11-23T00:00:00Z",
-      "season": 2027,
-      "season_type": "regular",
-      "status_state": "post",
-      "completed": true,
-      "away": {
-        "team_id": "19",
-        "name": "Orlando Magic",
-        "abbreviation": "ORL",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/orl.png",
-        "color": "#0150b5",
-        "alternate_color": "#9ca0a3"
-      },
-      "home": {
-        "team_id": "27",
-        "name": "Washington Wizards",
-        "abbreviation": "WSH",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/wsh.png",
-        "color": "#e31837",
-        "alternate_color": "#002b5c"
-      },
-      "neutral_site": false,
-      "venue": {
-        "id": "1823",
-        "latitude": null,
-        "longitude": null,
-        "timezone": null
-      },
-      "spread_caption": null
-    },
-    {
-      "event_id": "401910032",
-      "date": "2026-11-22",
-      "start_time": "2026-11-23T00:00:00Z",
-      "season": 2027,
-      "season_type": "regular",
-      "status_state": "post",
-      "completed": true,
-      "away": {
-        "team_id": "7",
-        "name": "Denver Nuggets",
-        "abbreviation": "DEN",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/den.png",
-        "color": "#0e2240",
-        "alternate_color": "#fec524"
-      },
-      "home": {
-        "team_id": "4",
-        "name": "Chicago Bulls",
-        "abbreviation": "CHI",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/chi.png",
-        "color": "#ce1141",
-        "alternate_color": "#000000"
-      },
-      "neutral_site": false,
-      "venue": {
-        "id": "1847",
-        "latitude": null,
-        "longitude": null,
-        "timezone": null
-      },
-      "spread_caption": null
-    },
-    {
-      "event_id": "401910033",
-      "date": "2026-11-22",
-      "start_time": "2026-11-23T00:00:00Z",
-      "season": 2027,
-      "season_type": "regular",
-      "status_state": "post",
-      "completed": true,
-      "away": {
-        "team_id": "6",
-        "name": "Dallas Mavericks",
-        "abbreviation": "DAL",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/dal.png",
-        "color": "#0064b1",
-        "alternate_color": "#bbc4ca"
-      },
-      "home": {
-        "team_id": "26",
-        "name": "Utah Jazz",
-        "abbreviation": "UTAH",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/utah.png",
-        "color": "#4e008e",
-        "alternate_color": "#79a3dc"
-      },
-      "neutral_site": false,
-      "venue": {
-        "id": "3093",
-        "latitude": null,
-        "longitude": null,
-        "timezone": null
-      },
-      "spread_caption": null
-    },
-    {
-      "event_id": "401910034",
-      "date": "2026-11-22",
-      "start_time": "2026-11-23T01:00:00Z",
-      "season": 2027,
-      "season_type": "regular",
-      "status_state": "post",
-      "completed": true,
-      "away": {
-        "team_id": "11",
-        "name": "Indiana Pacers",
-        "abbreviation": "IND",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/ind.png",
-        "color": "#0c2340",
-        "alternate_color": "#ffd520"
-      },
-      "home": {
-        "team_id": "18",
-        "name": "New York Knicks",
-        "abbreviation": "NY",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/ny.png",
-        "color": "#1d428a",
-        "alternate_color": "#f58426"
-      },
-      "neutral_site": false,
-      "venue": {
-        "id": "1830",
-        "latitude": null,
-        "longitude": null,
-        "timezone": null
-      },
-      "spread_caption": null
-    },
-    {
-      "event_id": "401910035",
-      "date": "2026-11-22",
-      "start_time": "2026-11-23T01:30:00Z",
-      "season": 2027,
-      "season_type": "regular",
-      "status_state": "post",
-      "completed": true,
-      "away": {
-        "team_id": "2",
-        "name": "Boston Celtics",
-        "abbreviation": "BOS",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bos.png",
-        "color": "#008348",
-        "alternate_color": "#ffffff"
-      },
-      "home": {
-        "team_id": "9",
-        "name": "Golden State Warriors",
-        "abbreviation": "GS",
-        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/gs.png",
-        "color": "#fdb927",
-        "alternate_color": "#1d428a"
-      },
-      "neutral_site": false,
-      "venue": {
-        "id": "6270",
-        "latitude": null,
-        "longitude": null,
-        "timezone": null
-      },
-      "spread_caption": null
-    },
     {
       "event_id": "401910036",
       "date": "2026-11-23",
@@ -307,8 +76,8 @@
       "start_time": "2026-11-24T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "25",
         "name": "Oklahoma City Thunder",
@@ -340,8 +109,8 @@
       "start_time": "2026-11-24T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "15",
         "name": "Milwaukee Bucks",
@@ -373,8 +142,8 @@
       "start_time": "2026-11-24T00:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "17",
         "name": "Brooklyn Nets",
@@ -406,8 +175,8 @@
       "start_time": "2026-11-24T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "5",
         "name": "Cleveland Cavaliers",
@@ -439,8 +208,8 @@
       "start_time": "2026-11-24T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "21",
         "name": "Phoenix Suns",
@@ -472,8 +241,8 @@
       "start_time": "2026-11-24T01:30:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "12",
         "name": "LA Clippers",
@@ -505,8 +274,8 @@
       "start_time": "2026-11-24T03:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "26",
         "name": "Utah Jazz",
@@ -538,8 +307,8 @@
       "start_time": "2026-11-24T03:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "24",
         "name": "San Antonio Spurs",
@@ -559,6 +328,105 @@
       "neutral_site": false,
       "venue": {
         "id": "5310",
+        "latitude": null,
+        "longitude": null,
+        "timezone": null
+      },
+      "spread_caption": null
+    },
+    {
+      "event_id": "401909314",
+      "date": "2026-11-24",
+      "start_time": "2026-11-25T00:00:00Z",
+      "season": 2027,
+      "season_type": "regular",
+      "status_state": "pre",
+      "completed": false,
+      "away": {
+        "team_id": "8",
+        "name": "Detroit Pistons",
+        "abbreviation": "DET",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/det.png",
+        "color": "#1d428a",
+        "alternate_color": "#c8102e"
+      },
+      "home": {
+        "team_id": "19",
+        "name": "Orlando Magic",
+        "abbreviation": "ORL",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/orl.png",
+        "color": "#0150b5",
+        "alternate_color": "#9ca0a3"
+      },
+      "neutral_site": false,
+      "venue": {
+        "id": "3432",
+        "latitude": null,
+        "longitude": null,
+        "timezone": null
+      },
+      "spread_caption": null
+    },
+    {
+      "event_id": "401909315",
+      "date": "2026-11-24",
+      "start_time": "2026-11-25T01:00:00Z",
+      "season": 2027,
+      "season_type": "regular",
+      "status_state": "pre",
+      "completed": false,
+      "away": {
+        "team_id": "2",
+        "name": "Boston Celtics",
+        "abbreviation": "BOS",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/bos.png",
+        "color": "#008348",
+        "alternate_color": "#ffffff"
+      },
+      "home": {
+        "team_id": "27",
+        "name": "Washington Wizards",
+        "abbreviation": "WSH",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/wsh.png",
+        "color": "#e31837",
+        "alternate_color": "#002b5c"
+      },
+      "neutral_site": false,
+      "venue": {
+        "id": "1823",
+        "latitude": null,
+        "longitude": null,
+        "timezone": null
+      },
+      "spread_caption": null
+    },
+    {
+      "event_id": "401909316",
+      "date": "2026-11-24",
+      "start_time": "2026-11-25T03:00:00Z",
+      "season": 2027,
+      "season_type": "regular",
+      "status_state": "pre",
+      "completed": false,
+      "away": {
+        "team_id": "6",
+        "name": "Dallas Mavericks",
+        "abbreviation": "DAL",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/dal.png",
+        "color": "#0064b1",
+        "alternate_color": "#bbc4ca"
+      },
+      "home": {
+        "team_id": "7",
+        "name": "Denver Nuggets",
+        "abbreviation": "DEN",
+        "logo_url": "https://a.espncdn.com/i/teamlogos/nba/500/scoreboard/den.png",
+        "color": "#0e2240",
+        "alternate_color": "#fec524"
+      },
+      "neutral_site": false,
+      "venue": {
+        "id": "892",
         "latitude": null,
         "longitude": null,
         "timezone": null
