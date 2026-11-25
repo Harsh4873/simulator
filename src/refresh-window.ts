@@ -2,12 +2,12 @@ import {chicagoDate} from './date.ts';
 import type {Slate} from './types.ts';
 
 export const PRE_TIP_WINDOW_MS=4*3600000;
-/** Inside the pre-tip window the browser accepts a source check for 90 minutes; refreshing every 45 leaves room for one slow or failed run. */
-export const PRE_TIP_INTERVAL_MS=45*60000;
+/** Inside the pre-tip window the browser accepts a source check for 90 minutes; refreshing every 30 leaves room for two slow or failed runs. */
+export const PRE_TIP_INTERVAL_MS=30*60000;
 /** One refresh lands about half an hour before each tip, when final injury designations and starters post. */
 export const FINAL_CHECK_LEAD_MS=30*60000;
-/** Outside the window: under the freshness monitor's four-hour deadline and the browser's six-hour expiry. */
-export const OFF_WINDOW_INTERVAL_MS=3.5*3600000;
+/** Outside the window: a two-hour heartbeat, under the freshness monitor's three-hour deadline and the browser's six-hour expiry. */
+export const OFF_WINDOW_INTERVAL_MS=2*3600000;
 export const ROLLOVER_DELAY_MS=5*60000;
 export const MIN_REFRESH_GAP_MS=10*60000;
 

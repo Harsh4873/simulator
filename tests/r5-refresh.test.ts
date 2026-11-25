@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync,existsSync} from 'node:fs';
 import {nextRefreshAt,nextChicagoMidnight,shouldRefresh,PRE_TIP_INTERVAL_MS,OFF_WINDOW_INTERVAL_MS,MIN_REFRESH_GAP_MS} from '../src/refresh-window.ts';
 import {scheduleNextRefresh} from '../scripts/schedule-refresh.ts';
 import {deployAndWait} from '../scripts/deploy-and-wait.mjs';
@@ -12,17 +12,17 @@ function slate(date:string,tips:string[],state='pre'):Slate{
 }
 const gap=(s:Slate,now:string)=>nextRefreshAt(s,new Date(now)).getTime()-Date.parse(now);
 
-test('inside the pre-tip window refreshes come every 45 minutes, plus one about 30 minutes before each tip',()=>{
+test('inside the pre-tip window refreshes come every 30 minutes, plus one about 30 minutes before each tip',()=>{
  const s=slate('2026-11-06',['2026-11-07T00:00:00Z','2026-11-07T03:00:00Z']);
  assert.equal(gap(s,'2026-11-06T22:00:00Z'),PRE_TIP_INTERVAL_MS);
  assert.equal(gap(s,'2026-11-06T23:10:00Z'),20*MIN);
  assert.equal(gap(s,'2026-11-06T23:25:00Z'),MIN_REFRESH_GAP_MS);
- // After the early tips, the 03:00 game still keeps the 45-minute pace and its own final check.
+ // After the early tips, the 03:00 game still keeps the 30-minute pace and its own final check.
  assert.equal(gap(s,'2026-11-07T00:10:00Z'),PRE_TIP_INTERVAL_MS);
  assert.equal(gap(s,'2026-11-07T02:00:00Z'),30*MIN);
 });
 
-test('outside the window the next run is the window start, a 3.5-hour heartbeat, or the Chicago rollover',()=>{
+test('outside the window the next run is the window start, a two-hour heartbeat, or the Chicago rollover',()=>{
  const evening=slate('2026-11-06',['2026-11-07T00:00:00Z']);
  assert.equal(gap(evening,'2026-11-06T18:30:00Z'),90*MIN);
  assert.equal(gap(evening,'2026-11-06T12:00:00Z'),OFF_WINDOW_INTERVAL_MS);
@@ -54,10 +54,10 @@ test('each refresh arms one timer for the computed time, and an unreadable slate
  const api=async(path:string,body?:unknown)=>{calls.push({path,body});return null;};
  const s=slate('2026-11-06',['2026-11-07T00:00:00Z']);
  const result=await scheduleNextRefresh({api,slate:s,now:new Date('2026-11-06T22:00:00Z')});
- assert.equal(result.at,'2026-11-06T22:45:00Z');
- assert.deepEqual(calls[0],{path:'actions/workflows/refresh-timer.yml/dispatches',body:{ref:'main',inputs:{at:'2026-11-06T22:45:00Z'}}});
+ assert.equal(result.at,'2026-11-06T22:30:00Z');
+ assert.deepEqual(calls[0],{path:'actions/workflows/refresh-timer.yml/dispatches',body:{ref:'main',inputs:{at:'2026-11-06T22:30:00Z'}}});
  const fallback=await scheduleNextRefresh({api,slate:null,now:new Date('2026-11-06T22:00:00Z')});
- assert.equal(fallback.at,'2026-11-06T22:45:00Z');assert.match(fallback.reason,/unreadable/);
+ assert.equal(fallback.at,'2026-11-06T22:30:00Z');assert.match(fallback.reason,/unreadable/);
 });
 
 test('a failed Pages deployment is retried once under a new correlation id; cancellations are not',async()=>{
@@ -91,10 +91,30 @@ test('the refresh job re-arms the timer even after a failure, and the timer only
  assert.match(timer,/19200/);
  const window=readFileSync('scripts/refresh-window.ts','utf8');
  assert.match(window,/REFRESH_TRIGGER==='timer'/);
- const recover=readFileSync('.github/workflows/recover-refresh-timer.yml','utf8');
- assert.match(recover,/workflows: \["Wait for the next simulator refresh"\]/);
- assert.match(recover,/github\.event\.workflow_run\.conclusion == 'failure'/);
- assert.match(recover,/head_branch == 'main'/);
- assert.match(recover,/gh workflow run refresh-rate-card.yml --repo "\$REPO" --ref main -f trigger=timer/);
- assert.match(recover,/A refresh is already running/);
+ assert.match(timer,/for delay in 0 15 30 60 120 240/,'the timer retries a failed dispatch');
+ assert.ok(!existsSync('.github/workflows/recover-refresh-timer.yml'),'workflow_run never fires for token-dispatched timers; the freshness check re-arms instead');
+ const check=readFileSync('.github/workflows/check-freshness.yml','utf8');
+ assert.match(check,/cron: "47 \* \* \* \*"/);
+});
+
+test('a failed timer dispatch is retried, and gives up only after the last attempt',async()=>{
+ let tries=0;const waits:number[]=[];
+ const flaky=async()=>{if(++tries<3)throw new Error('GitHub API returned 500');return null;};
+ const s=slate('2026-11-06',['2026-11-07T00:00:00Z']);
+ await scheduleNextRefresh({api:flaky,slate:s,now:new Date('2026-11-06T22:00:00Z'),sleep:async(ms:number)=>{waits.push(ms);}});
+ assert.equal(tries,3);assert.deepEqual(waits,[15000,30000]);
+ const down=async()=>{throw new Error('GitHub API returned 500');};
+ await assert.rejects(scheduleNextRefresh({api:down,slate:s,sleep:async()=>{},attempts:2}),/500/);
+});
+
+test('the freshness check re-arms a dropped timer once, and leaves an armed one alone',async()=>{
+ const {monitor}=await import('../scripts/check-freshness.mjs');
+ const now=Date.parse('2026-11-25T18:40:00Z');
+ const recent=[{created_at:'2026-11-25T17:00:00Z',run_started_at:'2026-11-25T17:00:00Z',status:'completed',conclusion:'success'}];
+ const run=async(timers:unknown[])=>{const posts:unknown[]=[];const api=async(path:string,body?:unknown)=>{if(body){posts.push(body);return null;}return path.includes('refresh-timer')?{workflow_runs:timers}:{workflow_runs:recent};};return {result:await monitor(api,now),posts};};
+ const dropped=await run([{status:'completed',conclusion:'failure',created_at:'2026-11-25T12:29:00Z'}]);
+ assert.equal(dropped.result.issue,null);assert.equal(dropped.result.recovery,true);
+ assert.deepEqual(dropped.posts,[{ref:'main',inputs:{trigger:'timer'}}]);
+ const armed=await run([{status:'in_progress',created_at:'2026-11-25T17:05:00Z'}]);
+ assert.equal(armed.result.recovery,false);assert.deepEqual(armed.posts,[]);
 });

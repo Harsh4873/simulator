@@ -44,4 +44,12 @@ jobs:
             echo "Waiting ${wait}s until $AT"
             sleep "$wait"
           fi
-          gh workflow run refresh-rate-card.yml --repo "$REPO" --ref main -f trigger=timer
+          # One HTTP 500 here used to end the cadence until a dropped cron happened to fire. Retry the dispatch.
+          for delay in 0 15 30 60 120 240; do
+            sleep "$delay"
+            if gh workflow run refresh-rate-card.yml --repo "$REPO" --ref main -f trigger=timer; then
+              exit 0
+            fi
+          done
+          echo "::error::Could not start the refresh; the hourly freshness check re-arms it"
+          exit 1

@@ -1,21 +1,25 @@
 name: Check simulator freshness
 on:
   schedule:
-    - cron: "47 12,16,20,23 * * *"
-    - cron: "47 1,3 * * *"
+    # Hourly. GitHub drops many scheduled slots, so more slots mean the watchdog still runs every few hours at worst.
+    - cron: "47 * * * *"
   workflow_dispatch:
 permissions:
   contents: read
   actions: write
+concurrency:
+  group: simulator-freshness-check
+  cancel-in-progress: false
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22.21.1"
-      - name: Detect stale data and request recovery
+      - name: Detect stale data or a dropped refresh timer and request recovery
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/check-freshness.mjs

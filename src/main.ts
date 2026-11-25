@@ -2176,5 +2176,24 @@ function recheckFreshness(): void {
   if (slate && card && freshnessIssue(slate, card, new Date(), health)) showSlate();
   else paintDailyPanel();
 }
-document.addEventListener('visibilitychange',()=>{if(!document.hidden)recheckFreshness();});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){recheckFreshness();void checkForNewGeneration();}});
 setInterval(recheckFreshness,60000);
+
+// An open page otherwise keeps the card it loaded, however many refreshes land after it. Look for a newer
+// published generation and pick it up once the viewer is not mid-interaction, so a reload never interrupts a click.
+const GENERATION_POLL_MS=5*60000;
+const IDLE_BEFORE_RELOAD_MS=2*60000;
+let lastInteraction=Date.now();
+for(const type of ['pointerdown','keydown','input','scroll'])window.addEventListener(type,()=>{lastInteraction=Date.now();},{passive:true,capture:true});
+async function checkForNewGeneration(): Promise<void> {
+  if (!card?.generated_at || currentSport() !== 'nba') return;
+  try {
+    const text = await getData('manifest.json');
+    const published = text ? (JSON.parse(text) as { generated_at?: string }).generated_at : null;
+    if (!published || Date.parse(published) <= Date.parse(card.generated_at)) return;
+    if (document.hidden || Date.now() - lastInteraction >= IDLE_BEFORE_RELOAD_MS) window.location.reload();
+  } catch {
+    // A missed poll just waits for the next one.
+  }
+}
+setInterval(()=>{void checkForNewGeneration();},GENERATION_POLL_MS);
