@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-25T20:29:51Z",
+  "generated_at": "2026-11-25T20:40:39Z",
   "date": "2026-11-25",
   "iterations": 10000,
   "model_version": "possessions-v9",
@@ -10,9 +10,9 @@
     "residual_covariance",
     "travel"
   ],
-  "source_cutoff": "2026-11-25T20:29:51Z",
-  "generator_sha": "747697dc7b65cbe99fd3219412840a690cfec28a",
-  "input_hash": "726f6acbfea5b4de36cb9f9264eb1bbd5bf07070c932794c0d6d2dcbb473b5b7",
+  "source_cutoff": "2026-11-25T20:40:39Z",
+  "generator_sha": "8125cbca631b92989b220424ba6bb192de8d4add",
+  "input_hash": "a59bc9c116c1f30fe7dfd374c2aa9ce5a481de934fc807ebe3588eb1f4e4138f",
   "model_hash": "c32125e3961ddd65fea4230d3c95c3feba3462d7366ca5dd926856f4e584aa36",
   "columns": [
     "min",
@@ -227,7 +227,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -425,7 +425,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -623,7 +623,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -821,7 +821,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -1019,7 +1019,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -1217,7 +1217,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -1415,7 +1415,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -1613,7 +1613,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -1811,7 +1811,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -2009,7 +2009,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -2207,7 +2207,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -2405,7 +2405,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -2603,7 +2603,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -2801,7 +2801,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -2999,7 +2999,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -3197,7 +3197,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -3395,7 +3395,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -3593,7 +3593,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -3791,7 +3791,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -3989,7 +3989,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -4187,7 +4187,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -4385,7 +4385,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -4583,7 +4583,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -4781,7 +4781,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -4979,7 +4979,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -5177,7 +5177,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -5375,7 +5375,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -5573,7 +5573,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -5771,7 +5771,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -5969,7 +5969,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -6167,7 +6167,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -6365,7 +6365,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -6563,7 +6563,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -6761,7 +6761,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -6959,7 +6959,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -9122,7 +9122,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -9320,7 +9320,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -9518,7 +9518,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -9716,7 +9716,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -9914,7 +9914,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -10112,7 +10112,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -10310,7 +10310,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -10508,7 +10508,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -10706,7 +10706,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -10904,7 +10904,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -11102,7 +11102,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -11300,7 +11300,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -11498,7 +11498,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -11696,7 +11696,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -11894,7 +11894,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -12092,7 +12092,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -12290,7 +12290,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -12488,7 +12488,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -12686,7 +12686,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -12884,7 +12884,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -13082,7 +13082,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -13280,7 +13280,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -13478,7 +13478,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -13676,7 +13676,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -13874,7 +13874,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -14072,7 +14072,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -14270,7 +14270,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -14468,7 +14468,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -14666,7 +14666,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -14864,7 +14864,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -15062,7 +15062,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -15260,7 +15260,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -15458,7 +15458,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -15656,7 +15656,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -15854,7 +15854,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -18017,7 +18017,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -18215,7 +18215,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -18413,7 +18413,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -18611,7 +18611,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -18809,7 +18809,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -19007,7 +19007,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -19205,7 +19205,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -19403,7 +19403,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -19601,7 +19601,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -19799,7 +19799,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -19997,7 +19997,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -20195,7 +20195,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -20393,7 +20393,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -20591,7 +20591,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -20789,7 +20789,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -20987,7 +20987,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -21185,7 +21185,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -21383,7 +21383,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -21581,7 +21581,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -21779,7 +21779,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -21977,7 +21977,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -22175,7 +22175,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -22373,7 +22373,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -22571,7 +22571,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -22769,7 +22769,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -22967,7 +22967,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -23165,7 +23165,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -23363,7 +23363,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -23561,7 +23561,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -23759,7 +23759,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -23957,7 +23957,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -24155,7 +24155,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -24353,7 +24353,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -24551,7 +24551,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -24749,7 +24749,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -26912,7 +26912,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -26935,8 +26935,8 @@
             },
             "older_history": "observed"
           },
-          "injury_reported_at": "2026-11-24T22:07Z",
-          "injury_note": "groin — Antetokounmpo (groin) is questionable for Wednesday's game in Philadelphia.",
+          "injury_reported_at": "2026-11-25T20:20Z",
+          "injury_note": "groin — Antetokounmpo (groin) has been upgraded to probable for Wednesday's game against the 76ers.",
           "minutes_restriction": null,
           "athlete_id": "3032977",
           "name": "Giannis Antetokounmpo",
@@ -27110,7 +27110,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -27308,7 +27308,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -27506,7 +27506,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -27704,7 +27704,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -27902,7 +27902,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -28100,7 +28100,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -28298,7 +28298,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -28496,7 +28496,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -28694,7 +28694,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -28892,7 +28892,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -29090,7 +29090,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -29288,7 +29288,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -29486,7 +29486,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -29684,7 +29684,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -29882,7 +29882,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -30080,7 +30080,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -30278,7 +30278,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -30476,7 +30476,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -30674,7 +30674,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -30872,7 +30872,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -31070,7 +31070,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -31268,7 +31268,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -31466,7 +31466,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -31664,7 +31664,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -31862,7 +31862,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -32060,7 +32060,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -32258,7 +32258,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -32456,7 +32456,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -32654,7 +32654,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -32852,7 +32852,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -33050,7 +33050,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -33248,7 +33248,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -33446,7 +33446,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -35609,7 +35609,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -35807,7 +35807,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -36005,7 +36005,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -36203,7 +36203,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -36401,7 +36401,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -36599,7 +36599,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -36797,7 +36797,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -36995,7 +36995,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -37193,7 +37193,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -37391,7 +37391,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -37589,7 +37589,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -37787,7 +37787,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -37985,7 +37985,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -38183,7 +38183,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -38381,7 +38381,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -38579,7 +38579,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -38777,7 +38777,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -38975,7 +38975,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -39173,7 +39173,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -39371,7 +39371,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -39569,7 +39569,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -39767,7 +39767,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -39965,7 +39965,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -40163,7 +40163,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -40361,7 +40361,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -40559,7 +40559,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -40757,7 +40757,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -40955,7 +40955,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -41153,7 +41153,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -41351,7 +41351,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -41549,7 +41549,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -41747,7 +41747,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -41945,7 +41945,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -42143,7 +42143,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -42341,7 +42341,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -42539,7 +42539,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -44702,7 +44702,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -44900,7 +44900,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -45098,7 +45098,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -45296,7 +45296,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -45494,7 +45494,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -45692,7 +45692,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -45890,7 +45890,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -46088,7 +46088,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -46286,7 +46286,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -46484,7 +46484,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -46682,7 +46682,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -46880,7 +46880,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -47077,7 +47077,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -47275,7 +47275,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -47473,7 +47473,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -47671,7 +47671,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -47869,7 +47869,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -48067,7 +48067,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -48265,7 +48265,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -48463,7 +48463,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -48661,7 +48661,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -48859,7 +48859,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -49057,7 +49057,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -49255,7 +49255,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -49453,7 +49453,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -49651,7 +49651,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -49849,7 +49849,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -50047,7 +50047,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -50245,7 +50245,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -50443,7 +50443,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -50641,7 +50641,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -50839,7 +50839,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -51037,7 +51037,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -51235,7 +51235,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -51433,7 +51433,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -53596,7 +53596,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -53794,7 +53794,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -53992,7 +53992,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -54190,7 +54190,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -54388,7 +54388,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -54586,7 +54586,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -54784,7 +54784,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -54982,7 +54982,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -55180,7 +55180,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -55378,7 +55378,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -55576,7 +55576,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -55774,7 +55774,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -55972,7 +55972,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -56170,7 +56170,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -56368,7 +56368,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -56566,7 +56566,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -56764,7 +56764,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -56962,7 +56962,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -57160,7 +57160,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -57358,7 +57358,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -57556,7 +57556,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -57754,7 +57754,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -57952,7 +57952,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -58150,7 +58150,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -58348,7 +58348,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -58546,7 +58546,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -58744,7 +58744,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -58942,7 +58942,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -59140,7 +59140,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -59338,7 +59338,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -59536,7 +59536,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -59734,7 +59734,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -59932,7 +59932,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -60130,7 +60130,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -60328,7 +60328,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -62491,7 +62491,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -62689,7 +62689,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -62887,7 +62887,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -63085,7 +63085,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -63283,7 +63283,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -63481,7 +63481,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -63679,7 +63679,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -63877,7 +63877,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -64075,7 +64075,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -64273,7 +64273,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -64471,7 +64471,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -64669,7 +64669,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -64867,7 +64867,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -65065,7 +65065,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -65263,7 +65263,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -65461,7 +65461,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -65659,7 +65659,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -65857,7 +65857,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -66055,7 +66055,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -66253,7 +66253,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -66451,7 +66451,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -66649,7 +66649,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -66847,7 +66847,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -67045,7 +67045,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -67243,7 +67243,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -67441,7 +67441,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -67639,7 +67639,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -67837,7 +67837,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -68035,7 +68035,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -68233,7 +68233,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -68431,7 +68431,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -68629,7 +68629,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -68827,7 +68827,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -69025,7 +69025,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -69223,7 +69223,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -69421,7 +69421,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -69619,7 +69619,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -71782,7 +71782,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -71980,7 +71980,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -72178,7 +72178,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -72376,7 +72376,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -72574,7 +72574,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -72772,7 +72772,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -72970,7 +72970,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -73168,7 +73168,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -73366,7 +73366,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -73564,7 +73564,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -73762,7 +73762,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -73960,7 +73960,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -74158,7 +74158,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -74356,7 +74356,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -74554,7 +74554,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -74752,7 +74752,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -74950,7 +74950,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -75148,7 +75148,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -75346,7 +75346,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -75544,7 +75544,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -75742,7 +75742,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -75940,7 +75940,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -76138,7 +76138,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -76336,7 +76336,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -76534,7 +76534,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -76732,7 +76732,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -76930,7 +76930,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -77128,7 +77128,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -77326,7 +77326,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -77524,7 +77524,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -77722,7 +77722,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -77920,7 +77920,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -78118,7 +78118,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -78316,7 +78316,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -78514,7 +78514,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -78712,7 +78712,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -80875,7 +80875,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -81073,7 +81073,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -81271,7 +81271,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -81469,7 +81469,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -81667,7 +81667,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -81865,7 +81865,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -82063,7 +82063,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -82261,7 +82261,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -82459,7 +82459,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -82657,7 +82657,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -82855,7 +82855,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -83053,7 +83053,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -83251,7 +83251,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -83449,7 +83449,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -83647,7 +83647,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -83845,7 +83845,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -84043,7 +84043,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -84241,7 +84241,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -84439,7 +84439,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -84637,7 +84637,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -84835,7 +84835,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -85033,7 +85033,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -85231,7 +85231,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -85429,7 +85429,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -85627,7 +85627,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -85825,7 +85825,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -86023,7 +86023,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -86221,7 +86221,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -86419,7 +86419,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -86617,7 +86617,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -86815,7 +86815,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -87013,7 +87013,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -87211,7 +87211,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -87409,7 +87409,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -89572,7 +89572,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -89770,7 +89770,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -89968,7 +89968,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -90166,7 +90166,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -90364,7 +90364,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -90562,7 +90562,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -90760,7 +90760,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -90958,7 +90958,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -91156,7 +91156,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -91354,7 +91354,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -91552,7 +91552,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -91750,7 +91750,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -91948,7 +91948,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -92146,7 +92146,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -92344,7 +92344,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -92542,7 +92542,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -92740,7 +92740,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -92938,7 +92938,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -93136,7 +93136,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -93334,7 +93334,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -93532,7 +93532,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -93730,7 +93730,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -93928,7 +93928,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -94126,7 +94126,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -94324,7 +94324,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -94522,7 +94522,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -94720,7 +94720,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -94918,7 +94918,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -95116,7 +95116,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -95314,7 +95314,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -95512,7 +95512,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -95710,7 +95710,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -95908,7 +95908,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -96106,7 +96106,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -96304,7 +96304,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -96502,7 +96502,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
@@ -98665,7 +98665,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -98863,7 +98863,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -99061,7 +99061,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -99259,7 +99259,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -99457,7 +99457,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -99655,7 +99655,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -99853,7 +99853,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -100051,7 +100051,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -100249,7 +100249,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -100447,7 +100447,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -100645,7 +100645,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -100843,7 +100843,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -101041,7 +101041,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -101239,7 +101239,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -101437,7 +101437,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -101635,7 +101635,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -101833,7 +101833,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -102031,7 +102031,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -102229,7 +102229,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -102427,7 +102427,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -102625,7 +102625,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -102823,7 +102823,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -103021,7 +103021,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -103219,7 +103219,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -103417,7 +103417,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -103615,7 +103615,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -103813,7 +103813,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -104011,7 +104011,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -104209,7 +104209,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -104407,7 +104407,7 @@
             "historical_roster_coverage": "unknown"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -104605,7 +104605,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -104803,7 +104803,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -105001,7 +105001,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         },
         {
@@ -105199,7 +105199,7 @@
             "historical_roster_coverage": "complete"
           },
           "model_version": "possessions-v9",
-          "as_of": "2026-11-25T20:29:51Z",
+          "as_of": "2026-11-25T20:40:39Z",
           "calibration": null
         }
       ],
