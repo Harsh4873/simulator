@@ -316,15 +316,18 @@ export function decideVerdict(
   context: PropContext,
   market: PropMarket,
   policy: PropPolicy = PROP_POLICY,
-  /** A published lean already supported by its live results can remain a LEAN until full release. */
-  listedLean = false,
+  /**
+   * Grade the lean on its price and data before the release calibration certifies its market: it can be a LEAN, never a
+   * BET. The daily picks use this and print what each grade rests on.
+   */
+  beforeRelease = false,
 ): VerdictResult | null {
   if (quote.breakEven === null || quote.expectedReturn === null) return null;
   if(context.evidence){
     const keys=market==='pra'?['minutes','shooting','reb','ast']:market==='pa'?['minutes','shooting','ast']:market==='pr'?['minutes','shooting','reb']:market==='ra'?['minutes','reb','ast']:market==='dd'||market==='td'?['minutes','shooting','reb','ast','stl','blk']:market==='reb'?['minutes','reb']:market==='ast'?['minutes','ast']:market==='stl'?['minutes','stl']:market==='blk'?['minutes','blk']:['minutes','shooting'];
     if(keys.some(k=>context.evidence![k as 'minutes'|'shooting'|'reb'|'ast'|'stl'|'blk'].state!=='observed')||context.evidence.role_changed)return pass('Insufficient, stale, or changed-role evidence for this market. Price cannot repair the data.');
     const issue=calibrationIssue(context.calibration,context.modelVersion??'',market,context.cutoff??'');
-    if(issue && !listedLean)return pass(issue+'. The simulation is exploratory.');
+    if(issue && !beforeRelease)return pass(issue+'. The simulation is exploratory.');
   }
   const decided = quote.grade.wins + quote.grade.losses;
   const total = decided + quote.grade.pushes + quote.grade.voids;

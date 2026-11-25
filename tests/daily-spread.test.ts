@@ -26,7 +26,9 @@ test('spread ranking compares the actual price, counts pushes as refunds, and us
   assert.ok(winner);
   assert.equal(winner.book, 'Book B');
   assert.equal(winner.title, game.home.name + ' -3');
-  assert.equal(winner.grade, 'LEAN');
+  // No graded record and no released margins: the best spread is an unproven edge, never a lean.
+  assert.equal(winner.grade, 'EDGE');
+  assert.match(winner.evidence ?? '', /^Not a qualified pick: spread leans are not graded against results yet/);
   assert.equal(winner.modelProbability, 550 / 950);
   assert.ok(Math.abs(winner.expectedReturn - 0.205) < 1e-10);
   assert.equal(winner.breakEven, 100 / 210);
@@ -70,7 +72,7 @@ test('the board drops tipped games and expired prices and rejects a different sl
   assert.equal(at('2026-11-02T23:00:01Z'), null);
 });
 
-test('an empty category says why: no current price, no live-graded support, or no offer clearing the checks', () => {
+test('an empty category says why: no current price, a newer prop build, or no offer clearing the checks', () => {
   const record = buildRecord([]);
   const lines = { [game.event_id]: [['1', 'pts', 15.5, -110, -110, quote.captured_at]] } as DailyPicks['lines'];
   const priced: DailyPicks = { built_at: 'built', lines, record };
@@ -82,13 +84,11 @@ test('an empty category says why: no current price, no live-graded support, or n
   assert.equal(state(null).propNote, 'No current player prop price for today’s remaining games.');
   assert.equal(state({ ...priced, lines: {} }).propNote, 'No current player prop price for today’s remaining games.');
   assert.equal(state({ ...priced, built_at: 'later' }).propNote, 'Player prop prices changed after today’s picks were made. They return with the next update.');
-  assert.equal(state(priced).propNote, 'Prop leans have no live-graded record yet, so none qualifies.');
+  // A prop without a live record would still show as an unproven edge, so the record never empties the category.
   const tier = { side: 'over' as const, lo: 0.06, hi: 0.1, n: 400, wins: 200, need: 0.52, units: -14, edge: -0.02, pooled: 900 };
-  const losing = { ...record, live: { ...record.live, from: '2026-11-15', over: { n: 3125, wins: 1537, need: 0.5236, units: -196.71 }, under: { n: 3042, wins: 1551, need: 0.5342, units: -140.65 } }, tiersLive: [tier] };
-  assert.equal(state({ ...priced, record: losing }).propNote,
-    'Live-graded prop leans have settled short of the posted price at every strength (6,167 graded since Nov 15), so none qualifies yet.');
-  const winning = { ...losing, tiersLive: [{ ...tier, edge: 0.02 }] };
-  assert.equal(state({ ...priced, record: winning }).propNote, 'No current player prop clears the model’s price, noise and evidence checks.');
+  for (const tiersLive of [[], [tier], [{ ...tier, edge: 0.02 }]]) {
+    assert.equal(state({ ...priced, record: { ...record, tiersLive } }).propNote, 'No current player prop clears the model’s price, noise and data checks.');
+  }
 
   assert.equal(state(priced).spreadNote, 'No spread clears the model’s edge and noise checks at the current price.');
   assert.equal(state(priced, [{ ...game, spread_quotes: [] }]).spreadNote, 'No current spread price for today’s remaining games.');
@@ -119,4 +119,18 @@ test('the deployment publishes the daily slate identity and the reader rejects i
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('released margin calibration lets a spread be a lean or a bet instead of an unproven edge', () => {
+  const released = { model_version: card.model_version ?? '', input_hash: 'a'.repeat(64), training_cutoff: '2026-10-01', evaluated_through: '2026-10-30',
+    games: 600, settled_markets: 2200, margin_bias: 0, total_bias: 0, coverage80: 0.8, coverage90: 0.9, ece: 0.01,
+    baseline_improvement: true, market_noninferiority: true, markets: ['spread'], status: 'passed' as const };
+  const releasedCard = { ...pregameCard, calibration: released, source_cutoff: pregameCard.generated_at };
+  // 550 of 950 decided draws (57.9%) at -110 clears the lean bar of 3 points but not the bet bar of 8.
+  const lean = dailySpreadForGame(game, releasedCard, sim, now)!;
+  assert.equal(lean.grade, 'LEAN');
+  assert.equal(lean.evidence, 'The simulated margins have passed their release checks against settled games.');
+  const bet = dailySpreadForGame(game, releasedCard, { ...sim, margins: [...Array(620).fill(5), ...Array(380).fill(1)] }, now)!;
+  assert.equal(bet.grade, 'BET');
+  assert.equal(dailySpreadForGame(game, { ...releasedCard, calibration: { ...released, markets: ['total'] } }, sim, now)?.grade, 'EDGE');
 });

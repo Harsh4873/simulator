@@ -1,5 +1,5 @@
 import { chicagoDate } from './date.ts';
-import { MIN_MEASURED_EDGE, MIN_TIER_LEANS, type PickRecord, type PicksFile } from './picks.ts';
+import type { PicksFile } from './picks.ts';
 import type { Slate, SlateGame } from './types.ts';
 import { MAX_CARD_AGE_MS } from './validate-card.ts';
 
@@ -18,6 +18,18 @@ export function upcomingToday(game: SlateGame, now: Date): boolean {
   return game.date === chicagoDate(now) && game.status_state === 'pre' && !game.completed && Date.parse(game.start_time) > now.getTime();
 }
 
+/**
+ * BET and LEAN clear every check, including (for a prop) a live record of leans like it beating the price. EDGE is the
+ * strongest prop that clears the price, noise and data checks without that record, shown only when nothing qualifies.
+ */
+export type DailyGrade = 'BET' | 'LEAN' | 'EDGE';
+
+const GRADE_RANK: Readonly<Record<DailyGrade, number>> = { BET: 2, LEAN: 1, EDGE: 0 };
+
+export function gradeRank(grade: DailyGrade): number {
+  return GRADE_RANK[grade];
+}
+
 export interface DailyOffer {
   eventId: string;
   title: string;
@@ -30,7 +42,7 @@ export interface DailyOffer {
   modelProbability: number;
   breakEven: number;
   expectedReturn: number;
-  grade: 'BET' | 'LEAN';
+  grade: DailyGrade;
   /** What the grade rests on, in words: the live record of leans like it, or that none exists yet. */
   evidence?: string;
 }
@@ -53,11 +65,11 @@ export interface DailyCandidates {
   spreads: DailyOffer[];
 }
 
-/** What the panel reads from picks.json: its build stamp, its posted prices and the live record. */
-export type DailyPicks = Pick<PicksFile, 'built_at' | 'lines' | 'record'> & Partial<Pick<PicksFile, 'offers'>>;
+/** What the panel reads from picks.json: its build stamp and its posted prices. */
+export type DailyPicks = Pick<PicksFile, 'built_at' | 'lines'> & Partial<Pick<PicksFile, 'offers' | 'record'>>;
 
 export function compareOffers(a: DailyOffer, b: DailyOffer): number {
-  return Number(b.grade === 'BET') - Number(a.grade === 'BET') || b.expectedReturn - a.expectedReturn ||
+  return gradeRank(b.grade) - gradeRank(a.grade) || b.expectedReturn - a.expectedReturn ||
     b.modelProbability - a.modelProbability || a.tip.localeCompare(b.tip) ||
     a.title.localeCompare(b.title) || a.book.localeCompare(b.book) || a.eventId.localeCompare(b.eventId);
 }
@@ -68,7 +80,7 @@ function validOffer(value: unknown): value is DailyOffer {
   return [offer.eventId, offer.title, offer.projectionLabel, offer.matchup, offer.book].every(s => typeof s === 'string' && s.trim()) &&
     typeof offer.tip === 'string' && Number.isFinite(Date.parse(offer.tip)) &&
     typeof offer.pricedAt === 'string' && Number.isFinite(Date.parse(offer.pricedAt)) &&
-    (offer.grade === 'BET' || offer.grade === 'LEAN') && typeof offer.odds === 'number' && Number.isFinite(offer.odds) && Math.abs(offer.odds) >= 100 &&
+    (offer.grade === 'BET' || offer.grade === 'LEAN' || offer.grade === 'EDGE') && typeof offer.odds === 'number' && Number.isFinite(offer.odds) && Math.abs(offer.odds) >= 100 &&
     typeof offer.modelProbability === 'number' && offer.modelProbability > 0 && offer.modelProbability <= 1 &&
     typeof offer.breakEven === 'number' && offer.breakEven > 0 && offer.breakEven < offer.modelProbability &&
     typeof offer.expectedReturn === 'number' && Number.isFinite(offer.expectedReturn) && offer.expectedReturn > 0 &&
@@ -83,15 +95,6 @@ export function parseDailyCandidates(value: unknown): DailyCandidates | null {
   return { date: file.date, slateHash: file.slateHash, picksBuiltAt: file.picksBuiltAt, props: file.props.filter(validOffer), spreads: file.spreads.filter(validOffer) };
 }
 
-/** A lean is listed only from a live tier that has beaten the price; with none, no prop can qualify. */
-export function liveTierListed(record: PickRecord | null | undefined): boolean {
-  return Boolean(record?.tiersLive?.some(tier => tier.pooled >= MIN_TIER_LEANS && tier.edge >= MIN_MEASURED_EDGE));
-}
-
-function monthDay(date: string): string {
-  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00Z`));
-}
-
 function propPriced(picks: DailyPicks, game: SlateGame, now: Date): boolean {
   const stamps = picks.offers ? (picks.offers[game.event_id] ?? []).map(row => row[6]) : (picks.lines[game.event_id] ?? []).map(row => row[5]);
   return stamps.some(at => currentDailyPrice(at, game.start_time, now));
@@ -100,14 +103,8 @@ function propPriced(picks: DailyPicks, game: SlateGame, now: Date): boolean {
 function propNote(picks: DailyPicks | null, sameBuild: boolean, upcoming: readonly SlateGame[], now: Date): string {
   if (!picks || !upcoming.some(game => propPriced(picks, game, now))) return 'No current player prop price for today’s remaining games.';
   if (!sameBuild) return 'Player prop prices changed after today’s picks were made. They return with the next update.';
-  if (!liveTierListed(picks.record)) {
-    const live = picks.record?.live;
-    const graded = (live?.over?.n ?? 0) + (live?.under?.n ?? 0);
-    if (!graded) return 'Prop leans have no live-graded record yet, so none qualifies.';
-    const since = live?.from && /^\d{4}-\d{2}-\d{2}$/.test(live.from) ? ` since ${monthDay(live.from)}` : '';
-    return `Live-graded prop leans have settled short of the posted price at every strength (${graded.toLocaleString('en-US')} graded${since}), so none qualifies yet.`;
-  }
-  return 'No current player prop clears the model’s price, noise and evidence checks.';
+  // A prop without a live record still shows as an unproven edge, so an empty category means no price gap held up.
+  return 'No current player prop clears the model’s price, noise and data checks.';
 }
 
 function spreadNote(upcoming: readonly SlateGame[], now: Date): string {

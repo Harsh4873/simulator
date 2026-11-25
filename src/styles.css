@@ -4271,6 +4271,9 @@ html[data-layout="phone"] tbody td:is([data-col], [data-label]) > * {
 .daily-offer h3 { color: var(--muted); }
 .daily-grade { color: var(--gold); }
 .daily-grade[data-grade="BET"], .daily-price strong { color: var(--accent); }
+/* An unproven edge is not a qualified pick: a muted label and a dashed outline keep it from reading like one. */
+.daily-grade[data-grade="EDGE"] { color: var(--muted); }
+.daily-offer[data-grade="EDGE"] { border-style: dashed; }
 .daily-selection { margin: 0.6rem 0 0; font-size: 1.15rem; font-weight: 700; }
 .daily-price, .daily-projection, .daily-offer-empty p { margin: 0.4rem 0 0; font-size: 0.875rem; }
 .daily-price strong { font: 700 1rem var(--mono); }

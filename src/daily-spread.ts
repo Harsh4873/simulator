@@ -45,10 +45,11 @@ export function dailySpreadForGame(game: SlateGame, card: RateCard, sim: Pick<Si
         projectionLabel: `Model spread ${game[side].abbreviation} ${signed(projected)}`,
         matchup: `${game.away.abbreviation} at ${game.home.abbreviation}`, tip: game.start_time,
         book: q.book, pricedAt: q.captured_at, odds, modelProbability: probability, breakEven: need, expectedReturn: ev,
-        grade: released && edge >= PROP_POLICY.betEdge && ev >= PROP_POLICY.betReturn ? 'BET' : 'LEAN',
+        // Spread leans have no graded record, so until the margins pass their release checks a spread is an unproven edge.
+        grade: !released ? 'EDGE' : edge >= PROP_POLICY.betEdge && ev >= PROP_POLICY.betReturn ? 'BET' : 'LEAN',
         evidence: released
           ? 'The simulated margins have passed their release checks against settled games.'
-          : 'Spread leans are not graded against results yet, and the simulated margins have not passed their release checks.',
+          : 'Not a qualified pick: spread leans are not graded against results yet, and the simulated margins have not passed their release checks.',
       });
     }
   }

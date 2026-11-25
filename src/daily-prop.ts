@@ -1,6 +1,9 @@
 import { type BookLine } from './book-lines.ts';
-import { currentDailyPrice, upcomingToday, type DailyOffer } from './daily-price.ts';
-import { gameLeans, LEAN_BUCKETS, linesByKey, listed, liveTierFor, type PicksFile } from './picks.ts';
+import { currentDailyPrice, gradeRank, upcomingToday, type DailyGrade, type DailyOffer } from './daily-price.ts';
+import {
+  EXTREME_CLAIM, gameLeans, LEAN_BUCKETS, linesByKey, listed, liveTierFor, MIN_MEASURED_EDGE, MIN_PLAY_SHARE, MIN_TIER_LEANS,
+  type PicksFile, type TierRecord,
+} from './picks.ts';
 import { groupOf, mapIsCurrent, quoteCalibrationFor, type parsePublishedPropCalibration } from './prop-calibration.ts';
 import { decideVerdict, profitPerStake, propContextFromPlayer, propPolicyFromArtifacts, quoteProp, type PropMarket, type PropSide } from './props.ts';
 import { marketLabel } from './projections.ts';
@@ -23,9 +26,24 @@ export interface DailyPropPick {
   modelProbability: number;
   breakEven: number;
   expectedReturn: number;
-  grade: 'BET' | 'LEAN';
-  /** The live record of graded leans of this side and strength, which is what lets this one be listed. */
+  /** BET or LEAN for a listed lean. EDGE is the strongest unlisted one, shown only when no listed lean is current. */
+  grade: DailyGrade;
+  /** What the grade rests on: the live record of graded leans of this side and strength, or that there is none yet. */
   evidence: string;
+}
+
+function points(edge: number): string {
+  return (Math.abs(edge) * 100).toFixed(1);
+}
+
+/** Why an unlisted lean is not a qualified pick, read from the live record of leans of its side and strength. */
+export function unprovenEvidence(side: PropSide, tier: TierRecord | null): string {
+  const prefix = 'Not a qualified pick: ';
+  if (!tier || !(tier.pooled > 0)) return `${prefix}${side} leans this strong have no live-graded record yet.`;
+  const graded = tier.pooled.toLocaleString('en-US');
+  if (tier.edge < 0) return `${prefix}live-graded ${side} leans this strong have settled ${points(tier.edge)} points short of the posted price across ${graded} leans.`;
+  if (tier.pooled < MIN_TIER_LEANS) return `${prefix}only ${graded} live-graded ${side} leans this strong so far, and listing needs ${MIN_TIER_LEANS}.`;
+  return `${prefix}live-graded ${side} leans this strong have beaten the posted price by ${points(tier.edge)} points across ${graded} leans, short of the ${points(MIN_MEASURED_EDGE)} listing needs.`;
 }
 
 function gameOffers(picks: PicksFile, eventId: string): BookLine[] {
@@ -60,7 +78,11 @@ export function dailyPropForGame(
     const group = groupOf(lean.market);
     const artifact = calibration.artifacts.find(a => a.group === group);
     if (!artifact || !mapIsCurrent(artifact, card.model_version, game.date) || !(artifact.validated_through < game.date) ||
-        !lean.calibrationMethod || lean.claimed < LEAN_BUCKETS[1] || !listed(lean, picks.record)) continue;
+        !lean.calibrationMethod || lean.claimed < LEAN_BUCKETS[1]) continue;
+    // A listed lean's side and strength have beaten the price in live grading. An unlisted lean can still be the day's
+    // unproven edge, but only under every other check a listing makes: no red drift, a claim short of extreme, a likely player.
+    const isListed = listed(lean, picks.record);
+    if (!isListed && (lean.drift === 'red' || !(lean.claimed < EXTREME_CLAIM) || !(lean.play >= MIN_PLAY_SHARE))) continue;
     const over = lean.side === 'over';
     const odds = over ? lean.over_odds : lean.under_odds;
     const key = JSON.stringify([lean.athlete_id, lean.market, lean.line, lean.side]);
@@ -71,20 +93,25 @@ export function dailyPropForGame(
     const map = quoteCalibrationFor(panel, lean.market, lean.side);
     const quote = quoteProp(sample, lean.market, lean.side, lean.line, odds, over ? lean.under_odds : lean.over_odds, map);
     if (!quote || quote.expectedReturn === null || quote.expectedReturn <= 0) continue;
-    const tier = liveTierFor(picks.record, lean.side, lean.claimed)!;
+    const tier = liveTierFor(picks.record, lean.side, lean.claimed);
     const policy = propPolicyFromArtifacts([artifact], card.model_version, game.date);
-    const context = { ...propContextFromPlayer(player), propCalibration: map, measured: { edge: tier.edge, graded: tier.pooled } };
+    // The live record already decided listing. An unproven edge is graded on its price and data alone, and its record
+    // is printed beside it instead of overruling it.
+    const measured = isListed && tier ? { measured: { edge: tier.edge, graded: tier.pooled } } : {};
+    const context = { ...propContextFromPlayer(player), propCalibration: map, ...measured };
     const verdict = decideVerdict(quote, context, lean.market, policy, true);
     if (!verdict || verdict.verdict === 'PASS') continue;
     candidates.push({
       eventId: game.event_id, athleteId: lean.athlete_id, player: lean.name, matchup: lean.matchup,
       market: lean.market, side: lean.side, line: lean.line, odds, book: lean.book, pricedAt: lean.priced_at,
       tip: game.start_time, projection: lean.projection, modelProbability: lean.model, breakEven: lean.need,
-      expectedReturn: quote.expectedReturn, grade: verdict.verdict,
-      evidence: `Live-graded ${lean.side} leans this strong have beaten the posted price by ${(tier.edge * 100).toFixed(1)} points across ${tier.pooled.toLocaleString('en-US')} leans.`,
+      expectedReturn: quote.expectedReturn, grade: isListed ? verdict.verdict : 'EDGE',
+      evidence: isListed && tier
+        ? `Live-graded ${lean.side} leans this strong have beaten the posted price by ${points(tier.edge)} points across ${tier.pooled.toLocaleString('en-US')} leans.`
+        : unprovenEvidence(lean.side, tier),
     });
   }
-  return candidates.sort((a, b) => Number(b.grade === 'BET') - Number(a.grade === 'BET') || b.expectedReturn - a.expectedReturn ||
+  return candidates.sort((a, b) => gradeRank(b.grade) - gradeRank(a.grade) || b.expectedReturn - a.expectedReturn ||
     b.modelProbability - a.modelProbability || a.athleteId.localeCompare(b.athleteId) || a.market.localeCompare(b.market) ||
     a.line - b.line || a.side.localeCompare(b.side) || a.book.localeCompare(b.book))[0] ?? null;
 }

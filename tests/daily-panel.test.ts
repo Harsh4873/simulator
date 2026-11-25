@@ -54,3 +54,15 @@ test('each pick shows what its grade rests on, and an empty category shows why i
   assert.equal(none.querySelector('.daily-note'), null);
   assert.equal(none.querySelector('.daily-evidence'), null);
 });
+
+test('an unproven edge is labelled as one, outlined apart, and explained in the note', () => {
+  const edge: DailyOffer = { ...offer, grade: 'EDGE', evidence: 'Not a qualified pick: live-graded over leans this strong have settled 1.8 points short of the posted price across 882 leans.' };
+  const { document } = parseHTML(renderDailyPanel({ status: 'open', prop: edge, spread: null, spreadNote: 'No current spread price for today’s remaining games.' }));
+  const card = document.querySelector('article.daily-offer[data-grade="EDGE"]');
+  assert.ok(card);
+  assert.equal(card.querySelector('.daily-grade')?.textContent, 'Unproven edge');
+  assert.equal(card.querySelector('.daily-evidence')?.textContent, edge.evidence);
+  assert.match(document.querySelector('.daily-note')?.textContent ?? '', /An unproven edge clears the price, noise and data checks, but leans like it have not beaten the posted price/);
+  const lean = parseHTML(renderDailyPanel({ status: 'open', prop: offer, spread: null })).document;
+  assert.doesNotMatch(lean.querySelector('.daily-note')?.textContent ?? '', /unproven/i);
+});

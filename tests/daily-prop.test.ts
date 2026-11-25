@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { buildPicks } from '../scripts/build-picks.ts';
 import type { BookLine } from '../src/book-lines.ts';
-import { dailyPropForGame, dailyPropOffer, type DailyPropPick } from '../src/daily-prop.ts';
+import { dailyPropForGame, dailyPropOffer, unprovenEvidence, type DailyPropPick } from '../src/daily-prop.ts';
+import { compareOffers, dailyPanelState, type DailyCandidates } from '../src/daily-price.ts';
 import { parsePicksFile } from '../src/picks.ts';
 import { parsePublishedPropCalibration, type PropCalibrationArtifact } from '../src/prop-calibration.ts';
 import type { RateCard, Slate } from '../src/types.ts';
@@ -55,7 +56,7 @@ test('daily player prop uses the best current comparable offer and accounts for 
   assert.equal(dailyPropForGame(game, rate, simulation, single, card, calibration, now)?.book, 'Book A');
 });
 
-test('daily prop requires the current card, a pre-tip quote, reliable player evidence and a supported live tier', () => {
+test('daily prop requires the current card, a pre-tip quote, current calibration and reliable player evidence', () => {
   const picks = build([offer]);
   const select = (file = picks, when = now, fixture = game, maps = calibration, rates = rate) => dailyPropForGame(fixture, rates, simulation, file, card, maps, when);
   assert.equal(select({ ...picks, input_hash: 'other' }), null);
@@ -69,7 +70,9 @@ test('daily prop requires the current card, a pre-tip quote, reliable player evi
   assert.equal(select(picks, now, { ...game, status_state: 'in' }), null);
   assert.equal(select(picks, new Date(game.start_time)), null);
   assert.equal(select(picks, now, { ...game, date: '2026-11-01' }), null);
-  assert.equal(select({ ...picks, record: { ...picks.record, tiersLive: [] } }), null);
+  // Without a live tier the same offer is no longer a lean, only the day's unproven edge.
+  const unlisted = select({ ...picks, record: { ...picks.record, tiersLive: [] } })!;
+  assert.deepEqual([unlisted.grade, unlisted.evidence], ['EDGE', 'Not a qualified pick: over leans this strong have no live-graded record yet.']);
   for (const changes of [{ drift: 'red' }, { validated_through: '2026-11-02' }, { fitted_through: '2026-10-01', validated_through: '2026-10-02' }]) {
     const invalid = parsePublishedPropCalibration(JSON.stringify({ schema_version: 1, groups: { points: { ...artifact, ...changes } } }))!;
     assert.equal(select(picks, now, game, invalid), null);
@@ -98,4 +101,52 @@ test('a prop pick reads as a book lists it, with yes/no wording for double- and 
   assert.deepEqual([double.title, double.projectionLabel], ['Guard Name to record a double-double', 'Simulated double-double in 42% of games played']);
   assert.equal(dailyPropOffer({ ...pick, market: 'td', side: 'under', line: 0.5 }).title, 'Guard Name no triple-double');
   assert.equal(points.evidence, 'Record.');
+});
+
+function withTiers(changes: Partial<{ edge: number; pooled: number }>) {
+  const picks = build([offer]);
+  for (const tier of picks.record.tiersLive) Object.assign(tier, changes);
+  return picks;
+}
+
+test('an unlisted prop that clears the price, noise and data checks is the unproven edge, with its live record', () => {
+  const losing = dailyPropForGame(game, rate, simulation, withTiers({ edge: -0.018, pooled: 882 }), card, calibration, now)!;
+  assert.equal(losing.grade, 'EDGE');
+  assert.equal(losing.evidence, 'Not a qualified pick: live-graded over leans this strong have settled 1.8 points short of the posted price across 882 leans.');
+  // Same line, price and chance as the listed lean: only the grade and its evidence change.
+  const lean = dailyPropForGame(game, rate, simulation, build([offer]), card, calibration, now)!;
+  assert.deepEqual([losing.line, losing.odds, losing.side, losing.modelProbability, losing.expectedReturn],
+    [lean.line, lean.odds, lean.side, lean.modelProbability, lean.expectedReturn]);
+  assert.equal(dailyPropForGame(game, rate, simulation, withTiers({ edge: 0.02, pooled: 150 }), card, calibration, now)?.evidence,
+    'Not a qualified pick: only 150 live-graded over leans this strong so far, and listing needs 200.');
+  assert.equal(dailyPropForGame(game, rate, simulation, withTiers({ edge: 0.005, pooled: 500 }), card, calibration, now)?.evidence,
+    'Not a qualified pick: live-graded over leans this strong have beaten the posted price by 0.5 points across 500 leans, short of the 1.0 listing needs.');
+  assert.equal(unprovenEvidence('under', null), 'Not a qualified pick: under leans this strong have no live-graded record yet.');
+});
+
+test('an unproven edge still needs every other check, never becomes a bet, and never outranks a qualified pick', () => {
+  const losing = withTiers({ edge: -0.018, pooled: 882 });
+  const select = (when = now, fixture = game, maps = calibration, rates = rate) => dailyPropForGame(fixture, rates, simulation, losing, card, maps, when);
+  for (const changes of [{ drift: 'red' }, { validated_through: '2026-11-02' }, { fitted_through: '2026-10-01', validated_through: '2026-10-02' }]) {
+    const invalid = parsePublishedPropCalibration(JSON.stringify({ schema_version: 1, groups: { points: { ...artifact, ...changes } } }))!;
+    assert.equal(select(now, game, invalid), null);
+  }
+  assert.equal(select(now, game, calibration, { ...rate, players: [{ ...player, evidence: { ...player.evidence!, role_changed: true } }] }), null);
+  assert.equal(select(new Date(game.start_time)), null);
+  // Released calibration lets a listed lean become a BET. An unlisted one stays an unproven edge.
+  const released = { model_version: card.model_version!, input_hash: 'a'.repeat(64), training_cutoff: '2026-10-01', evaluated_through: '2026-10-30',
+    games: 600, settled_markets: 2200, margin_bias: 0, total_bias: 0, coverage80: .8, coverage90: .9, ece: .01, baseline_improvement: true, market_noninferiority: true, markets: ['pts'], status: 'passed' as const };
+  const rated = { ...rate, players: [{ ...player, as_of: at, model_version: card.model_version, calibration: released }] };
+  assert.equal(select(now, game, calibration, rated)?.grade, 'EDGE');
+
+  // On the panel any qualified pick, however small its return, comes before an unproven edge.
+  const edge = { ...dailyPropOffer(select()!), expectedReturn: 0.4 };
+  const qualified = { ...dailyPropOffer(dailyPropForGame(game, rate, simulation, build([offer]), card, calibration, now)!), eventId: 'other', expectedReturn: 0.02 };
+  assert.ok(compareOffers(qualified, edge) < 0);
+  const later = { ...game, event_id: 'other' };
+  const daily: DailyCandidates = { date: game.date, slateHash: 'c'.repeat(64), picksBuiltAt: losing.built_at, props: [edge, qualified], spreads: [] };
+  const state = (props: DailyCandidates['props']) =>
+    dailyPanelState({ ...slate, date: game.date, games: [game, later] }, { ...daily, props }, daily.slateHash, losing, now, false).prop;
+  assert.equal(state([edge, qualified])?.grade, 'LEAN');
+  assert.equal(state([edge])?.grade, 'EDGE');
 });
