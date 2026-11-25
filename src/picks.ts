@@ -161,6 +161,8 @@ export interface PicksFile {
   book: string | null;
   /** Latest posted lines for games on the slate: [athlete_id, market, line, over, under, priced_at, open_line?], by event. */
   lines: Record<string, [string, PropMarket, number, number, number, string, number?][]>;
+  /** Current two-sided offers by event when the feed names more than one book. */
+  offers?: Record<string, [string, string, PropMarket, number, number, number, string][]>;
   leans: Lean[];
   record: PickRecord;
   /** Map that was live for this card, when one applied. Old files omit it. */
@@ -575,6 +577,19 @@ export function parsePicksFile(text: string): PicksFile | null {
     for (const row of rows) {
       if (!Array.isArray(row) || (row.length !== 6 && row.length !== 7) || typeof row[0] !== 'string' || !MARKETS.has(String(row[1])) || !finite(row[2]) || row[2] < 0 || !odds(row[3]) || !odds(row[4]) || !stamp(row[5])) return null;
       if (row.length === 7 && (!finite(row[6]) || row[6] < 0)) return null;
+    }
+  }
+  if (file.offers !== undefined) {
+    if (!file.offers || typeof file.offers !== 'object' || Array.isArray(file.offers)) return null;
+    for (const rows of Object.values(file.offers)) {
+      if (!Array.isArray(rows)) return null;
+      for (const row of rows) {
+        if (!Array.isArray(row) || row.length !== 7) return null;
+        const [book, athlete, market, line, over, under, at] = row;
+        if (typeof book !== 'string' || !book.trim() || typeof athlete !== 'string' || !athlete ||
+            !MARKETS.has(market) || !finite(line) || line < 0 || !Number.isInteger(2 * line) ||
+            !odds(over) || !odds(under) || !stamp(at)) return null;
+      }
     }
   }
   for (const lean of file.leans) {

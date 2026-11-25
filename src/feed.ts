@@ -566,12 +566,6 @@ function simMarkup(game: FeedGame, sim: FeedGameSim): string {
   </div>`;
 }
 
-function dayTitle(gameDate: string, today: string): string {
-  if (gameDate === today) return 'Today';
-  if (gameDate === shiftChicagoDate(today, -1)) return 'Yesterday';
-  return gameDate;
-}
-
 function section(title: string, games: readonly FeedGame[]): string {
   const cards = games.map((game) => renderGame(game)).join('');
   return `<section class="slate-day"><h2 class="slate-title">${escapeHtml(title)}</h2><div class="slate">${cards}</div></section>`;
@@ -586,31 +580,29 @@ export function renderFeedSlate(slate: FeedSlate, now: Date): string {
     ? ''
     : `<p class="state" role="alert">This ${sportName} slate was published for ${escapeHtml(slate.dates[0])} and ${escapeHtml(slate.dates[1])}, not the current Chicago window.</p>`;
   const built = `Published ${formatTip(slate.generated_at)} · ${slate.source}`;
-  const next = [...slate.games, ...slate.later].filter((game) => game.status === 'scheduled' && Date.parse(game.start_time) > now.getTime()).map((game) => game.start_time).sort()[0];
-  const count = slate.games.length + slate.later.filter((game) => chicagoDate(new Date(game.start_time)) > today).length;
-  const meta = [`${sportName} · ${count} ${count === 1 ? 'game' : 'games'}`, next ? `next kickoff ${formatTip(next)}` : ''].filter(Boolean).join(' · ');
+  // Keep the published lists disjoint, then group the games by the dates the viewer sees now.
+  const publishedLater = slate.later.filter((game) => chicagoDate(new Date(game.start_time)) > slate.dates[1]);
+  const games = [...slate.games, ...publishedLater]
+    .filter((game) => chicagoDate(new Date(game.start_time)) >= yesterday)
+    .sort((a, b) => a.start_time.localeCompare(b.start_time));
+  const next = games.find((game) => game.status === 'scheduled' && Date.parse(game.start_time) > now.getTime());
+  const meta = [`${sportName} · ${games.length} ${games.length === 1 ? 'game' : 'games'}`, next ? `next kickoff ${formatTip(next.start_time)}` : ''].filter(Boolean).join(' · ');
   const head = `<div class="feed-head"><div class="feed-titles"><p class="slate-meta">${escapeHtml(meta)}</p><p class="status captured">${escapeHtml(built)}</p></div></div>`;
   const byDate = new Map<string, FeedGame[]>();
-  for (const game of slate.games) {
+  for (const game of games) {
     const day = chicagoDate(new Date(game.start_time));
     const list = byDate.get(day) ?? [];
     list.push(game);
     byDate.set(day, list);
   }
-  const days = [...byDate.keys()].sort((a, b) => b.localeCompare(a));
-  const windowHtml = days.map((day) => section(dayTitle(day, today), byDate.get(day) ?? [])).join('');
-  const upcoming = slate.later.filter((game) => chicagoDate(new Date(game.start_time)) > today);
-  const empty =
-    slate.games.length > 0
-      ? windowHtml
-      : `<p class="state">No ${sportName} games today or yesterday.${upcoming.length ? ' The rest of this week is below.' : ''}</p>`;
-  const laterDays = new Map<string, FeedGame[]>();
-  for (const game of [...upcoming].sort((a, b) => a.start_time.localeCompare(b.start_time))) {
-    const day = chicagoDate(new Date(game.start_time));
-    laterDays.set(day, [...(laterDays.get(day) ?? []), game]);
-  }
-  const later = [...laterDays.entries()].map(([day, games]) => section(laterTitle(day), games)).join('');
-  return `${stale}${head}${empty}${later}`;
+  const windowHtml = [today, yesterday].map((day) => {
+    const rows = byDate.get(day);
+    return rows ? section(day === today ? 'Today' : 'Yesterday', rows) : '';
+  }).join('');
+  const later = [...byDate.entries()].filter(([day]) => day > today).map(([day, rows]) => section(laterTitle(day), rows)).join('');
+  const emptyMessage = current ? `No ${sportName} games today or yesterday.` : 'This published slate has no games for today or yesterday.';
+  const empty = `<p class="state">${emptyMessage}${later ? ' Upcoming games are below.' : ''}</p>`;
+  return `${stale}${head}${windowHtml || empty}${later}`;
 }
 
 /** "Sunday, Nov 22" for a Chicago date. */

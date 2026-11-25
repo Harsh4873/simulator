@@ -11,6 +11,7 @@ import {
   espnSeasonYear,
   espnWeek,
   historyWeeks,
+  nextEspnWeek,
   parseEspnScoreboard,
   parseInjuries,
   parseRoster,
@@ -84,6 +85,23 @@ export function laterGames(week: readonly EspnGame[], windowIds: ReadonlySet<str
       return chicagoDate(new Date(game.start_time)) > today;
     })
     .sort((a, b) => a.start_time.localeCompare(b.start_time) || a.id.localeCompare(b.id));
+}
+
+/** ESPN keeps a completed week as current until Wednesday. Show the following week's schedule in that gap. */
+export async function upcomingWeekGames(weekPayload: unknown, windowIds: ReadonlySet<string>, today: string, year: number, read = getJson): Promise<EspnGame[]> {
+  if (weekPayload === null) return [];
+  const remaining = laterGames(parseEspnScoreboard(weekPayload), windowIds, today);
+  if (remaining.length) return remaining;
+  const next = nextEspnWeek(weekPayload);
+  if (!next) return [];
+  try {
+    const payload = await read(`${SCOREBOARD}?dates=${year}&seasontype=${next.seasonType}&week=${next.week}`);
+    return laterGames(parseEspnScoreboard(payload), windowIds, today);
+  } catch (error) {
+    // The next week is extra context. Without it the page keeps today's window and the slate still builds.
+    console.error(`NFL ${next.seasonType === 3 ? 'postseason ' : ''}week ${next.week} was not loaded: ${error instanceof Error ? error.message : 'unknown error'}`);
+    return [];
+  }
 }
 
 function loadCache(season: number): NflCache {
@@ -242,8 +260,8 @@ export async function buildNflSlate(now = new Date()): Promise<void> {
     const day = chicagoDate(new Date(game.start_time));
     return day === today || day === yesterday;
   });
-  const upcoming = weekPayload === null ? [] : laterGames(parseEspnScoreboard(weekPayload), new Set(slateGames.map((game) => game.id)), today);
   const year = espnSeasonYear(todayPayload) ?? espnSeasonYear(yesterdayPayload) ?? Number(today.slice(0, 4));
+  const upcoming = await upcomingWeekGames(weekPayload, new Set(slateGames.map((game) => game.id)), today, year);
   const week = espnWeek(weekPayload) ?? espnWeek(todayPayload) ?? espnWeek(yesterdayPayload) ?? 1;
   const seasonType = espnSeasonType(weekPayload) ?? espnSeasonType(todayPayload) ?? 2;
   const regularWeeks = espnRegularWeeks(weekPayload ?? todayPayload);

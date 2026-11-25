@@ -24,6 +24,7 @@ import {
 } from '../src/projection-context.ts';
 import { gradeProp, quoteProp, type PlayerSample } from '../src/props.ts';
 import type { BookLine } from '../src/book-lines.ts';
+import type { PropCalibrationCard, PropCalibrationGroup, PropPanelCalibration } from '../src/prop-calibration.ts';
 import { buildRecord, gameLeans, type LedgerFile, type LedgerRow } from '../src/picks.ts';
 import {
   defaultMarketLine,
@@ -1339,9 +1340,16 @@ test('a card at a posted line shows the chance anchored on its price and lights 
   // A milder 60% over keeps too little of its gap to pay the vig on either side.
   const mild = anchoredChance(0.6, book, 'pts', null)!;
   assert.ok(mild.edge <= 0);
+  // A finite number of draws can all land on one side. The raw share is still reported alongside the anchored chance.
+  for (const raw of [0, 1]) {
+    const extreme = anchoredChance(raw, book, 'pts', null)!;
+    assert.equal(extreme.raw, raw);
+    assert.ok(Math.abs(extreme.over - (0.2 * raw + 0.8 * noVig)) < 1e-12);
+  }
   // A fitted map for the stat uses its own weight.
-  const table = new Map([['points', { status: 'fitted', model_version: 'v', fitted_through: '2026-11-01', w: 0.5, params: { method: 'identity' } }]]) as never;
-  const mapped = anchoredChance(0.75, book, 'pts', { table, modelVersion: 'v', tipDate: '2026-11-02' } as never)!;
+  const table = new Map<PropCalibrationGroup, PropCalibrationCard>([['points', { group: 'points', method: 'temperature', status: 'fitted', model_version: 'v', fitted_through: '2026-11-01', w: 0.5, params: { method: 'temperature', temperature: 1 } }]]);
+  const calibrationForDate = (tipDate: string): PropPanelCalibration => ({ table, modelVersion: 'v', tipDate });
+  const mapped = anchoredChance(0.75, book, 'pts', calibrationForDate('2026-11-02'))!;
   assert.ok(mapped.over > strong.over, 'a heavier fitted weight keeps more of the simulation');
 
   const sim = simulate(game, seed, draws);
@@ -1357,9 +1365,36 @@ test('a card at a posted line shows the chance anchored on its price and lights 
   const far = cardOf(line(Math.max(0.5, Math.floor(mean) - 4.5), -105, -115));
   assert.match(far, /data-lean="over"/);
   assert.match(far, /class="pick-edge edge-up">Over \+\d+\.\d pp</);
-  assert.match(far, /class="pick-anchor"[^>]*>Simulated over \d+(\.\d)?% · price to beat \d+(\.\d)?%</);
+  assert.match(far, /class="pick-anchor"[^>]*>Simulated over \d+(\.\d)?% · no-vig over \d+(\.\d)?%</);
   // A line at his projection with a heavy price on each side: no side clears, nothing lights and no edge shows.
   const even = cardOf(line(Math.floor(mean) + 0.5, -130, -130));
   assert.doesNotMatch(even, /data-lean=/);
   assert.doesNotMatch(even, /pick-edge/);
+
+  // Opening the player or editing the price in his checker cannot change the edge next to the posted odds.
+  const posted = line(Math.max(0.5, Math.floor(mean) - 4.5), -105, -115);
+  const lines = new Map([[`${game.event_id}:${role.athlete_id}:pts`, posted]]);
+  const selectedForm = { ...form, line: String(posted.line), odds: '+200', opposite: '-300' };
+  const selected = projectionBoardHtml(game, sim, selectedForm, game.event_id, role.athlete_id, undefined, 'projection', lines);
+  const cardEdge = (html: string) => parseHTML(html).document.querySelector(`[data-projection-player="${role.athlete_id}"] .pick-edge`)?.textContent;
+  assert.equal(cardEdge(selected), cardEdge(far));
+
+  // In All games each tip gets only the map available that day, even before the viewer picks a game.
+  const today = { ...slateGame!, date: '2026-11-02', completed: false, status_state: 'pre' };
+  const yesterday = { ...today, event_id: 'earlier', date: '2026-11-01' };
+  lines.set(`earlier:${role.athlete_id}:pts`, { ...posted, event_id: 'earlier' });
+  const view: ProjectionView = {
+    slate: { ...slate, games: [yesterday, today] }, card: { ...card, games: [{ ...game, event_id: 'earlier' }, game] },
+    now: new Date('2026-11-02T12:00:00Z'), query: '', eventId: null, athleteId: null, form, simulation: null,
+    drawing: false, overrides: {}, scope: 'all', simulations: new Map([['earlier', sim], [today.event_id, sim]]), lines, calibrationForDate,
+  };
+  const chance = (html: string, eventId: string) => parseHTML(html).document.querySelector(`[data-projection-event="${eventId}"][data-projection-player="${role.athlete_id}"] [data-side="over"] .pick-pct`)?.textContent;
+  const fallback = chance(far, today.event_id);
+  const calibrated = chance(projectionBoardHtml(game, sim, form, game.event_id, null, undefined, 'projection', lines, calibrationForDate(today.date)), today.event_id);
+  assert.ok(fallback && calibrated && fallback !== calibrated);
+  for (const eventId of [null, yesterday.event_id, today.event_id]) {
+    const all = slateBoardHtml({ ...view, eventId });
+    assert.equal(chance(all, today.event_id), calibrated);
+    assert.equal(chance(all, yesterday.event_id), fallback);
+  }
 });

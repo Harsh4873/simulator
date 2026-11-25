@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,readFileSync,writeFileSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
+import {createHash} from 'node:crypto';
 import {join} from 'node:path';
 import {gzipSync} from 'node:zlib';
 import {buildRateCard,eventOutcomes} from '../scripts/build-rate-card.ts';
@@ -19,10 +20,15 @@ test('full builder is byte-stable on identical inputs across clocks and fails cl
  const outcome=gzipSync(eventOutcomes(cache.events).map(x=>JSON.stringify({...x,sport:'NBA'})).join('\n'));
  const scoreboard={events:[{id:game.event_id,date:'2026-10-31T00:00Z',season:{year:2027,type:2},competitions:[{status:{type:{state:'pre',completed:false}},competitors:[{homeAway:'away',team:{id:game.away.team_id,displayName:'Away'}},{homeAway:'home',team:{id:game.home.team_id,displayName:'Home'}}]}]}]};
  let broken=false, depleted=false;
+ let quote: unknown = null;
  globalThis.fetch=async input=>{
   const url=String(input);
   if(url.endsWith('.gz'))return new Response(outcome);
-  if(url.includes('/scoreboard'))return Response.json(scoreboard);
+  if(url.includes('/scoreboard')){
+   const payload = structuredClone(scoreboard);
+   if (quote && payload.events[0]) Object.assign(payload.events[0].competitions[0], {odds: [quote]});
+   return Response.json(payload);
+  }
   if(url.endsWith('/injuries'))return Response.json(broken?{}:{injuries:depleted?[{injuries:rate.players.filter(p=>p.team_id===game.away.team_id).slice(4).map(p=>({athlete:{id:p.athlete_id},status:'out'}))}]:[]});
   if(url.endsWith('/teams'))return Response.json({sports:[{leagues:[{teams:[game.away,game.home].map(t=>({team:{id:t.team_id}}))}]}]});
   const team=url.match(/teams\/(\d+)\/roster/)?.[1];
@@ -42,6 +48,18 @@ test('full builder is byte-stable on identical inputs across clocks and fails cl
   broken=true;await assert.rejects(run('2026-10-30T14:00Z'),/injury/);
   assert.deepEqual(files.map(f=>readFileSync(join(root,'public/data',f),'utf8')),before);
   broken=false;
+  await t.test('publishing a new spread price changes only the slate digest', async () => {
+    quote = {provider: {name: 'Book'}, pointSpread: {home: {close: {line: '-2.5', odds: '-105'}}, away: {close: {line: '+2.5', odds: '-115'}}}};
+    await run('2026-10-30T14:05Z');
+    const [cardText, slateText, manifestText] = files.map(f => readFileSync(join(root, 'public/data', f), 'utf8'));
+    assert.equal(cardText, before[0]);
+    const manifest = JSON.parse(manifestText);
+    assert.deepEqual(manifest, {...JSON.parse(before[2]), slate_hash: createHash('sha256').update(slateText).digest('hex')});
+    const publishedSlate = JSON.parse(slateText);
+    assert.equal(publishedSlate.generated_at, JSON.parse(before[1]).generated_at);
+    assert.equal(publishedSlate.games[0].spread_quotes[0].captured_at, '2026-10-30T14:05:00Z');
+    quote = null;
+  });
   await t.test('builder fills a thin rotation instead of failing when fewer than five healthy players remain',async()=>{
     depleted=true;await run('2026-10-30T15:00Z');
     const generated=await checkGeneration(join(root,'public'));

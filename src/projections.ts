@@ -103,7 +103,7 @@ export interface ProjectionView {
   leansWaiting?: number;
   record?: PickRecord | null;
   book?: string | null;
-  propCalibration?: PropPanelCalibration | null;
+  calibrationForDate?: (tipDate: string) => PropPanelCalibration | null;
   /** Every game or the selected one. Defaults to the game when one is selected. */
   scope?: BoardScope;
   /** Simulations already in this browser, by event, for the every-game board. */
@@ -267,7 +267,7 @@ export function bookLineFor(
   return lines.get(bookKey({ event_id: eventId, athlete_id: athleteId, market })) ?? null;
 }
 
-function marketLabel(market: PropMarket): string {
+export function marketLabel(market: PropMarket): string {
   return MARKETS.find((item) => item.value === market)?.label ?? market;
 }
 
@@ -439,7 +439,7 @@ export interface AnchoredChance {
 export function anchoredChance(rawOver: number, book: Pick<BookLine, 'over_odds' | 'under_odds'>, market: PropMarket, calibration: PropPanelCalibration | null | undefined): AnchoredChance | null {
   const overNeed = americanBreakEven(book.over_odds);
   const underNeed = americanBreakEven(book.under_odds);
-  if (overNeed === null || underNeed === null || !(rawOver > 0 && rawOver < 1)) return null;
+  if (overNeed === null || underNeed === null || !Number.isFinite(rawOver) || rawOver < 0 || rawOver > 1) return null;
   const noVig = noVigFromBreakEven(overNeed, underNeed);
   if (noVig === null) return null;
   const map = quoteCalibrationFor(calibration, market, 'over');
@@ -497,8 +497,8 @@ function boardRows(
       }
       over = overRate === null ? '' : percent(overRate);
       under = underRate === null ? '' : percent(underRate);
-      if (selected && form.odds.trim() !== '') edge = edgeText(sample, form.market, form, rowLine, calibration);
-      else if (anchor && anchor.edge > 0) edge = `${anchor.side === 'over' ? 'Over' : 'Under'} ${signedEdge(anchor.edge)}`;
+      if (anchor && anchor.edge > 0) edge = `${anchor.side === 'over' ? 'Over' : 'Under'} ${signedEdge(anchor.edge)}`;
+      else if (!book && selected && form.odds.trim() !== '') edge = edgeText(sample, form.market, form, rowLine, calibration);
     }
     const games = context ? unpackPlayerGames(context.players[player.athlete_id]?.games) : [];
     const opponentId = player.team_id === game.home_team_id ? game.away_team_id : game.home_team_id;
@@ -640,7 +640,7 @@ function pickCardHtml(row: BoardRow, form: PropFormState, selected: boolean, sid
           <span class="pick-side" data-side="over"${leanTo === 'over' ? ' data-lead' : ''}><span class="pick-side-name">Over</span><span class="pick-pct">${row.over || '—'}</span>${price(row.book?.over_odds)}</span>
           <span class="pick-meter" aria-hidden="true"><span class="pick-meter-fill" style="width:${((row.overRate ?? 0) * 100).toFixed(1)}%"></span></span>
           <span class="pick-side" data-side="under"${leanTo === 'under' ? ' data-lead' : ''}><span class="pick-side-name">Under</span><span class="pick-pct">${row.under || '—'}</span>${price(row.book?.under_odds)}</span>
-        </span>${row.anchor ? `<span class="pick-anchor" title="Simulated chance and the posted price">Simulated over ${percent(row.anchor.raw)} · price to beat ${percent(row.anchor.market)}</span>` : ''}`
+        </span>${row.anchor ? `<span class="pick-anchor" title="Over chance from the simulation and from the posted prices with the margin removed">Simulated over ${percent(row.anchor.raw)} · no-vig over ${percent(row.anchor.market)}</span>` : ''}`
       : '';
   const spark = row.values.length ? `<span class="pick-spark">${sparkBarsSvg(row.values, row.line, `${row.name}: ${marketLabel(form.market)} in simulated games he played`)}</span>` : '';
   const chipForm = leanTo === 'over' || leanTo === 'under' ? { ...form, side: leanTo } : form;
@@ -754,7 +754,7 @@ export function slateBoardHtml(view: ProjectionView): string {
     const simulation = view.simulations?.get(game.event_id) ?? (view.eventId === game.event_id ? view.simulation : null);
     if (!simulation) pending += 1;
     const athleteId = view.eventId === game.event_id ? view.athleteId : null;
-    for (const row of boardRows(rate, simulation ?? null, view.form, athleteId, context, sort, view.lines, view.propCalibration)) {
+    for (const row of boardRows(rate, simulation ?? null, view.form, athleteId, context, sort, view.lines, view.calibrationForDate?.(game.date))) {
       if (row.note && row.athleteId !== view.athleteId && row.book === null) continue;
       const player = rate.players.find((item) => item.athlete_id === row.athleteId);
       if (!player || player.replacement_level) continue;
@@ -849,9 +849,10 @@ export function defenseModeHtml(view: ProjectionView): string {
 export function boardInnerHtml(view: ProjectionView): string {
   const scope = view.scope ?? (view.eventId ? 'game' : 'all');
   if (scope === 'all') return slateBoardHtml(view);
-  const rate = view.card.games.find((item) => item.event_id === view.eventId) ?? null;
-  if (!rate || !view.eventId) return '';
-  return projectionBoardHtml(rate, view.simulation, view.form, view.eventId, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines, view.propCalibration, view.slate, { filter: view.dvpFilter, focus: view.dvpFocus });
+  const game = view.slate.games.find((item) => item.event_id === view.eventId);
+  const rate = view.card.games.find((item) => item.event_id === view.eventId);
+  if (!rate || !game) return '';
+  return projectionBoardHtml(rate, view.simulation, view.form, game.event_id, view.athleteId, view.card.projection_context, view.boardSort ?? 'projection', view.lines, view.calibrationForDate?.(game.date), view.slate, { filter: view.dvpFilter, focus: view.dvpFocus });
 }
 
 export function projectionChartHtml(sample: PlayerSample | null, market: PropMarket, lineRaw: string): string {
@@ -1579,8 +1580,9 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
   const call = callFor(player.name, rate, view.overrides);
   const sample = view.simulation?.playerDraws.get(player.athlete_id) ?? null;
   const form = view.form.market === 'dd' || view.form.market === 'td' ? { ...view.form, line: '0.5' } : view.form;
+  const calibration = view.calibrationForDate?.(game.date);
   const results = view.simulation
-    ? renderPropResults(view.simulation, player.athlete_id, form, player, view.record ?? null, view.propCalibration ?? null)
+    ? renderPropResults(view.simulation, player.athlete_id, form, player, view.record ?? null, calibration ?? null)
     : '<div class="prop-prompt"><p class="prop-prompt-title">Add a line and a price</p><p class="prop-note">The price comparison appears after this game is simulated.</p></div>';
   const l10Ready = l10HistoricalValues(context, player.athlete_id, form.market).length > 0;
   const posted = bookLineFor(view.lines, game.event_id, player.athlete_id, form.market);
@@ -1620,7 +1622,7 @@ function detailHtml(view: ProjectionView, game: SlateGame, rate: RateGame): stri
           <div data-posted>${postedLineHtml(posted, form)}</div>
           ${propFormMarkup(form)}
           <div data-prop-results aria-live="polite">${results}</div>
-          <div data-measured>${measuredNoteHtml(sample, form, view.record, view.propCalibration)}</div>
+          <div data-measured>${measuredNoteHtml(sample, form, view.record, calibration)}</div>
         </div>
       </section>
       <details class="detail-more">

@@ -20,7 +20,7 @@ test('a game published with the card opens with no worker and no wait, in the bo
   }
   Object.defineProperty(window, 'matchMedia', { configurable: true, value: () => ({ matches: false }) });
   window.scrollTo = () => {};
-  const loc = { hash: '#projections' };
+  const loc = { hash: '' };
   Object.defineProperty(window, 'location', { configurable: true, value: loc });
   Object.defineProperty(globalThis, 'location', { configurable: true, value: loc });
   globals.CSS = { escape: (x: string) => x };
@@ -49,10 +49,16 @@ test('a game published with the card opens with no worker and no wait, in the bo
   const seed = fnv1a(`${game.event_id}:${card.generated_at}`);
   const meta = { generated_at: card.generated_at, input_hash: card.input_hash ?? null, model_hash: null };
   const published = JSON.stringify(summarizeSimulation(simulate(game, seed, ITERATIONS), { event_id: game.event_id, ...meta, seed }));
-  const index = JSON.stringify(publishedIndex({ ...meta, iterations: ITERATIONS }, [game.event_id]));
+  const otherGame = card.games[1];
+  const index = JSON.stringify(publishedIndex({ ...meta, iterations: ITERATIONS }, [game.event_id, otherGame.event_id]));
+  const held = new Map<string, (response: Response) => void>();
+  let holdGames = true;
   const requested: string[] = [];
   globals.fetch = async (url: string) => {
     requested.push(url);
+    if (holdGames && [game, otherGame].some((g) => url.endsWith(`/sims/${g.event_id}.json`))) {
+      return new Promise<Response>((resolve) => held.set(url.split('/').pop()!, resolve));
+    }
     const body = url.endsWith('/slate.json')
       ? JSON.stringify(slate)
       : url.endsWith('/rate-card.json')
@@ -80,8 +86,29 @@ test('a game published with the card opens with no worker and no wait, in the bo
     await build({ entryPoints: ['src/main.ts'], bundle: true, format: 'esm', outfile: join(dir, 'app.mjs'), loader: { '.css': 'empty' }, logLevel: 'silent' });
     await import(pathToFileURL(join(dir, 'app.mjs')).href);
     await wait(80);
-    assert.equal(document.querySelector('#desk')?.getAttribute('data-mode'), 'projections');
     assert.ok(requested.some((url) => url.endsWith('/sims/index.json')), 'the page asks which games were published');
+
+    // A slow score request must respect later navigation, including when the file fails and needs a local draw.
+    const click = (selector: string) => {
+      const button = document.querySelector<HTMLButtonElement>(selector);
+      assert.ok(button, selector);
+      button.click();
+    };
+    click(`button[data-event="${otherGame.event_id}"]`);
+    click(`button[data-event="${game.event_id}"]`);
+    click(`button[data-lineup="${game.event_id}"]`);
+    assert.equal(document.querySelector('#desk')?.getAttribute('data-mode'), 'lineups');
+    held.get(`${game.event_id}.json`)!(new Response(published));
+    await wait(40);
+    assert.ok(document.querySelector('[data-lineup-editor]'), 'a late box score leaves the editor open');
+    held.get(`${otherGame.event_id}.json`)!(new Response('', { status: 404 }));
+    await wait(40);
+    assert.equal(asked.length, 0, 'a superseded download never starts a fallback worker');
+    assert.equal(document.querySelector('.sim-screen'), null);
+    holdGames = false;
+    loc.hash = '#projections';
+    window.dispatchEvent(new window.Event('hashchange'));
+    assert.equal(document.querySelector('#desk')?.getAttribute('data-mode'), 'projections');
 
     // Opening the game shows its board from the published counts, with nothing to wait for.
     document.querySelector<HTMLButtonElement>(`button[data-projection-game="${game.event_id}"]`)?.click();

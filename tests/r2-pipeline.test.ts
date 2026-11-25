@@ -38,6 +38,21 @@ test('mixed manifests retry coherently and malformed versions fail closed',async
  assert.equal(result.card.generated_at,c.generated_at);assert.equal(attempts,2);
  await assert.rejects(()=>loadGeneration(async name=>name==='slate.json'?slate:name==='rate-card.json'?JSON.stringify({...c,model_version:'unknown'}):null,async s=>hash(s)),/Unsupported/);
 });
+test('a failed optional health request leaves the verified card usable on the first attempt', async () => {
+ const fixture = 'tests/fixtures/generation-2026-11-02';
+ for (const healthText of [null, '<html>Unavailable</html>', '{}']) {
+  const requests: string[] = [];
+  const result = await loadGeneration(async name => {
+   requests.push(name);
+   if (name !== 'health.json') return readFileSync(`${fixture}/${name}`, 'utf8');
+   if (healthText === null) throw new Error('Service unavailable');
+   return healthText;
+  }, async text => hash(text));
+  assert.equal(result.health, null);
+  assert.ok(result.card.games.length > 0);
+  assert.deepEqual(requests.sort(), ['health.json', 'manifest.json', 'rate-card.json', 'slate.json']);
+ }
+});
 test('a deployment cancelled by a newer one that publishes this commit counts, and one that does not still fails',async()=>{
  const sha='b'.repeat(40),request='superseded';
  const mine={display_title:request,id:7,status:'completed',conclusion:'cancelled',created_at:'2026-11-20T22:36:00Z'};

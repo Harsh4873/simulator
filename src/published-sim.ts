@@ -1,3 +1,4 @@
+import { parseDailyCandidates, type DailyCandidates } from './daily-price.ts';
 import { valueAt, type PlayerSample } from './props.ts';
 import type { ScenarioView, Simulation, ToneSeries } from './simulate.ts';
 
@@ -60,6 +61,7 @@ export interface PublishedSim extends PublishedExpectation {
 export interface PublishedIndex extends Omit<PublishedExpectation, 'event_id' | 'seed'> {
   schema_version: 1;
   events: string[];
+  daily?: DailyCandidates;
 }
 
 const COMBINED = ['pra', 'pa', 'pr', 'ra'] as const;
@@ -240,15 +242,21 @@ export function parsePublishedSim(text: string, expected: PublishedExpectation):
   return file as PublishedSim;
 }
 
-export function parsePublishedIndex(text: string, expected: Omit<PublishedExpectation, 'event_id' | 'seed'>): Set<string> {
+function publishedSlate(text: string, expected: Omit<PublishedExpectation, 'event_id' | 'seed'>): {events: Set<string>; daily: DailyCandidates | null} {
+  const empty = { events: new Set<string>(), daily: null };
   try {
     const file = JSON.parse(text) as Partial<PublishedIndex> | null;
-    if (!file || file.schema_version !== PUBLISHED_SIM_SCHEMA || !Array.isArray(file.events)) return new Set();
-    if (file.generated_at !== expected.generated_at || (file.input_hash ?? null) !== expected.input_hash || (file.model_hash ?? null) !== expected.model_hash || file.iterations !== expected.iterations) return new Set();
-    return new Set(file.events.filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id)));
+    if (!file || file.schema_version !== PUBLISHED_SIM_SCHEMA || !Array.isArray(file.events)) return empty;
+    if (file.generated_at !== expected.generated_at || (file.input_hash ?? null) !== expected.input_hash || (file.model_hash ?? null) !== expected.model_hash || file.iterations !== expected.iterations) return empty;
+    const events = new Set(file.events.filter((id): id is string => typeof id === 'string' && /^\d+$/.test(id)));
+    return { events, daily: parseDailyCandidates(file.daily) };
   } catch {
-    return new Set();
+    return empty;
   }
+}
+
+export function parsePublishedIndex(text: string, expected: Omit<PublishedExpectation, 'event_id' | 'seed'>): Set<string> {
+  return publishedSlate(text, expected).events;
 }
 
 export type DataGetter = (name: string) => Promise<string | null>;
@@ -265,13 +273,18 @@ export async function fetchPublishedSimulation(get: DataGetter, expected: Publis
 }
 
 /** The games published for this card. Empty when there is no index or it belongs to another card. */
-export async function fetchPublishedIndex(get: DataGetter, expected: Omit<PublishedExpectation, 'event_id' | 'seed'>): Promise<Set<string>> {
+export async function fetchPublishedSlate(get: DataGetter, expected: Omit<PublishedExpectation, 'event_id' | 'seed'>) {
   try {
     const text = await get('sims/index.json');
-    return text ? parsePublishedIndex(text, expected) : new Set();
+    if (text) return publishedSlate(text, expected);
   } catch {
-    return new Set();
+    // The browser can still simulate games when this optional file is unavailable.
   }
+  return { events: new Set<string>(), daily: null };
+}
+
+export async function fetchPublishedIndex(get: DataGetter, expected: Omit<PublishedExpectation, 'event_id' | 'seed'>): Promise<Set<string>> {
+  return (await fetchPublishedSlate(get, expected)).events;
 }
 
 export function publishedIndex(expected: Omit<PublishedExpectation, 'event_id' | 'seed'>, events: readonly string[]): PublishedIndex {

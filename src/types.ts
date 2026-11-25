@@ -27,6 +27,16 @@ export interface TeamSide {
   alternate_color?: string;
 }
 
+/** A two-sided point spread observed on the pregame scoreboard. The away handicap is the opposite of home_spread. */
+export interface SpreadQuote {
+  source: 'ESPN scoreboard';
+  book: string;
+  captured_at: string;
+  home_spread: number;
+  home_odds: number;
+  away_odds: number;
+}
+
 export interface SlateGame {
   event_id: string;
   date: string;
@@ -38,6 +48,7 @@ export interface SlateGame {
   away: TeamSide;
   home: TeamSide;
   spread_caption: string | null;
+  spread_quotes?: SpreadQuote[];
   neutral_site?: boolean;
   venue?:import('./schedule-context.ts').Venue;
 }

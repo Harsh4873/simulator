@@ -31,20 +31,18 @@ on:
 permissions:
   contents: read
   actions: read
-  pages: write
-  id-token: write
+  pages: read
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact_id }}
 
     steps:
       - name: Check out source
@@ -110,9 +108,43 @@ jobs:
           touch dist/.nojekyll
 
       - name: Upload Pages artifact
+        id: upload
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # The artifact listing can lag a finished upload: a deploy 0.3 s after "Artifact ID ..." once found no artifact.
+      # Deploying from its own job, after the listing shows this upload, closes that window.
+      - name: Wait for the uploaded Pages artifact to appear in this run
+        env:
+          ARTIFACT_ID: ${{ needs.build.outputs.artifact_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          endpoint="repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=github-pages"
+          for delay in 0 2 4 8 16 30; do
+            sleep "$delay"
+            # Read the listing whole: a failed request is one more retry, not a broken pipe.
+            ids="$(gh api "$endpoint" --jq '.artifacts[] | select(.expired == false and .size_in_bytes > 0) | .id' || true)"
+            if grep -Fxq "$ARTIFACT_ID" <<<"$ids"; then
+              exit 0
+            fi
+          done
+          echo "::error::Pages artifact $ARTIFACT_ID was uploaded but is unavailable in run $GITHUB_RUN_ID"
+          exit 1
 
       - name: Deploy Pages artifact
         id: deployment

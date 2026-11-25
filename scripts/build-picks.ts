@@ -79,6 +79,24 @@ export interface PicksInput {
   calibration?: ReadonlyMap<PropCalibrationGroup, PropCalibrationArtifact>;
 }
 
+function currentBookOffers({ feed, now, slate }: PicksInput): PicksFile['offers'] {
+  const books = new Set(feed.flatMap(day => day.map(line => line.book)));
+  if (books.size < 2) return undefined;
+  const offers: NonNullable<PicksFile['offers']> = {};
+  const tips = new Map(slate.games.map(game => [game.event_id, Date.parse(game.start_time)]));
+  for (const book of [...books].sort()) {
+    for (const day of feed) {
+      const posted = postedLines(day.filter(line => line.book === book), now.toISOString());
+      for (const line of posted.values()) {
+        if (!(Date.parse(line.priced_at) < (tips.get(line.event_id) ?? NaN))) continue;
+        (offers[line.event_id] ??= []).push([book, line.athlete_id, line.market, line.line, line.over_odds, line.under_odds, line.priced_at]);
+      }
+    }
+  }
+  for (const rows of Object.values(offers)) rows.sort((a, b) => a[0].localeCompare(b[0]) || a[1].localeCompare(b[1]) || a[2].localeCompare(b[2]));
+  return offers;
+}
+
 /**
  * Pure step: every file the job writes follows from these inputs. A game is simulated only before its tip, and only
  * when its card or its posted lines changed, or a line it can log is not in the ledger yet.
@@ -174,6 +192,8 @@ export function buildPicks(input: PicksInput): { picks: PicksFile; simulated: nu
     record: buildRecord([...ledgers.values()].sort((a, b) => a.date.localeCompare(b.date)), input.calibration),
   };
   if (summary) picks.calibration = summary;
+  const offers = currentBookOffers(input);
+  if (offers) picks.offers = offers;
   // Nothing new to say: keep the earlier stamp so an idle run does not rewrite the file.
   if (previous && JSON.stringify({ ...picks, built_at: '' }) === JSON.stringify({ ...previous, built_at: '' })) picks.built_at = previous.built_at;
   return { picks, simulated, opened, refreshed, settled };

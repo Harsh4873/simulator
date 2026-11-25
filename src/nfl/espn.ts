@@ -145,6 +145,28 @@ export function espnSeasonType(payload: unknown): number | null {
   return numberOf(record(record(league?.season)?.type)?.type);
 }
 
+/** The next scheduled week on ESPN's calendar, including transitions between season types. */
+export function nextEspnWeek(payload: unknown): { seasonType: number; week: number } | null {
+  const leagues = record(payload)?.leagues;
+  const calendar = record(Array.isArray(leagues) ? leagues[0] : null)?.calendar;
+  if (!Array.isArray(calendar)) return null;
+  const seasonType = espnSeasonType(payload);
+  const week = espnWeek(payload);
+  let currentFound = false;
+  for (const item of calendar) {
+    const block = record(item);
+    const type = numberOf(block?.value);
+    if (type === null || ![1, 2, 3].includes(type) || !Array.isArray(block?.entries)) continue;
+    for (const item of block.entries) {
+      const number = numberOf(record(item)?.value);
+      if (number === null || !Number.isInteger(number) || number < 1) continue;
+      if (currentFound) return { seasonType: type, week: number };
+      currentFound = type === seasonType && number === week;
+    }
+  }
+  return null;
+}
+
 export const NFL_REGULAR_WEEKS = 18;
 
 /** Regular-season weeks on the league calendar, or 18 when the calendar does not list them. */

@@ -122,7 +122,7 @@ test('the rest of the week shows under its own days, with records, after an empt
     { ...game, id: 'today', start_time: '2026-11-20T23:00:00Z', away: { ...game.away, name: 'Earlier Team' } },
   ];
   const html = renderFeedSlate(parseFeedSlate(JSON.stringify(week), 'nfl')!, now);
-  assert.match(html, /No NFL games today or yesterday\. The rest of this week is below\./);
+  assert.match(html, /No NFL games today or yesterday\. Upcoming games are below\./);
   assert.ok(html.indexOf('Sunday, Nov 22') < html.indexOf('Monday, Nov 23'), html);
   assert.match(html, /data-record>1-8</);
   assert.match(html, /data-record>5-3-1</);
@@ -132,6 +132,21 @@ test('the rest of the week shows under its own days, with records, after an empt
   bad.later[1]!.away.record = '1 and 8';
   assert.equal(parseFeedSlate(JSON.stringify(bad), 'nfl'), null);
   assert.ok(parseFeedSlate(JSON.stringify(slate(now)), 'nfl'));
+});
+
+test('upcoming NFL games move into the Chicago window before the next refresh', () => {
+  const week = slate(new Date('2026-11-25T02:00:00Z'));
+  const game = week.games[0]!;
+  week.games = [{ ...game, start_time: '2026-11-24T01:15:00Z', away: { ...game.away, name: 'Monday Team' } }];
+  week.later = [
+    { ...game, id: 'wed', start_time: '2026-11-26T01:00:00Z', away: { ...game.away, name: 'Wednesday Team' } },
+    { ...game, id: 'thu', start_time: '2026-11-26T18:00:00Z', away: { ...game.away, name: 'Thursday Team' } },
+  ];
+  const html = renderFeedSlate(week, new Date('2026-11-26T06:05:00Z'));
+  assert.match(html, /not the current Chicago window/);
+  assert.match(html, /NFL · 2 games · next kickoff Thu, Nov 26/);
+  assert.match(html, />Today<.*?Thursday Team.*?>Yesterday<.*?Wednesday Team/s);
+  assert.doesNotMatch(html, /Monday Team|No NFL games today/);
 });
 
 test('a finished esports game shows each player\'s projection and what he did, and no team result', () => {

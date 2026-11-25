@@ -20,7 +20,7 @@ import { upsertEvents, aggregateShooting, pendingEvents } from '../src/event-cac
 import { createHash } from 'node:crypto';
 import { validateGeneration } from '../src/validate-card.ts';
 import { parseCompletedSummary, type CompletedEvent } from '../src/parse-summary.ts';
-import type { OutcomeRow, RateCard, SeasonType, ShootingCache, Slate, SlateGame, TeamSide } from '../src/types.ts';
+import type { OutcomeRow, RateCard, SeasonType, ShootingCache, Slate, SlateGame, SpreadQuote, TeamSide } from '../src/types.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CACHE_PATH = join(ROOT, 'data/shooting-cache.json');
@@ -241,6 +241,54 @@ function teamSide(competitor: Record<string, unknown>): TeamSide | null {
   const alternate = hexColor(team.alternateColor);
   if (alternate) side.alternate_color = alternate;
   return side;
+}
+
+function quoteNumber(value: unknown, words: Readonly<Record<string, number>> = {}): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  const word = words[text.toUpperCase()];
+  if (word !== undefined) return word;
+  if (!/^[+-]?[0-9]+(?:\.[0-9]+)?$/.test(text)) return null;
+  const parsed = Number(text);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function currentSpreadSide(value: unknown): {line: number; odds: number} | null {
+  // ESPN calls the latest price "close" even while the game is scheduled. Books print a pick'em line as PK and +100 as EVEN.
+  if (!isRecord(value) || !isRecord(value.close)) return null;
+  const line = quoteNumber(value.close.line, {PK: 0, PICK: 0});
+  const odds = quoteNumber(value.close.odds, {EVEN: 100, EV: 100});
+  if (line === null || !Number.isSafeInteger(line * 2) || odds === null || !Number.isSafeInteger(odds) || Math.abs(odds) < 100) return null;
+  return {line, odds};
+}
+
+function spreadQuotes(competition: Record<string, unknown>, capturedAt: string): SpreadQuote[] {
+  if (!Array.isArray(competition.odds)) return [];
+  const quotes: SpreadQuote[] = [];
+  for (const offer of competition.odds) {
+    if (!isRecord(offer) || !isRecord(offer.provider) || !isRecord(offer.pointSpread)) continue;
+    const book = typeof offer.provider.name === 'string' ? offer.provider.name.trim() : '';
+    const home = currentSpreadSide(offer.pointSpread.home);
+    const away = currentSpreadSide(offer.pointSpread.away);
+    if (!book || !home || !away || home.line !== -away.line) continue;
+    quotes.push({source: 'ESPN scoreboard', book, captured_at: capturedAt, home_spread: home.line, home_odds: home.odds, away_odds: away.odds});
+  }
+  return quotes;
+}
+
+/** Attach the latest observations to a new public slate only after fitting and hashing the original games. */
+export function slateWithSpreadQuotes(slate: Slate, scoreboard: unknown, capturedAt: string): Slate {
+  if (!isRecord(scoreboard) || !Array.isArray(scoreboard.events)) return slate;
+  const events = new Map(scoreboard.events.filter(isRecord).map(event => [String(event.id), event]));
+  return { ...slate, games: slate.games.map(game => {
+    const event = events.get(game.event_id);
+    if (!event || game.status_state !== 'pre' || game.completed || !(Date.parse(capturedAt) < Date.parse(game.start_time))) return game;
+    const status = eventStatus(event);
+    if (status.status_state !== 'pre' || status.completed || !sameInstant(game.start_time, eventStart(event))) return game;
+    const quotes = spreadQuotes(firstCompetition(event), capturedAt);
+    return quotes.length ? {...game, spread_quotes: quotes} : game;
+  }) };
 }
 
 export function gamesFromScoreboard(payload: unknown, date: string, picks: unknown[]): SlateGame[] {
@@ -785,11 +833,12 @@ export async function buildRateCard(options:{now?:Date;outputRoot?:string;summar
       mkdirSync(dirname(RATE_CARD_PATH), { recursive: true });
       validateGeneration(slate, rateCard);
       console.log(JSON.stringify({team_coverage:rateCard.coverage}));
-      writeFileSync(`${SLATE_PATH}.tmp`, serialize(slate));
+      const publicSlate = serialize(slateWithSpreadQuotes(slate, scoreboard, stamp(now)));
+      writeFileSync(`${SLATE_PATH}.tmp`, publicSlate);
       writeFileSync(`${RATE_CARD_PATH}.tmp`, serialize(rateCard));
       renameSync(`${RATE_CARD_PATH}.tmp`, RATE_CARD_PATH);
       renameSync(`${SLATE_PATH}.tmp`, SLATE_PATH);
-      writeFileSync(join(outputRoot,'public/data/manifest.json'),serialize({schema_version:1,input_hash:inputHash,model_hash:modelHash,generated_at:generatedAt,slate_hash:hash(serialize(slate)),card_hash:hash(serialize(rateCard))}));
+      writeFileSync(join(outputRoot,'public/data/manifest.json'),serialize({schema_version:1,input_hash:inputHash,model_hash:modelHash,generated_at:generatedAt,slate_hash:hash(publicSlate),card_hash:hash(serialize(rateCard))}));
       writeFileSync(join(outputRoot,'.refresh-status.json'),serialize({checked_at:stamp(now),input_hash:inputHash,model_hash:modelHash,expected_date:date,completed_at:stamp(new Date())}));
       // Archive only games tipping soon: the last pre-tip card is the forecast that gets evaluated, and earlier refreshes would only add repository weight.
       const upcoming = new Set(games.filter(g => Date.parse(g.start_time)>now.getTime() && Date.parse(g.start_time)-now.getTime()<=ARCHIVE_LEAD_MS && g.status_state==='pre').map(g=>g.event_id));

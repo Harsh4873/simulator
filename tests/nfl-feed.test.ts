@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { laterGames } from '../scripts/build-nfl-slate.ts';
+import { laterGames, upcomingWeekGames } from '../scripts/build-nfl-slate.ts';
 import { applyElo, expectedHomeWin, fitElo, marginMultiplier } from '../src/nfl/elo.ts';
 import { espnRegularWeeks, espnSeasonType, historyWeeks, parseEspnScoreboard } from '../src/nfl/espn.ts';
 
@@ -129,6 +129,60 @@ test('later games are this week\'s games after the Chicago window, earliest firs
   const at = (id: string, start: string) => ({ id, start_time: start }) as Parameters<typeof laterGames>[0][number];
   const week = [at('mon', '2026-11-24T01:15:00.000Z'), at('thu', '2026-11-20T01:15:00.000Z'), at('sun', '2026-11-22T18:00:00.000Z'), at('sun', '2026-11-22T18:00:00.000Z'), at('tonight', '2026-11-20T23:00:00.000Z')];
   assert.deepEqual(laterGames(week, new Set(['thu']), '2026-11-20').map((game) => game.id), ['sun', 'mon']);
+});
+
+test('a completed NFL week rolls forward to the next calendar week', async () => {
+  const event = (id: string, date: string) => ({
+    id, date, competitions: [{ competitors: [
+      { homeAway: 'away', team: { displayName: 'Away', abbreviation: 'A' } },
+      { homeAway: 'home', team: { displayName: 'Home', abbreviation: 'H' } },
+    ] }],
+  });
+  const monday = event('mon', '2026-11-24T01:15:00Z');
+  const wednesday = event('wed', '2026-11-26T01:00:00Z');
+  const scoreboard = {
+    events: [monday], season: { type: 2 }, week: { number: 11 },
+    leagues: [{ calendar: [
+      { value: '2', entries: [{ value: '11' }, { value: '12' }] },
+      { value: '3', entries: [{ value: '1' }] },
+    ] }],
+  };
+  const window = new Set(['mon']);
+  const upcoming = await upcomingWeekGames(scoreboard, window, '2026-11-24', 2026, async (url) => {
+    assert.match(url, /dates=2026&seasontype=2&week=12$/);
+    return { events: [wednesday, wednesday, monday] };
+  });
+  assert.deepEqual(upcoming.map((game) => game.id), ['wed']);
+
+  scoreboard.week.number = 12;
+  await upcomingWeekGames(scoreboard, window, '2026-11-24', 2026, async (url) => {
+    assert.match(url, /dates=2026&seasontype=3&week=1$/);
+    return { events: [] };
+  });
+  const noFetch = async () => assert.fail('another scoreboard was unnecessary');
+  scoreboard.events = [wednesday];
+  assert.equal((await upcomingWeekGames(scoreboard, window, '2026-11-24', 2026, noFetch)).length, 1);
+  scoreboard.events = [];
+  scoreboard.season.type = 3;
+  scoreboard.week.number = 1;
+  assert.deepEqual(await upcomingWeekGames(scoreboard, window, '2026-11-24', 2026, noFetch), []);
+});
+
+test('a next-week scoreboard that fails to load leaves the slate buildable', async () => {
+  const scoreboard = {
+    events: [], season: { type: 2 }, week: { number: 11 },
+    leagues: [{ calendar: [{ value: '2', entries: [{ value: '11' }, { value: '12' }] }] }],
+  };
+  const report = console.error;
+  const errors: string[] = [];
+  console.error = (line: string) => errors.push(line);
+  try {
+    const upcoming = await upcomingWeekGames(scoreboard, new Set(), '2026-11-24', 2026, async () => { throw new Error('timeout'); });
+    assert.deepEqual(upcoming, []);
+  } finally {
+    console.error = report;
+  }
+  assert.deepEqual(errors, ['NFL week 12 was not loaded: timeout']);
 });
 
 test('a blowout moves ratings more than a field goal, and a favourite\'s win counts for less', () => {

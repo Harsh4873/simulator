@@ -59,7 +59,9 @@ import {
   type SupportMode,
 } from './projections.ts';
 import { unpackPlayerGames, type DefenseSlot } from './projection-context.ts';
-import { fetchPublishedIndex, fetchPublishedSimulation, type PublishedExpectation } from './published-sim.ts';
+import { dailyPanelState, type DailyCandidates } from './daily-price.ts';
+import { renderDailyPanel } from './daily-panel.ts';
+import { fetchPublishedSlate, fetchPublishedSimulation, type PublishedExpectation } from './published-sim.ts';
 import { hydrateSimulationCache, persistSimulationEntry } from './simulation-cache.ts';
 import { parseEsportsDocument, renderEsports } from './esports/props.ts';
 import { parseFeedSlate, renderFeedSlate, type FeedGame, type FeedSlate } from './feed.ts';
@@ -93,7 +95,6 @@ let card: RateCard | null = null;
 let health:RefreshHealth|null=null;
 let bound = false;
 let running = false;
-let activeWorker: Worker | null = null;
 let cancelRun: (()=>void) | null = null;
 let prefetchWorker: Worker | null = null;
 let cancelPrefetch: (()=>void) | null = null;
@@ -138,6 +139,8 @@ let propCalibration: { table: Map<PropCalibrationGroup, PropCalibrationCard>; ar
 let localLeans = new WeakMap<Simulation, Lean[]>();
 /** Games whose 10,000 draws were published with this card, so they are fetched instead of simulated. */
 let publishedEvents = new Set<string>();
+let dailyCandidates: DailyCandidates | null = null;
+let slateHash: string | null = null;
 const publishedInFlight = new Map<string, Promise<Simulation | null>>();
 let prefetchingPublished = false;
 /** Set only while this game's worker is drawing. A cache hit never sets it. */
@@ -281,7 +284,9 @@ async function loadPublishedIndex(): Promise<void> {
   const { event_id: _event, seed: _seed, ...rest } = expected;
   void _event;
   void _seed;
-  publishedEvents = await fetchPublishedIndex(getData, rest);
+  const published = await fetchPublishedSlate(getData, rest);
+  publishedEvents = published.events;
+  dailyCandidates = published.daily;
 }
 
 /**
@@ -345,7 +350,16 @@ function deskTabName(): 'games' | 'projections' {
   return desk?.dataset.mode === 'projections' ? 'projections' : 'games';
 }
 
+function paintDailyPanel(): void {
+  const root = document.getElementById('daily-panel');
+  if (!root || !slate || !card || currentSport() !== 'nba' || !['games', 'empty', 'projections'].includes(desk?.dataset.mode ?? '')) return;
+  const now = new Date();
+  const state = dailyPanelState(slate, dailyCandidates, slateHash, picks, now, !!freshnessIssue(slate, card, now, health));
+  root.innerHTML = renderDailyPanel(state);
+}
+
 function markDeskTabs(): void {
+  paintDailyPanel();
   const selected = deskTabName();
   document.querySelectorAll<HTMLButtonElement>('[data-desk-tab]').forEach((button) => {
     button.setAttribute('aria-selected', button.dataset.deskTab === selected ? 'true' : 'false');
@@ -378,7 +392,7 @@ function projectionView(): ProjectionView | null {
     ...slateLeans(),
     record: picks?.record ?? null,
     book: picks?.book ?? null,
-    propCalibration: panelCalibration(projectionEvent ? slate.games.find((item) => item.event_id === projectionEvent)?.date ?? null : null),
+    calibrationForDate: panelCalibration,
     scope: projectionScope === 'game' && projectionEvent ? 'game' : 'all',
     simulations: cachedSimulations(),
     boardLimit: projectionBoardExpanded ? null : BOARD_LIMIT,
@@ -664,15 +678,21 @@ function scheduleNextPrefetch(): void {
   }, 180);
 }
 
+function leaveSimulation(): void {
+  // Published downloads can still finish after the viewer leaves, even if no worker was started.
+  simulationEpoch += 1;
+  cancelRun?.();
+  running = false;
+  drawingEvent = null;
+  drawingProgress = 0;
+  desk?.setAttribute('aria-busy', 'false');
+}
+
 function showProjections(): void {
   if (currentSport() !== 'nba') return;
   if (!slate || !card || !desk || !projectionsRoot) return;
   const entering = desk.dataset.mode !== 'projections';
-  if (entering) {
-    cancelRun?.();
-    drawingEvent = null;
-    drawingProgress = 0;
-  }
+  if (entering) leaveSimulation();
   unmountSheet();
   const games = gamesFrame();
   if (games) games.hidden = true;
@@ -692,9 +712,7 @@ function showSlate(): void {
   if (currentSport() !== 'nba') return;
   if (!slateRoot || !slate || !card) return;
   stopPrefetch();
-  cancelRun?.();
-  drawingEvent = null;
-  drawingProgress = 0;
+  leaveSimulation();
   view = null;
   panelAthlete = null;
   boxRoot?.replaceChildren();
@@ -842,7 +860,6 @@ function drawSimulation(
     };
     const finish = () => {
       worker?.terminate();
-      if (worker && activeWorker === worker) activeWorker = null;
       if (cancelRun === cancel) cancelRun = null;
     };
     const cancel = () => {
@@ -857,7 +874,6 @@ function drawSimulation(
         return;
       }
       worker = new Worker(new URL('./simulation-worker.ts', import.meta.url), { type: 'module' });
-      activeWorker = worker;
       worker.onmessage = (event: MessageEvent<{ result?: Simulation; error?: string; progress?: number }>) => {
         if (epoch !== simulationEpoch) {
           finish();
@@ -894,6 +910,11 @@ async function runSimulation(
   const game = slate.games.find((item) => item.event_id === eventId);
   const base = rateGame(eventId);
   if (!game || !base) return null;
+  if (running) {
+    if (options.modalClock !== false || !cancelRun) return null;
+    leaveSimulation();
+  }
+  const epoch = ++simulationEpoch;
   const overrides = editsFor(eventId);
   const rates = applyLineupOverrides(base, overrides);
   const key = simulationKey(eventId, overrides);
@@ -908,25 +929,15 @@ async function runSimulation(
     return cached;
   }
   if (!Object.keys(overrides).length && publishedEvents.has(eventId)) {
-    const epoch = simulationEpoch;
     const published = await publishedSimulation(eventId);
-    if (published && epoch === simulationEpoch) {
+    if (epoch !== simulationEpoch) return null;
+    if (published) {
       const stored = simulationCache.get(key) ?? published;
       if (!simulationCache.has(key)) storeCachedSimulation(key, published);
       view = { game, rates, result: stored };
       return stored;
     }
-    if (published) return null;
   }
-  if (running) {
-    if (options.modalClock !== false || !cancelRun) return null;
-    simulationEpoch += 1;
-    const cancel = cancelRun;
-    cancelRun = null;
-    running = false;
-    cancel();
-  }
-  const epoch = simulationEpoch;
   stopPrefetch();
   running = true;
   drawingEvent = eventId;
@@ -995,24 +1006,23 @@ async function onSimulate(button: HTMLButtonElement): Promise<void> {
 async function simulateProjection(eventId: string): Promise<void> {
   try {
     const result = await runSimulation(eventId, { modalClock: false });
+    if (!result || desk?.dataset.mode !== 'projections' || projectionEvent !== eventId) return;
     if (drawingEvent === eventId) {
       drawingEvent = null;
       drawingProgress = 0;
     }
-    if (desk?.dataset.mode !== 'projections') return;
-    if (result && projectionAthlete && (propForm.line.trim() === '' || projectionAutoLine)) {
+    if (projectionAthlete && (propForm.line.trim() === '' || projectionAutoLine)) {
       applyDefaultLine(propForm.market, result.playerDraws.get(projectionAthlete) ?? null, projectionEvent, projectionAthlete);
       projectionAutoLine = false;
     }
     paintProjection();
-    if (result) return;
   } catch (error) {
     if (error instanceof Error && error.message === 'Simulation cancelled') return;
     if (drawingEvent === eventId) {
       drawingEvent = null;
       drawingProgress = 0;
     }
-    if (desk?.dataset.mode !== 'projections' || !projectionsRoot) return;
+    if (desk?.dataset.mode !== 'projections' || projectionEvent !== eventId || !projectionsRoot) return;
     paintProjection();
     const status = document.createElement('p');
     status.setAttribute('role', 'alert');
@@ -1027,9 +1037,7 @@ function showLineups(eventId: string, focusSelector?: string): void {
   const base = rateGame(eventId);
   if (!game || !base) return;
   stopPrefetch();
-  cancelRun?.();
-  drawingEvent = null;
-  drawingProgress = 0;
+  leaveSimulation();
   lineupEvent = eventId;
   panelAthlete = null;
   panelBody?.replaceChildren();
@@ -1710,11 +1718,9 @@ async function load(): Promise<void> {
       const response=await fetch(`${DATA_BASE}${name}`,{cache:'no-store',signal:AbortSignal.timeout(15000)});
       if(response.status===404&&['manifest.json','health.json'].includes(name))return null;
       if(!response.ok)throw new Error('Data fetch failed');
-      const text=await response.text();
-      if(name==='health.json'){try{JSON.parse(text);}catch{return null;}}
-      return text;
+      return response.text();
     },async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join(''));
-    slate=loaded.slate;card=loaded.card;health=loaded.health;
+    slate=loaded.slate;card=loaded.card;health=loaded.health;slateHash=loaded.slateHash;
     // The optional files load side by side, so a slow one does not stack its wait on the others.
     await Promise.all([loadPicks(), loadPropCalibration(), loadPublishedIndex()]);
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
@@ -1831,12 +1837,7 @@ function parkNbaViews(): void {
   nflView = null;
   nflPanelPlayer = null;
   stopPrefetch();
-  simulationEpoch += 1;
-  running = false;
-  drawingEvent = null;
-  drawingProgress = 0;
-  if (desk) desk.setAttribute('aria-busy', 'false');
-  cancelRun?.();
+  leaveSimulation();
   view = null;
   panelAthlete = null;
   lineupEvent = null;
@@ -2172,7 +2173,8 @@ void load();
 function recheckFreshness(): void {
   paintFreshness();
   if (currentSport() !== 'nba') return;
-  if(slate && card && freshnessIssue(slate,card,new Date(),health)){stopPrefetch();activeWorker?.terminate();cancelRun?.();showSlate();}
+  if (slate && card && freshnessIssue(slate, card, new Date(), health)) showSlate();
+  else paintDailyPanel();
 }
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)recheckFreshness();});
 setInterval(recheckFreshness,60000);
