@@ -4241,13 +4241,27 @@ html[data-layout="phone"] tbody td:is([data-col], [data-label]) > * {
   font-size: clamp(1.125rem, 2vw, 1.45rem);
 }
 
-.daily-intro, .daily-note, .daily-match, .daily-stamp, .daily-evidence, .daily-offer-empty p {
+.daily-intro, .daily-note, .daily-match, .daily-stamp, .daily-evidence, .daily-empty, .daily-record-sub, .daily-result {
   color: var(--muted);
   line-height: 1.45;
 }
 
 .daily-intro { margin: 0.35rem 0 0; font-size: 0.875rem; }
-.daily-note, .daily-stamp, .daily-match, .daily-evidence { margin: 0.65rem 0 0; font-size: 0.8rem; }
+.daily-note, .daily-stamp, .daily-match, .daily-evidence, .daily-result { margin: 0.65rem 0 0; font-size: 0.8rem; }
+.daily-empty { margin: 0.75rem 0 0; font-size: 0.85rem; }
+
+/* The title sits beside the running record of every posted pick. */
+.daily-head { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem 1.5rem; }
+.daily-record { margin: 0; text-align: right; }
+.daily-record-main { margin: 0; color: var(--text); font-size: 0.95rem; }
+.daily-record-label { color: var(--muted); font-size: 0.8rem; font-weight: 600; }
+.daily-record-main strong { font: 700 1.15rem var(--mono); }
+.daily-record-units { margin-left: 0.35rem; font: 700 0.95rem var(--mono); color: var(--muted); }
+.daily-record-units[data-units="up"] { color: var(--accent); }
+.daily-record-units[data-units="down"] { color: var(--danger); }
+.daily-record-sub { margin: 0.2rem 0 0; font-size: 0.75rem; }
+html[data-layout="phone"] .daily-record { text-align: left; }
+.daily-day { margin: 1.1rem 0 0; color: var(--muted); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; }
 
 .daily-offers {
   display: grid;
@@ -4266,16 +4280,24 @@ html[data-layout="phone"] tbody td:is([data-col], [data-label]) > * {
   overflow-wrap: anywhere;
 }
 
-.daily-offer header { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem; }
-.daily-offer h3, .daily-grade { margin: 0; font-size: 0.8rem; font-weight: 700; }
-.daily-offer h3 { color: var(--muted); }
+.daily-offer header { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.35rem 0.6rem; }
+.daily-offer h4, .daily-grade, .daily-status { margin: 0; font-size: 0.8rem; font-weight: 700; }
+.daily-offer h4 { color: var(--muted); }
+.daily-status { margin-left: auto; padding: 0.1rem 0.5rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-weight: 600; }
+.daily-status[data-state="open"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.daily-status[data-state="win"] { color: var(--accent); border-color: var(--accent); }
+.daily-status[data-state="loss"] { color: var(--danger); border-color: var(--danger); }
+/* A started or settled pick keeps its line and result, without the pregame chances. */
+.daily-offer-compact { padding: 0.8rem 1rem; }
+.daily-offer-compact .daily-selection { font-size: 1rem; }
 .daily-grade { color: var(--gold); }
 .daily-grade[data-grade="BET"], .daily-price strong { color: var(--accent); }
 /* An unproven edge is not a qualified pick: a muted label and a dashed outline keep it from reading like one. */
 .daily-grade[data-grade="EDGE"] { color: var(--muted); }
 .daily-offer[data-grade="EDGE"] { border-style: dashed; }
 .daily-selection { margin: 0.6rem 0 0; font-size: 1.15rem; font-weight: 700; }
-.daily-price, .daily-projection, .daily-offer-empty p { margin: 0.4rem 0 0; font-size: 0.875rem; }
+.daily-price, .daily-projection { margin: 0.4rem 0 0; font-size: 0.875rem; }
+.daily-result { color: var(--text); font-weight: 600; }
 .daily-price strong { font: 700 1rem var(--mono); }
 
 .daily-metrics {

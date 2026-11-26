@@ -4,7 +4,8 @@ import test from 'node:test';
 import { buildPicks } from '../scripts/build-picks.ts';
 import type { BookLine } from '../src/book-lines.ts';
 import { dailyPropForGame, dailyPropOffer, unprovenEvidence, type DailyPropPick } from '../src/daily-prop.ts';
-import { compareOffers, dailyPanelState, type DailyCandidates } from '../src/daily-price.ts';
+import { compareOffers } from '../src/daily-price.ts';
+import { emptyDay, postDailyPicks } from '../src/daily-ledger.ts';
 import { parsePicksFile } from '../src/picks.ts';
 import { parsePublishedPropCalibration, type PropCalibrationArtifact } from '../src/prop-calibration.ts';
 import type { RateCard, Slate } from '../src/types.ts';
@@ -139,14 +140,11 @@ test('an unproven edge still needs every other check, never becomes a bet, and n
   const rated = { ...rate, players: [{ ...player, as_of: at, model_version: card.model_version, calibration: released }] };
   assert.equal(select(now, game, calibration, rated)?.grade, 'EDGE');
 
-  // On the panel any qualified pick, however small its return, comes before an unproven edge.
+  // When a pick is posted, any qualified pick, however small its return, comes before an unproven edge.
   const edge = { ...dailyPropOffer(select()!), expectedReturn: 0.4 };
   const qualified = { ...dailyPropOffer(dailyPropForGame(game, rate, simulation, build([offer]), card, calibration, now)!), eventId: 'other', expectedReturn: 0.02 };
   assert.ok(compareOffers(qualified, edge) < 0);
-  const later = { ...game, event_id: 'other' };
-  const daily: DailyCandidates = { date: game.date, slateHash: 'c'.repeat(64), picksBuiltAt: losing.built_at, props: [edge, qualified], spreads: [] };
-  const state = (props: DailyCandidates['props']) =>
-    dailyPanelState({ ...slate, date: game.date, games: [game, later] }, { ...daily, props }, daily.slateHash, losing, now, false).prop;
-  assert.equal(state([edge, qualified])?.grade, 'LEAN');
-  assert.equal(state([edge])?.grade, 'EDGE');
+  assert.deepEqual(postDailyPicks(emptyDay(game.date), { prop: [edge, qualified], spread: [] }, now).map((pick) => pick.grade), ['LEAN']);
+  assert.deepEqual(postDailyPicks(emptyDay(game.date), { prop: [edge], spread: [] }, now).map((pick) => [pick.grade, pick.settle]),
+    [['EDGE', { kind: 'prop', athlete_id: player.athlete_id, market: 'pts', side: 'over', line: 15 }]]);
 });

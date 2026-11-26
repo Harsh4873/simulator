@@ -50,6 +50,7 @@ export function dailySpreadForGame(game: SlateGame, card: RateCard, sim: Pick<Si
         evidence: released
           ? 'The simulated margins have passed their release checks against settled games.'
           : 'Not a qualified pick: spread leans are not graded against results yet, and the simulated margins have not passed their release checks.',
+        settle: { kind: 'spread', side, home_spread: q.home_spread, home: game.home.abbreviation, away: game.away.abbreviation },
       });
     }
   }

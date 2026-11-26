@@ -14,6 +14,7 @@
     "rate-card": "node --experimental-strip-types scripts/build-rate-card.ts",
     "slates": "node --experimental-strip-types scripts/build-slates.ts",
     "picks": "node --experimental-strip-types scripts/build-picks.ts",
+    "daily": "node --experimental-strip-types scripts/build-daily.ts",
     "matchups": "node --experimental-strip-types scripts/build-matchups.ts",
     "calibrate-props": "node --experimental-strip-types scripts/fit-prop-calibration.ts",
     "picks:backfill": "node --experimental-strip-types scripts/backfill-picks.ts",

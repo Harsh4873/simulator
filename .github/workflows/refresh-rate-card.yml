@@ -59,6 +59,11 @@ jobs:
         # Prices are read after the draws exist and never reach the fit. A failure here leaves the rate card as built.
         continue-on-error: true
         run: npm run picks
+      - name: Post and grade the NBA bets of the day
+        # Posts a pick only where a category has none open, and grades posted picks from the scoreboard's finals and the
+        # cached box scores. A failure leaves every posted pick and the published file as they were.
+        continue-on-error: true
+        run: npm run daily
       - name: Write the matchup report
         # Reads the shooting cache and the committed card. A failure leaves the previous file.
         continue-on-error: true
@@ -97,6 +102,13 @@ jobs:
           fi
           if [ -f public/data/matchups.json ]; then
             git add -- public/data/matchups.json
+          fi
+          # Every posted bet of the day, and the page's copy of the slate's two days with the record.
+          if [ -f public/data/daily.json ]; then
+            git add -- public/data/daily.json
+          fi
+          if [ -d data/daily-ledger ]; then
+            git add -- data/daily-ledger
           fi
           # NFL box scores the simulation reads. Off the site; only newly finished games change it.
           if [ -f data/nfl-cache.json ]; then

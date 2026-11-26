@@ -59,9 +59,9 @@ import {
   type SupportMode,
 } from './projections.ts';
 import { unpackPlayerGames, type DefenseSlot } from './projection-context.ts';
-import { dailyPanelState, type DailyCandidates } from './daily-price.ts';
+import { dailyPanelState, parseDailyFile, type DailyFile } from './daily-ledger.ts';
 import { renderDailyPanel } from './daily-panel.ts';
-import { fetchPublishedSlate, fetchPublishedSimulation, type PublishedExpectation } from './published-sim.ts';
+import { fetchPublishedIndex, fetchPublishedSimulation, type PublishedExpectation } from './published-sim.ts';
 import { hydrateSimulationCache, persistSimulationEntry } from './simulation-cache.ts';
 import { parseEsportsDocument, renderEsports } from './esports/props.ts';
 import { parseFeedSlate, renderFeedSlate, type FeedGame, type FeedSlate } from './feed.ts';
@@ -139,8 +139,8 @@ let propCalibration: { table: Map<PropCalibrationGroup, PropCalibrationCard>; ar
 let localLeans = new WeakMap<Simulation, Lean[]>();
 /** Games whose 10,000 draws were published with this card, so they are fetched instead of simulated. */
 let publishedEvents = new Set<string>();
-let dailyCandidates: DailyCandidates | null = null;
-let slateHash: string | null = null;
+/** The posted NBA bets of the day and their record. Optional: the page works without it. */
+let daily: DailyFile | null = null;
 const publishedInFlight = new Map<string, Promise<Simulation | null>>();
 let prefetchingPublished = false;
 /** Set only while this game's worker is drawing. A cache hit never sets it. */
@@ -284,9 +284,7 @@ async function loadPublishedIndex(): Promise<void> {
   const { event_id: _event, seed: _seed, ...rest } = expected;
   void _event;
   void _seed;
-  const published = await fetchPublishedSlate(getData, rest);
-  publishedEvents = published.events;
-  dailyCandidates = published.daily;
+  publishedEvents = await fetchPublishedIndex(getData, rest);
 }
 
 /**
@@ -354,7 +352,7 @@ function paintDailyPanel(): void {
   const root = document.getElementById('daily-panel');
   if (!root || !slate || !card || currentSport() !== 'nba' || !['games', 'empty', 'projections'].includes(desk?.dataset.mode ?? '')) return;
   const now = new Date();
-  const state = dailyPanelState(slate, dailyCandidates, slateHash, picks, now, !!freshnessIssue(slate, card, now, health));
+  const state = dailyPanelState(daily, slate, picks, now);
   root.innerHTML = renderDailyPanel(state);
 }
 
@@ -1696,6 +1694,15 @@ async function loadPropCalibration(): Promise<void> {
   }
 }
 
+async function loadDaily(): Promise<void> {
+  try {
+    const response = await fetch(`${DATA_BASE}daily.json`, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+    daily = response.ok ? parseDailyFile(await response.text()) : null;
+  } catch {
+    daily = null;
+  }
+}
+
 async function loadPicks(): Promise<void> {
   picks = null;
   bookLines = new Map();
@@ -1720,9 +1727,9 @@ async function load(): Promise<void> {
       if(!response.ok)throw new Error('Data fetch failed');
       return response.text();
     },async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join(''));
-    slate=loaded.slate;card=loaded.card;health=loaded.health;slateHash=loaded.slateHash;
+    slate=loaded.slate;card=loaded.card;health=loaded.health;
     // The optional files load side by side, so a slow one does not stack its wait on the others.
-    await Promise.all([loadPicks(), loadPropCalibration(), loadPublishedIndex()]);
+    await Promise.all([loadPicks(), loadPropCalibration(), loadPublishedIndex(), loadDaily()]);
     lineupEdits=readStoredLineups(storedLineups(),slate.games.map(g=>g.event_id));
     bind();
     await hydrateSimulationCache(generationKey(), simulationCache);

@@ -11,6 +11,7 @@ import type { RateCard, Slate } from '../src/types.ts';
 
 const KNOWN_DATA = [
   '/slate.json',
+  '/daily.json',
   '/rate-card.json',
   '/manifest.json',
   '/health.json',

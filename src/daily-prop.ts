@@ -127,5 +127,5 @@ export function dailyPropOffer(pick: DailyPropPick): DailyPropPick & DailyOffer 
   const projectionLabel = milestone
     ? `Simulated ${stat} in ${(pick.projection * 100).toFixed(0)}% of games played`
     : `Model projection ${pick.projection.toFixed(1)} ${stat}`;
-  return { ...pick, title, projectionLabel };
+  return { ...pick, title, projectionLabel, settle: { kind: 'prop', athlete_id: pick.athleteId, market: pick.market, side: pick.side, line: pick.line } };
 }
