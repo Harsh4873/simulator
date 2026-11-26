@@ -1,4 +1,4 @@
-import type { DailyPanelPick, DailyPanelState, DailyRecord, DailyRecordLine } from './daily-ledger.ts';
+import type { DailyCategory, DailyPanelPick, DailyPanelState, DailyRecordLine } from './daily-ledger.ts';
 import type { DailyGrade } from './daily-price.ts';
 import { formatTip } from './date.ts';
 import { escapeHtml } from './slate.ts';
@@ -11,6 +11,24 @@ function timeTag(iso: string): string {
 
 const GRADE_LABEL: Readonly<Record<DailyGrade, string>> = { BET: 'Qualified bet', LEAN: 'Model lean', EDGE: 'Unproven edge' };
 const CATEGORY_LABEL = { prop: 'Player prop', spread: 'Game spread' } as const;
+
+/** Games carries the team bets (game spreads); Projections carries the player props. */
+const PANEL: Readonly<Record<DailyCategory, { title: string; first: string; intro: string; none: string; waiting: string }>> = {
+  spread: {
+    title: 'NBA team bets of the day',
+    first: 'The record starts with the first posted team bet.',
+    intro: 'Each pick is the strongest game spread left on the slate, read from the same 10,000 simulations as the box scores at the best tracked price. It is posted once, at the line and price shown, and stays up until its game tips; then the next game’s best spread is posted. Every posted pick counts in the record. Player props are on Projections.',
+    none: 'No team bets were posted today.',
+    waiting: 'Today’s team bets and their record are awaiting publication.',
+  },
+  prop: {
+    title: 'NBA player prop bets of the day',
+    first: 'The record starts with the first posted player prop.',
+    intro: 'Each pick is the strongest player prop left on the slate, read from the same 10,000 simulations as the box scores at the best tracked price. It is posted once, at the line and price shown, and stays up until its game tips; then the next game’s best prop is posted. Every posted pick counts in the record. Team bets are on Games.',
+    none: 'No player props were posted today.',
+    waiting: 'Today’s player props and their record are awaiting publication.',
+  },
+};
 
 export function formatUnits(value: number): string {
   const sign = value > 0 ? '+' : value < 0 ? '−' : '';
@@ -25,17 +43,18 @@ function monthDay(date: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' }).format(new Date(`${date}T12:00:00Z`));
 }
 
-function recordHtml(record: DailyRecord | null): string {
-  if (!record || !record.all.picks) return '<p class="daily-record">The record starts with the first posted pick.</p>';
-  const { all, spread, prop } = record;
+function recordHtml(line: DailyRecordLine | null, category: DailyCategory): string {
+  if (!line || !line.picks) return `<p class="daily-record">${PANEL[category].first}</p>`;
   const extra = [
-    all.pushes ? `${all.pushes} push${all.pushes === 1 ? '' : 'es'}` : '',
-    all.voids ? `${all.voids} void` : '',
-    all.pending ? `${all.pending} pending` : '',
+    `${line.picks} posted`,
+    line.pushes ? `${line.pushes} push${line.pushes === 1 ? '' : 'es'}` : '',
+    line.voids ? `${line.voids} void` : '',
+    line.pending ? `${line.pending} pending` : '',
+    line.from ? `since ${escapeHtml(monthDay(line.from))}` : '',
   ].filter(Boolean).join(' · ');
-  return `<div class="daily-record" aria-label="Record of every posted bet of the day">
-    <p class="daily-record-main"><span class="daily-record-label">Record</span> <strong data-record-tally>${tally(all)}</strong> <span class="daily-record-units" data-units="${all.units > 0 ? 'up' : all.units < 0 ? 'down' : 'flat'}">${formatUnits(all.units)}</span></p>
-    <p class="daily-record-sub">Spreads ${tally(spread)} · Props ${tally(prop)}${extra ? ` · ${extra}` : ''}${record.from ? ` · since ${escapeHtml(monthDay(record.from))}` : ''}</p>
+  return `<div class="daily-record" aria-label="Record of every posted ${category === 'prop' ? 'player prop' : 'team bet'}">
+    <p class="daily-record-main"><span class="daily-record-label">Record</span> <strong data-record-tally>${tally(line)}</strong> <span class="daily-record-units" data-units="${line.units > 0 ? 'up' : line.units < 0 ? 'down' : 'flat'}">${formatUnits(line.units)}</span></p>
+    <p class="daily-record-sub">${extra}</p>
   </div>`;
 }
 
@@ -96,9 +115,10 @@ function pickCard(pick: DailyPanelPick): string {
 }
 
 export function renderDailyPanel(state: DailyPanelState): string {
+  const panel = PANEL[state.category];
   if (state.status === 'unavailable') {
-    return `<section class="daily-picks" aria-labelledby="daily-picks-title">
-    <h2 id="daily-picks-title">NBA bets of the day</h2><p class="daily-intro">Today’s posted picks and their record are awaiting publication.</p>
+    return `<section class="daily-picks" data-category="${state.category}" aria-labelledby="daily-picks-title">
+    <h2 id="daily-picks-title">${panel.title}</h2><p class="daily-intro">${panel.waiting}</p>
   </section>`;
   }
   const shown = [...state.today, ...state.yesterday];
@@ -107,13 +127,13 @@ export function renderDailyPanel(state: DailyPanelState): string {
     : '';
   const notes = state.notes.map((note) => `<p class="daily-empty">${escapeHtml(note)}</p>`).join('');
   const today = state.today.length ? `<div class="daily-offers">${state.today.map(pickCard).join('')}</div>` : '';
-  const todayEmpty = !state.today.length && !state.notes.length ? '<p class="daily-empty">No NBA bets of the day were posted today.</p>' : '';
+  const todayEmpty = !state.today.length && !state.notes.length ? `<p class="daily-empty">${panel.none}</p>` : '';
   const yesterday = state.yesterday.length
     ? `<h3 class="daily-day">Yesterday</h3><div class="daily-offers">${state.yesterday.map(pickCard).join('')}</div>`
     : '';
-  return `<section class="daily-picks" aria-labelledby="daily-picks-title">
-    <header class="daily-head"><h2 id="daily-picks-title">NBA bets of the day</h2>${recordHtml(state.record)}</header>
-    <p class="daily-intro">Each pick is the strongest player prop or spread left on the slate, read from the same 10,000 simulations as the box scores at the best tracked price. It is posted once, at the line and price shown, and stays up until its game tips; then the next game’s best pick is posted. Every posted pick counts in the record.</p>
+  return `<section class="daily-picks" data-category="${state.category}" aria-labelledby="daily-picks-title">
+    <header class="daily-head"><h2 id="daily-picks-title">${panel.title}</h2>${recordHtml(state.record, state.category)}</header>
+    <p class="daily-intro">${panel.intro}</p>
     <h3 class="daily-day">Today</h3>${today}${notes}${todayEmpty}
     ${yesterday}
     ${shown.length ? `<p class="daily-note">No pick is a sure thing: a lean can lose, and leans have limited validation.${unproven} Win chance and break-even exclude pushes and voids; estimated net return includes them. The record grades each pick at its posted line and price, one unit each.</p>` : ''}

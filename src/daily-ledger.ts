@@ -50,6 +50,8 @@ export interface DailyRecordLine {
   voids: number;
   pending: number;
   units: number;
+  /** First date with a posted pick in this line. */
+  from: string | null;
 }
 
 export interface DailyRecord {
@@ -173,7 +175,7 @@ export function settleDailyPicks(days: Iterable<DailyLedgerDay>, finals: Readonl
 }
 
 function emptyLine(): DailyRecordLine {
-  return { picks: 0, wins: 0, losses: 0, pushes: 0, voids: 0, pending: 0, units: 0 };
+  return { picks: 0, wins: 0, losses: 0, pushes: 0, voids: 0, pending: 0, units: 0, from: null };
 }
 
 export function dailyRecord(days: Iterable<DailyLedgerDay>): DailyRecord {
@@ -182,6 +184,7 @@ export function dailyRecord(days: Iterable<DailyLedgerDay>): DailyRecord {
     for (const pick of day.picks) {
       if (!record.from || pick.date < record.from) record.from = pick.date;
       for (const line of [record.all, record[pick.category]]) {
+        if (!line.from || pick.date < line.from) line.from = pick.date;
         line.picks += 1;
         const outcome = pick.result?.outcome;
         if (outcome === 'win') line.wins += 1;
@@ -233,7 +236,8 @@ export function isPostedPick(value: unknown): value is PostedDailyPick {
 function isRecordLine(value: unknown): value is DailyRecordLine {
   if (!value || typeof value !== 'object') return false;
   const line = value as Record<string, unknown>;
-  return ['picks', 'wins', 'losses', 'pushes', 'voids', 'pending', 'units'].every((key) => typeof line[key] === 'number' && Number.isFinite(line[key]));
+  return ['picks', 'wins', 'losses', 'pushes', 'voids', 'pending', 'units'].every((key) => typeof line[key] === 'number' && Number.isFinite(line[key])) &&
+    (line.from === undefined || line.from === null || (typeof line.from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(line.from)));
 }
 
 export function parseDailyFile(text: string): DailyFile | null {
@@ -272,36 +276,38 @@ export interface DailyPanelPick extends PostedDailyPick {
   state: DailyPickState;
 }
 
+/** One tab's bets of the day: Games shows the game spreads, Projections the player props, each with its own record. */
 export interface DailyPanelState {
   status: 'open' | 'unavailable';
-  record: DailyRecord | null;
+  category: DailyCategory;
+  record: DailyRecordLine | null;
   today: DailyPanelPick[];
   yesterday: DailyPanelPick[];
-  /** Why a category has no pick today, or when its next one posts. */
+  /** Why the category has no pick today, or when its next one posts. */
   notes: string[];
 }
 
-export function dailyPanelState(file: DailyFile | null, slate: Slate, picks: DailyPicks | null, now: Date): DailyPanelState {
-  if (!file) return { status: 'unavailable', record: null, today: [], yesterday: [], notes: [] };
+export function dailyPanelState(file: DailyFile | null, slate: Slate, picks: DailyPicks | null, now: Date, category: DailyCategory): DailyPanelState {
+  if (!file) return { status: 'unavailable', category, record: null, today: [], yesterday: [], notes: [] };
   const today = chicagoDate(now);
   const yesterday = shiftChicagoDate(today, -1);
   const withState = (pick: PostedDailyPick): DailyPanelPick => ({ ...pick, state: pickState(pick, now) });
   const byTip = (a: PostedDailyPick, b: PostedDailyPick) => a.tip.localeCompare(b.tip) || a.posted_at.localeCompare(b.posted_at);
-  const todays = file.picks.filter((pick) => pick.date === today).sort(byTip).map(withState);
+  const mine = file.picks.filter((pick) => pick.category === category);
+  const todays = mine.filter((pick) => pick.date === today).sort(byTip).map(withState);
   const upcoming = slate.games.filter((game) => upcomingToday(game, now));
   const notes: string[] = [];
-  for (const category of DAILY_CATEGORIES) {
-    const mine = todays.filter((pick) => pick.category === category);
-    if (mine.some((pick) => pick.state === 'open') || !upcoming.length) continue;
+  if (upcoming.length && !todays.some((pick) => pick.state === 'open')) {
     const label = category === 'prop' ? 'player prop' : 'spread';
-    if (mine.length) notes.push(`The next ${label} posts at the next update if a game still to tip clears the checks.`);
+    if (todays.length) notes.push(`The next ${label} posts at the next update if a game still to tip clears the checks.`);
     else notes.push(category === 'prop' ? propNote(picks, upcoming, now) : spreadNote(upcoming, now));
   }
   return {
     status: 'open',
-    record: file.record,
+    category,
+    record: file.record[category],
     today: todays,
-    yesterday: file.picks.filter((pick) => pick.date === yesterday).sort(byTip).map(withState),
+    yesterday: mine.filter((pick) => pick.date === yesterday).sort(byTip).map(withState),
     notes,
   };
 }

@@ -352,7 +352,8 @@ function paintDailyPanel(): void {
   const root = document.getElementById('daily-panel');
   if (!root || !slate || !card || currentSport() !== 'nba' || !['games', 'empty', 'projections'].includes(desk?.dataset.mode ?? '')) return;
   const now = new Date();
-  const state = dailyPanelState(daily, slate, picks, now);
+  // Games carries the team bets of the day; Projections carries the player props.
+  const state = dailyPanelState(daily, slate, picks, now, desk?.dataset.mode === 'projections' ? 'prop' : 'spread');
   root.innerHTML = renderDailyPanel(state);
 }
 

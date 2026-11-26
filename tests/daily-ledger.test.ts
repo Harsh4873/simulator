@@ -97,8 +97,10 @@ test('the record counts every posted pick by category, and graded picks are neve
   assert.equal(settleDailyPicks([day], finals, new Map(), now), 2);
   assert.equal(settleDailyPicks([day], new Map([[bulls.eventId, { home: 140, away: 100 }]]), new Map(), now), 0);
   const record = dailyRecord([day, { ...emptyDay('2026-11-24'), picks: [] }]);
-  assert.deepEqual(record.spread, { picks: 2, wins: 1, losses: 1, pushes: 0, voids: 0, pending: 0, units: -0.1304 });
-  assert.deepEqual(record.prop, { picks: 1, wins: 0, losses: 0, pushes: 0, voids: 0, pending: 1, units: 0 });
+  assert.deepEqual(record.spread, { picks: 2, wins: 1, losses: 1, pushes: 0, voids: 0, pending: 0, units: -0.1304, from: date });
+  assert.deepEqual(record.prop, { picks: 1, wins: 0, losses: 0, pushes: 0, voids: 0, pending: 1, units: 0, from: date });
+  // Each line starts on its own first pick: a category with none has no start.
+  assert.equal(dailyRecord([{ ...emptyDay(date), picks: [spreadPick()] }]).prop.from, null);
   assert.equal(record.all.picks, 3);
   assert.equal(record.from, date);
 });
@@ -122,29 +124,36 @@ test('a ledger day round-trips one pick a line, and malformed picks or files are
 
 const quote: SpreadQuote = { source: 'ESPN scoreboard', book: 'DraftKings', captured_at: '2026-11-25T22:00:00Z', home_spread: -3.5, home_odds: -110, away_odds: -110 };
 
-test('the panel shows today\'s picks together with where each stands, yesterday\'s results, and why a category is empty', () => {
+test('each tab shows its own picks together with where each stands, yesterday\'s results, and why it is empty', () => {
   const posted = [spreadPick(), spreadPick({ eventId: wolves.eventId, tip: wolves.tip, title: wolves.title, posted_at: '2026-11-26T00:00:00Z', settle: wolves.settle! }),
     spreadPick({ date: '2026-11-24', eventId: '1', tip: '2026-11-25T01:00:00Z', result: { outcome: 'loss', actual: 9, units: -1, settled_at: '2026-11-25T06:00:00Z' } })];
   const file = dailyFile(new Map([[date, { ...emptyDay(date), picks: posted.slice(0, 2) }], ['2026-11-24', { ...emptyDay('2026-11-24'), picks: posted.slice(2) }]]), ['2026-11-24', date], now);
   const game = (id: string, start: string) => ({ event_id: id, date, start_time: start, status_state: 'pre', completed: false, spread_quotes: [quote] }) as unknown as Slate['games'][number];
   const slate = { schema_version: 1, generated_at: '2026-11-25T22:00:00Z', date, timezone: 'America/Chicago', games: [game(bulls.eventId, bulls.tip), game(wolves.eventId, wolves.tip), game('9', '2026-11-26T03:00:00Z')] } as unknown as Slate;
-  const at = (time: string) => dailyPanelState(file, slate, null, new Date(time));
+  const games = (time: string) => dailyPanelState(file, slate, null, new Date(time), 'spread');
+  const projections = (time: string) => dailyPanelState(file, slate, null, new Date(time), 'prop');
 
-  const evening = at('2026-11-26T00:10:00Z');
+  // Games: the team bets, with the spread record.
+  const evening = games('2026-11-26T00:10:00Z');
+  assert.equal(evening.category, 'spread');
   assert.deepEqual(evening.today.map((pick) => [pick.title, pick.state]), [['Chicago Bulls +3.5', 'live'], ['Minnesota Timberwolves +2.5', 'open']]);
   assert.deepEqual(evening.yesterday.map((pick) => pick.state), ['loss']);
-  assert.deepEqual(evening.notes, ['No current player prop price for today’s remaining games.']);
-  // Once the Wolves tip too, the panel says a spread may still follow for the last game.
-  assert.deepEqual(at('2026-11-26T00:40:00Z').notes, [
-    'The next spread posts at the next update if a game still to tip clears the checks.',
-    'No current player prop price for today’s remaining games.',
-  ]);
-  assert.deepEqual(at('2026-11-26T03:10:00Z').notes, [], 'no notes once every game has tipped');
-  assert.equal(pickState(posted[0], new Date('2026-11-26T03:00:01Z')), 'awaiting');
-  assert.equal(dailyPanelState(null, slate, null, now).status, 'unavailable');
+  assert.deepEqual(evening.notes, []);
+  assert.deepEqual(evening.record, file.record.spread);
+  // Once the Wolves tip too, Games says a spread may still follow for the last game.
+  assert.deepEqual(games('2026-11-26T00:40:00Z').notes, ['The next spread posts at the next update if a game still to tip clears the checks.']);
+  assert.deepEqual(games('2026-11-26T03:10:00Z').notes, [], 'no notes once every game has tipped');
+
+  // Projections: only the player props and their record, so none of the spreads above.
+  const props = projections('2026-11-26T00:10:00Z');
+  assert.deepEqual([props.today, props.yesterday, props.record], [[], [], file.record.prop]);
+  assert.deepEqual(props.notes, ['No current player prop price for today’s remaining games.']);
   const lines = { '9': [['1', 'pts', 15.5, -110, -110, '2026-11-25T22:00:00Z']] } as never;
-  assert.equal(at('2026-11-26T00:10:00Z').notes.length, 1);
-  assert.deepEqual(dailyPanelState(file, slate, { lines }, new Date('2026-11-26T00:10:00Z')).notes, ['No player prop has cleared the model’s price, noise and data checks yet today.']);
+  assert.deepEqual(dailyPanelState(file, slate, { lines }, new Date('2026-11-26T00:10:00Z'), 'prop').notes, ['No player prop has cleared the model’s price, noise and data checks yet today.']);
+  assert.deepEqual(projections('2026-11-26T03:10:00Z').notes, []);
+
+  assert.equal(pickState(posted[0], new Date('2026-11-26T03:00:01Z')), 'awaiting');
+  assert.deepEqual(dailyPanelState(null, slate, null, now, 'prop'), { status: 'unavailable', category: 'prop', record: null, today: [], yesterday: [], notes: [] });
 });
 
 test('the refresh step posts, grades and publishes, draws only what it could post, and leaves an idle file alone', () => {
