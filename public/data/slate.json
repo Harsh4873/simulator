@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-26T01:00:56Z",
+  "generated_at": "2026-11-26T01:41:00Z",
   "date": "2026-11-25",
   "timezone": "America/Chicago",
   "games": [
@@ -241,7 +241,7 @@
       "start_time": "2026-11-26T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "12",
@@ -274,7 +274,7 @@
       "start_time": "2026-11-26T01:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "17",
@@ -332,17 +332,7 @@
         "longitude": null,
         "timezone": null
       },
-      "spread_caption": null,
-      "spread_quotes": [
-        {
-          "source": "ESPN scoreboard",
-          "book": "DraftKings",
-          "captured_at": "2026-11-26T01:00:56Z",
-          "home_spread": -9.5,
-          "home_odds": -104,
-          "away_odds": -116
-        }
-      ]
+      "spread_caption": null
     },
     {
       "event_id": "401909324",
@@ -380,10 +370,10 @@
         {
           "source": "ESPN scoreboard",
           "book": "DraftKings",
-          "captured_at": "2026-11-26T01:00:56Z",
+          "captured_at": "2026-11-26T01:41:00Z",
           "home_spread": -8.5,
-          "home_odds": -105,
-          "away_odds": -116
+          "home_odds": -115,
+          "away_odds": -105
         }
       ]
     },
@@ -423,10 +413,10 @@
         {
           "source": "ESPN scoreboard",
           "book": "DraftKings",
-          "captured_at": "2026-11-26T01:00:56Z",
+          "captured_at": "2026-11-26T01:41:00Z",
           "home_spread": 3.5,
-          "home_odds": -112,
-          "away_odds": -108
+          "home_odds": -117,
+          "away_odds": -103
         }
       ]
     }
