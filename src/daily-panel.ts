@@ -9,7 +9,9 @@ function timeTag(iso: string): string {
   return `<time datetime="${escapeHtml(iso)}">${escapeHtml(formatTip(iso))}</time>`;
 }
 
-const GRADE_LABEL: Readonly<Record<DailyGrade, string>> = { BET: 'Qualified bet', LEAN: 'Model lean', EDGE: 'Unproven edge' };
+const GRADE_LABEL: Readonly<Record<DailyGrade, string>> = {
+  BET: 'Qualified bet', LEAN: 'Model lean', EDGE: 'Unproven edge', THIN: 'Thin edge', TOP: 'Top prop · no edge',
+};
 const CATEGORY_LABEL = { prop: 'Player prop', spread: 'Game spread' } as const;
 
 /** Games carries the team bets (game spreads); Projections carries the player props. */
@@ -24,7 +26,7 @@ const PANEL: Readonly<Record<DailyCategory, { title: string; first: string; intr
   prop: {
     title: 'NBA player prop bets of the day',
     first: 'The record starts with the first posted player prop.',
-    intro: 'Each pick is the strongest player prop left on the slate, read from the same 10,000 simulations as the box scores at the best tracked price. It is posted once, at the line and price shown, and stays up until its game tips; then the next game’s best prop is posted. Every posted pick counts in the record. Team bets are on Games.',
+    intro: 'Each pick is the strongest player prop left on the slate, read from the same 10,000 simulations as the box scores at the best tracked price. When none clears the edge bar, the closest one is still posted and labelled thin edge or no edge. It is posted once, at the line and price shown, and stays up until its game tips; then the next game’s best prop is posted. Every posted pick counts in the record. Team bets are on Games.',
     none: 'No player props were posted today.',
     waiting: 'Today’s player props and their record are awaiting publication.',
   },
@@ -107,7 +109,7 @@ function pickCard(pick: DailyPanelPick): string {
     <dl class="daily-metrics">
       <div><dt>Model win chance</dt><dd>${percent(pick.modelProbability)}</dd></div>
       <div><dt>Break-even</dt><dd>${percent(pick.breakEven)}</dd></div>
-      <div><dt>Est. net return</dt><dd>+${percent(pick.expectedReturn)}</dd></div>
+      <div><dt>Est. net return</dt><dd>${pick.expectedReturn < 0 ? '−' : '+'}${percent(Math.abs(pick.expectedReturn))}</dd></div>
     </dl>
     ${pick.evidence ? `<p class="daily-evidence">${escapeHtml(pick.evidence)}</p>` : ''}
     ${posted}
@@ -122,9 +124,11 @@ export function renderDailyPanel(state: DailyPanelState): string {
   </section>`;
   }
   const shown = [...state.today, ...state.yesterday];
-  const unproven = shown.some((pick) => pick.grade === 'EDGE')
+  const unproven = (shown.some((pick) => pick.grade === 'EDGE')
     ? ' An unproven edge clears the price, noise and data checks, but leans like it have not beaten the posted price in live grading.'
-    : '';
+    : '') + (shown.some((pick) => pick.grade === 'THIN' || pick.grade === 'TOP')
+    ? ' A thin edge or top prop is posted only because nothing cleared the edge bar. Calibrated against settled results, the model’s prop chances sit close to the sportsbook’s, so at the posted price these are close to a coin flip with the vig against you.'
+    : '');
   const notes = state.notes.map((note) => `<p class="daily-empty">${escapeHtml(note)}</p>`).join('');
   const today = state.today.length ? `<div class="daily-offers">${state.today.map(pickCard).join('')}</div>` : '';
   const todayEmpty = !state.today.length && !state.notes.length ? `<p class="daily-empty">${panel.none}</p>` : '';

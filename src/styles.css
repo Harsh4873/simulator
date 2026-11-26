@@ -4293,8 +4293,8 @@ html[data-layout="phone"] .daily-record { text-align: left; }
 .daily-grade { color: var(--gold); }
 .daily-grade[data-grade="BET"], .daily-price strong { color: var(--accent); }
 /* An unproven edge is not a qualified pick: a muted label and a dashed outline keep it from reading like one. */
-.daily-grade[data-grade="EDGE"] { color: var(--muted); }
-.daily-offer[data-grade="EDGE"] { border-style: dashed; }
+.daily-grade:is([data-grade="EDGE"], [data-grade="THIN"], [data-grade="TOP"]) { color: var(--muted); }
+.daily-offer:is([data-grade="EDGE"], [data-grade="THIN"], [data-grade="TOP"]) { border-style: dashed; }
 .daily-selection { margin: 0.6rem 0 0; font-size: 1.15rem; font-weight: 700; }
 .daily-price, .daily-projection { margin: 0.4rem 0 0; font-size: 0.875rem; }
 .daily-result { color: var(--text); font-weight: 600; }

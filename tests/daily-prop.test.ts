@@ -4,7 +4,7 @@ import test from 'node:test';
 import { buildPicks } from '../scripts/build-picks.ts';
 import type { BookLine } from '../src/book-lines.ts';
 import { dailyPropForGame, dailyPropOffer, unprovenEvidence, type DailyPropPick } from '../src/daily-prop.ts';
-import { compareOffers } from '../src/daily-price.ts';
+import { compareOffers, isDailyOffer } from '../src/daily-price.ts';
 import { emptyDay, postDailyPicks } from '../src/daily-ledger.ts';
 import { parsePicksFile } from '../src/picks.ts';
 import { parsePublishedPropCalibration, type PropCalibrationArtifact } from '../src/prop-calibration.ts';
@@ -147,4 +147,43 @@ test('an unproven edge still needs every other check, never becomes a bet, and n
   assert.deepEqual(postDailyPicks(emptyDay(game.date), { prop: [edge, qualified], spread: [] }, now).map((pick) => pick.grade), ['LEAN']);
   assert.deepEqual(postDailyPicks(emptyDay(game.date), { prop: [edge], spread: [] }, now).map((pick) => [pick.grade, pick.settle]),
     [['EDGE', { kind: 'prop', athlete_id: player.athlete_id, market: 'pts', side: 'over', line: 15 }]]);
+});
+
+test('below the edge bar the best prop is still posted, as a thin edge or a top prop, with the reason it falls short', () => {
+  const at = (over: number, under: number, picks = build([{ ...offer, over_odds: over, under_odds: under }])) => dailyPropForGame(game, rate, simulation, picks, card, calibration, now);
+  // A 4-point claim inside the sampling noise, a 1.7-point claim, and a price the calibrated chance does not beat.
+  const noisy = at(-180, 150)!;
+  assert.equal(noisy.grade, 'THIN');
+  assert.equal(noisy.evidence, 'Below the edge bar: the calibrated chance of 68.3% clears the 64.3% break-even by 4.0 points. The gap is inside the sampling noise, so it is not an advantage yet.');
+  const thin = at(-220, 180)!;
+  assert.equal(thin.grade, 'THIN');
+  assert.equal(thin.evidence, 'Below the edge bar: the calibrated chance of 70.4% clears the 68.8% break-even by 1.7 points, short of the 3.0 a lean needs.');
+  assert.ok(thin.expectedReturn > 0);
+  const top = at(-300, 240)!;
+  assert.deepEqual([top.grade, top.side, top.line], ['TOP', 'over', 15]);
+  assert.ok(top.expectedReturn < 0 && top.modelProbability < top.breakEven);
+  assert.equal(top.evidence, 'No edge at this price: the calibrated chance of 73.4% is under the 75.0% break-even. It was the closest player prop to an edge when posted, not a qualified pick.');
+
+  // Posting takes a qualified lean first, then a thin edge, and a top prop only when nothing else is there.
+  const lean = dailyPropOffer(at(-110, -110)!);
+  const [thinOffer, topOffer] = [dailyPropOffer(thin), dailyPropOffer(top)];
+  assert.equal(lean.grade, 'LEAN');
+  const post = (props: ReturnType<typeof dailyPropOffer>[]) => postDailyPicks(emptyDay(game.date), { prop: props, spread: [] }, now)[0]?.grade;
+  assert.equal(post([topOffer, thinOffer, lean]), 'LEAN');
+  assert.equal(post([topOffer, { ...thinOffer, expectedReturn: 0.001 }]), 'THIN');
+  assert.equal(post([topOffer]), 'TOP');
+  // Only a top prop may be published at or under its break-even.
+  assert.ok(isDailyOffer(topOffer));
+  assert.equal(isDailyOffer({ ...topOffer, grade: 'THIN' }), false);
+  assert.equal(isDailyOffer({ ...topOffer, expectedReturn: -1 }), false);
+
+  // The data checks still turn a prop away below the bar.
+  const topPriced = build([{ ...offer, over_odds: -300, under_odds: 240 }]);
+  for (const changes of [{ drift: 'red' }, { validated_through: '2026-11-02' }, { fitted_through: '2026-10-01', validated_through: '2026-10-02' }]) {
+    const invalid = parsePublishedPropCalibration(JSON.stringify({ schema_version: 1, groups: { points: { ...artifact, ...changes } } }))!;
+    assert.equal(dailyPropForGame(game, rate, simulation, topPriced, card, invalid, now), null);
+  }
+  assert.equal(dailyPropForGame(game, { ...rate, players: [{ ...player, evidence: { ...player.evidence!, role_changed: true } }] }, simulation, topPriced, card, calibration, now), null);
+  assert.equal(dailyPropForGame(game, rate, { playerDraws: new Map([[player.athlete_id, { ...sample, min: stats(i => i < 9 ? 30 : 0) }]]) }, topPriced, card, calibration, now), null,
+    'a player who sits most draws is not posted');
 });

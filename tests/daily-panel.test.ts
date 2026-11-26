@@ -112,3 +112,15 @@ test('notes say why a tab has no pick, and an unproven edge is explained wheneve
   const lean = parseHTML(renderDailyPanel(state({ category: 'prop', today: [at(prop, 'open')] }))).document;
   assert.doesNotMatch(lean.querySelector('.daily-note')?.textContent ?? '', /unproven/i);
 });
+
+test('a thin edge and a top prop say what they are, and a negative return keeps its sign', () => {
+  const thin = { ...prop, grade: 'THIN' as const, expectedReturn: 0.007, evidence: 'Below the edge bar: the calibrated chance of 45.0% clears the 44.6% break-even by 0.3 points, short of the 3.0 a lean needs.' };
+  const top = { ...prop, eventId: '9', grade: 'TOP' as const, modelProbability: 0.384, breakEven: 0.386, expectedReturn: -0.0062, evidence: 'No edge at this price.' };
+  const { document } = parseHTML(renderDailyPanel(state({ category: 'prop', record: record(thin, top).prop, today: [at(thin, 'open'), at(top, 'open')] })));
+  const cards = [...document.querySelectorAll('article.daily-offer')];
+  assert.deepEqual(cards.map((card) => card.querySelector('.daily-grade')?.textContent), ['Thin edge', 'Top prop · no edge']);
+  assert.deepEqual(cards.map((card) => card.getAttribute('data-grade')), ['THIN', 'TOP']);
+  assert.deepEqual(cards.map((card) => card.querySelectorAll('dd')[2]?.textContent), ['+0.7%', '−0.6%']);
+  assert.match(document.querySelector('.daily-note')?.textContent ?? '', /posted only because nothing cleared the edge bar.*close to a coin flip with the vig against you/);
+  assert.match(document.querySelector('.daily-intro')?.textContent ?? '', /When none clears the edge bar, the closest one is still posted and labelled thin edge or no edge/);
+});

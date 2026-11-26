@@ -5,7 +5,9 @@ import {
   type PicksFile, type TierRecord,
 } from './picks.ts';
 import { groupOf, mapIsCurrent, quoteCalibrationFor, type parsePublishedPropCalibration } from './prop-calibration.ts';
-import { decideVerdict, profitPerStake, propContextFromPlayer, propPolicyFromArtifacts, quoteProp, type PropMarket, type PropSide } from './props.ts';
+import {
+  decideVerdict, profitPerStake, PROP_POLICY, propContextFromPlayer, propPolicyFromArtifacts, quoteProp, type PropMarket, type PropPolicy, type PropSide,
+} from './props.ts';
 import { marketLabel } from './projections.ts';
 import type { Simulation } from './simulate.ts';
 import type { RateCard, RateGame, SlateGame } from './types.ts';
@@ -26,7 +28,7 @@ export interface DailyPropPick {
   modelProbability: number;
   breakEven: number;
   expectedReturn: number;
-  /** BET or LEAN for a listed lean. EDGE is the strongest unlisted one, shown only when no listed lean is current. */
+  /** BET or LEAN for a listed lean; EDGE for an unlisted one; THIN or TOP for the best prop below the edge bar. */
   grade: DailyGrade;
   /** What the grade rests on: the live record of graded leans of this side and strength, or that there is none yet. */
   evidence: string;
@@ -35,6 +37,16 @@ export interface DailyPropPick {
 function points(edge: number): string {
   return (Math.abs(edge) * 100).toFixed(1);
 }
+
+function percent(value: number): string {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+/**
+ * The verdict with its price, size and noise bars removed and no bet possible, so only its data checks can turn a prop
+ * away: role and minutes evidence, a player who plays in the draws, few sit-outs, enough decided draws, no extreme gap.
+ */
+const BELOW_BAR: PropPolicy = { ...PROP_POLICY, calibrated: false, leanEdge: -1, leanReturn: -Infinity, noiseMultiple: -Infinity, betEdge: Infinity };
 
 /** Why an unlisted lean is not a qualified pick, read from the live record of leans of its side and strength. */
 export function unprovenEvidence(side: PropSide, tier: TierRecord | null): string {
@@ -78,11 +90,9 @@ export function dailyPropForGame(
     const group = groupOf(lean.market);
     const artifact = calibration.artifacts.find(a => a.group === group);
     if (!artifact || !mapIsCurrent(artifact, card.model_version, game.date) || !(artifact.validated_through < game.date) ||
-        !lean.calibrationMethod || lean.claimed < LEAN_BUCKETS[1]) continue;
-    // A listed lean's side and strength have beaten the price in live grading. An unlisted lean can still be the day's
-    // unproven edge, but only under every other check a listing makes: no red drift, a claim short of extreme, a likely player.
-    const isListed = listed(lean, picks.record);
-    if (!isListed && (lean.drift === 'red' || !(lean.claimed < EXTREME_CLAIM) || !(lean.play >= MIN_PLAY_SHARE))) continue;
+        !lean.calibrationMethod) continue;
+    // Every pick, qualified or not, needs a map that is not red on drift, a claim short of extreme, and a likely player.
+    if (lean.drift === 'red' || !(lean.claimed < EXTREME_CLAIM) || !(lean.play >= MIN_PLAY_SHARE)) continue;
     const over = lean.side === 'over';
     const odds = over ? lean.over_odds : lean.under_odds;
     const key = JSON.stringify([lean.athlete_id, lean.market, lean.line, lean.side]);
@@ -92,23 +102,50 @@ export function dailyPropForGame(
     if (!player || !sample) continue;
     const map = quoteCalibrationFor(panel, lean.market, lean.side);
     const quote = quoteProp(sample, lean.market, lean.side, lean.line, odds, over ? lean.under_odds : lean.over_odds, map);
-    if (!quote || quote.expectedReturn === null || quote.expectedReturn <= 0) continue;
+    if (!quote || quote.expectedReturn === null) continue;
     const tier = liveTierFor(picks.record, lean.side, lean.claimed);
-    const policy = propPolicyFromArtifacts([artifact], card.model_version, game.date);
-    // The live record already decided listing. An unproven edge is graded on its price and data alone, and its record
-    // is printed beside it instead of overruling it.
-    const measured = isListed && tier ? { measured: { edge: tier.edge, graded: tier.pooled } } : {};
-    const context = { ...propContextFromPlayer(player), propCalibration: map, ...measured };
-    const verdict = decideVerdict(quote, context, lean.market, policy, true);
-    if (!verdict || verdict.verdict === 'PASS') continue;
+    const base = { ...propContextFromPlayer(player), propCalibration: map };
+    let grade: DailyGrade | null = null;
+    let evidence = '';
+    // Why a claim over the bar still did not qualify, in the verdict's words (sampling noise, pushes, sit-outs).
+    let shortfall: string | null = null;
+    if (lean.claimed >= LEAN_BUCKETS[1] && quote.expectedReturn > 0) {
+      // A listed lean's side and strength have beaten the price in live grading. An unlisted one is graded on its price
+      // and data alone as an unproven edge, and its record is printed beside it instead of overruling it.
+      const isListed = listed(lean, picks.record);
+      const measured = isListed && tier ? { measured: { edge: tier.edge, graded: tier.pooled } } : {};
+      const verdict = decideVerdict(quote, { ...base, ...measured }, lean.market, propPolicyFromArtifacts([artifact], card.model_version, game.date), true);
+      if (verdict && verdict.verdict !== 'PASS') {
+        grade = isListed ? verdict.verdict : 'EDGE';
+        evidence = isListed && tier
+          ? `Live-graded ${lean.side} leans this strong have beaten the posted price by ${points(tier.edge)} points across ${tier.pooled.toLocaleString('en-US')} leans.`
+          : unprovenEvidence(lean.side, tier);
+      } else if (verdict) {
+        shortfall = verdict.text;
+      }
+    }
+    if (!grade) {
+      // Below the edge bar the best prop is still posted, so a day with prices always has one, but only past the same
+      // data checks: the verdict runs with its price, size and noise bars removed.
+      const verdict = decideVerdict(quote, base, lean.market, BELOW_BAR, true);
+      if (!verdict || verdict.verdict === 'PASS') continue;
+      const thin = lean.claimed > 0 && quote.expectedReturn > 0;
+      grade = thin ? 'THIN' : 'TOP';
+      const gap = `the calibrated chance of ${percent(lean.model)} clears the ${percent(lean.need)} break-even by ${points(lean.claimed)} points`;
+      if (thin) {
+        evidence = `Below the edge bar: ${gap}${shortfall ? `. ${shortfall}` : `, short of the ${points(LEAN_BUCKETS[1])} a lean needs.`}`;
+      } else {
+        const reason = lean.claimed > 0
+          ? `${gap}, but pushes and sit-outs bring the expected return to ${quote.expectedReturn < 0 ? '−' : ''}${percent(Math.abs(quote.expectedReturn))}`
+          : `the calibrated chance of ${percent(lean.model)} is under the ${percent(lean.need)} break-even`;
+        evidence = `No edge at this price: ${reason}. It was the closest player prop to an edge when posted, not a qualified pick.`;
+      }
+    }
     candidates.push({
       eventId: game.event_id, athleteId: lean.athlete_id, player: lean.name, matchup: lean.matchup,
       market: lean.market, side: lean.side, line: lean.line, odds, book: lean.book, pricedAt: lean.priced_at,
       tip: game.start_time, projection: lean.projection, modelProbability: lean.model, breakEven: lean.need,
-      expectedReturn: quote.expectedReturn, grade: isListed ? verdict.verdict : 'EDGE',
-      evidence: isListed && tier
-        ? `Live-graded ${lean.side} leans this strong have beaten the posted price by ${points(tier.edge)} points across ${tier.pooled.toLocaleString('en-US')} leans.`
-        : unprovenEvidence(lean.side, tier),
+      expectedReturn: quote.expectedReturn, grade, evidence,
     });
   }
   return candidates.sort((a, b) => gradeRank(b.grade) - gradeRank(a.grade) || b.expectedReturn - a.expectedReturn ||

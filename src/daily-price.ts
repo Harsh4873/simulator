@@ -21,11 +21,14 @@ export function upcomingToday(game: SlateGame, now: Date): boolean {
 
 /**
  * BET and LEAN clear every check, including (for a prop) a live record of leans like it beating the price. EDGE clears
- * the price, noise and data checks without that record, and ranks below any qualified pick.
+ * the price, noise and data checks without that record. Below the edge bar a prop is still posted when nothing better
+ * is: THIN when its calibrated chance beats the break-even by less than the bar, TOP when it does not beat it at all.
+ * Each ranks below every grade before it.
  */
-export type DailyGrade = 'BET' | 'LEAN' | 'EDGE';
+export type DailyGrade = 'BET' | 'LEAN' | 'EDGE' | 'THIN' | 'TOP';
 
-const GRADE_RANK: Readonly<Record<DailyGrade, number>> = { BET: 2, LEAN: 1, EDGE: 0 };
+const GRADE_RANK: Readonly<Record<DailyGrade, number>> = { BET: 4, LEAN: 3, EDGE: 2, THIN: 1, TOP: 0 };
+const DAILY_GRADES = Object.keys(GRADE_RANK) as DailyGrade[];
 
 export function gradeRank(grade: DailyGrade): number {
   return GRADE_RANK[grade];
@@ -83,10 +86,12 @@ export function isDailyOffer(value: unknown): value is DailyOffer {
   return [offer.eventId, offer.title, offer.projectionLabel, offer.matchup, offer.book].every(text) &&
     typeof offer.tip === 'string' && Number.isFinite(Date.parse(offer.tip)) &&
     typeof offer.pricedAt === 'string' && Number.isFinite(Date.parse(offer.pricedAt)) &&
-    (offer.grade === 'BET' || offer.grade === 'LEAN' || offer.grade === 'EDGE') && finite(offer.odds) && Math.abs(offer.odds) >= 100 &&
+    DAILY_GRADES.includes(offer.grade as DailyGrade) && finite(offer.odds) && Math.abs(offer.odds) >= 100 &&
     finite(offer.modelProbability) && offer.modelProbability > 0 && offer.modelProbability <= 1 &&
-    finite(offer.breakEven) && offer.breakEven > 0 && offer.breakEven < offer.modelProbability &&
-    finite(offer.expectedReturn) && offer.expectedReturn > 0 &&
+    finite(offer.breakEven) && offer.breakEven > 0 && offer.breakEven < 1 &&
+    finite(offer.expectedReturn) && offer.expectedReturn > -1 &&
+    // Only a top prop may sit at or under its break-even; every other grade beats the price.
+    (offer.grade === 'TOP' || (offer.breakEven < offer.modelProbability && offer.expectedReturn > 0)) &&
     (offer.evidence === undefined || typeof offer.evidence === 'string') &&
     (offer.settle === undefined || validSettle(offer.settle));
 }
