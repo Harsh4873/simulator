@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-26T02:19:21Z",
+  "generated_at": "2026-11-26T02:37:58Z",
   "date": "2026-11-25",
   "timezone": "America/Chicago",
   "games": [
@@ -142,8 +142,8 @@
       "start_time": "2026-11-26T00:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "in",
-      "completed": false,
+      "status_state": "post",
+      "completed": true,
       "away": {
         "team_id": "4",
         "name": "Chicago Bulls",
@@ -370,7 +370,7 @@
         {
           "source": "ESPN scoreboard",
           "book": "DraftKings",
-          "captured_at": "2026-11-26T02:19:21Z",
+          "captured_at": "2026-11-26T02:37:58Z",
           "home_spread": -8.5,
           "home_odds": -115,
           "away_odds": -105
@@ -413,10 +413,10 @@
         {
           "source": "ESPN scoreboard",
           "book": "DraftKings",
-          "captured_at": "2026-11-26T02:19:21Z",
-          "home_spread": 4.5,
-          "home_odds": -115,
-          "away_odds": -105
+          "captured_at": "2026-11-26T02:37:58Z",
+          "home_spread": 3.5,
+          "home_odds": -105,
+          "away_odds": -115
         }
       ]
     }
