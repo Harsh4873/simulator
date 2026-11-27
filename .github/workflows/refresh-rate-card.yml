@@ -59,9 +59,14 @@ jobs:
         # Prices are read after the draws exist and never reach the fit. A failure here leaves the rate card as built.
         continue-on-error: true
         run: npm run picks
-      - name: Post and grade the NBA bets of the day
-        # Posts a pick only where a category has none open, and grades posted picks from the scoreboard's finals and the
-        # cached box scores. A failure leaves every posted pick and the published file as they were.
+      - name: Refresh NFL and esports slates
+        # A missed feed leaves the last published files. It does not block the rate card.
+        continue-on-error: true
+        run: npm run slates
+      - name: Post and grade the bets of the day
+        # NBA team bets and player props, and NFL team bets from the slate just built. Posts a pick only where a category
+        # has none open, and grades posted picks from the scoreboards' finals and the cached box scores. A failure leaves
+        # every posted pick and the published file as they were.
         continue-on-error: true
         run: npm run daily
       - name: Write the matchup report
@@ -75,10 +80,6 @@ jobs:
           npm run build
           npm run validate-artifact
           npm run validate-privacy
-      - name: Refresh NFL and esports slates
-        # A missed feed leaves the last published files. It does not block the rate card.
-        continue-on-error: true
-        run: npm run slates
       - name: Commit validated generation
         id: commit
         shell: bash

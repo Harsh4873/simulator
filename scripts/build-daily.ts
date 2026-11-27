@@ -1,26 +1,31 @@
-// Posts and grades the NBA bets of the day. The refresh job runs this after the picks step, on the card, slate, prices
-// and box scores that same run wrote. Each day's posted picks are kept in data/daily-ledger/<date>.json, and
-// public/data/daily.json carries the slate's two days of picks and the record over every day.
+// Posts and grades the bets of the day: NBA team bets and player props, and NFL team bets. The refresh job runs this after
+// the picks step and the NFL slate, on the card, slates, prices and box scores that same run wrote. NFL spreads are read
+// from the NFL scoreboard here, because the NFL slate carries no prices. Each day's posted picks are kept in
+// data/daily-ledger/<date>.json, and public/data/daily.json carries the slate's two days of picks and the record over every day.
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chicagoDate, shiftChicagoDate } from '../src/date.ts';
 import {
-  DAILY_CATEGORIES, dailyFile, emptyDay, openPick, parseDailyDay, postDailyPicks, serializeDailyDay, settleDailyPicks,
+  DAILY_CATEGORIES, dailyFile, emptyDay, openPick, parseDailyDay, postDailyPicks, serializeDailyDay, settleDailyPicks, stamp,
   type DailyCategory, type DailyFile, type DailyFinal, type DailyLedgerDay, type PostedDailyPick,
 } from '../src/daily-ledger.ts';
-import { upcomingToday, type DailyOffer } from '../src/daily-price.ts';
+import { dailyNflSpreadForGame } from '../src/daily-nfl.ts';
+import { nflUpcomingToday, upcomingToday, type DailyOffer } from '../src/daily-price.ts';
 import { dailyPropForGame, dailyPropOffer } from '../src/daily-prop.ts';
 import { dailySpreadForGame } from '../src/daily-spread.ts';
+import { parseFeedSlate, type FeedGame } from '../src/feed.ts';
 import type { CompletedEvent } from '../src/parse-summary.ts';
 import { parsePicksFile, type PicksFile } from '../src/picks.ts';
 import { parsePublishedPropCalibration } from '../src/prop-calibration.ts';
 import { fnv1a } from '../src/rng.ts';
 import { ITERATIONS, simulate, type Simulation } from '../src/simulate.ts';
+import { pregameSpreadQuotes, type PregameQuotes } from '../src/spread-quotes.ts';
 import type { RateCard, RateGame, Slate } from '../src/types.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard';
+const NFL_SCOREBOARD = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
 const FETCH_TIMEOUT_MS = 20000;
 
 export interface DailyInput {
@@ -36,6 +41,10 @@ export interface DailyInput {
   now: Date;
   /** Draws a game with the seed and draw count the page uses. */
   draw?: (rate: RateGame) => Simulation;
+  /** The NFL slate's games, and the scoreboard's current spreads for those still to kick off, by event. */
+  nfl?: { games: readonly FeedGame[]; quotes: ReadonlyMap<string, PregameQuotes> } | null;
+  /** Replays an NFL game's published plan; by default the same draws as its box score. */
+  nflDraw?: (game: FeedGame) => readonly number[] | null;
 }
 
 /** Pure step: posts what each category needs, grades what has finished, and builds the published file. */
@@ -47,13 +56,14 @@ export function buildDaily(input: DailyInput): { posted: PostedDailyPick[]; sett
   const day = days.get(today) ?? emptyDay(today);
   const needed = DAILY_CATEGORIES.filter((category) => !openPick(day, category, now));
   const taken = (category: DailyCategory) => new Set(day.picks.filter((pick) => pick.category === category).map((pick) => pick.eventId));
-  const candidates: Record<DailyCategory, DailyOffer[]> = { prop: [], spread: [] };
-  if (needed.length && slate.date === today) {
-    const takenBy = new Map(needed.map((category) => [category, taken(category)]));
+  const candidates: Record<DailyCategory, DailyOffer[]> = { prop: [], spread: [], nfl_spread: [] };
+  const nbaNeeded = needed.filter((category) => category !== 'nfl_spread');
+  if (nbaNeeded.length && slate.date === today) {
+    const takenBy = new Map(nbaNeeded.map((category) => [category, taken(category)]));
     for (const game of slate.games) {
       if (!upcomingToday(game, now)) continue;
       // Only a game that could still be posted in some category is drawn.
-      const wanted = needed.filter((category) => !takenBy.get(category)!.has(game.event_id));
+      const wanted = nbaNeeded.filter((category) => !takenBy.get(category)!.has(game.event_id));
       const rate = card.games.find((item) => item.event_id === game.event_id);
       if (!wanted.length || !rate || rate.simulation_error) continue;
       const simulation = draw(rate);
@@ -65,6 +75,17 @@ export function buildDaily(input: DailyInput): { posted: PostedDailyPick[]; sett
         const prop = dailyPropForGame(game, rate, simulation, picks, card, calibration, now);
         if (prop) candidates.prop.push(dailyPropOffer(prop));
       }
+    }
+  }
+  if (needed.includes('nfl_spread') && input.nfl) {
+    const takenNfl = taken('nfl_spread');
+    for (const game of input.nfl.games) {
+      if (takenNfl.has(game.id) || !nflUpcomingToday(game, now)) continue;
+      const priced = input.nfl.quotes.get(game.id);
+      // The scoreboard and the slate must agree on the kickoff; a moved game waits for the next slate.
+      if (!priced || Date.parse(priced.start) !== Date.parse(game.start_time)) continue;
+      const offer = dailyNflSpreadForGame(game, priced.quotes, now, input.nflDraw);
+      if (offer) candidates.nfl_spread.push(offer);
     }
   }
   const posted = postDailyPicks(day, candidates, now);
@@ -102,20 +123,20 @@ export function finalsFromScoreboard(payload: unknown): Map<string, DailyFinal> 
   return finals;
 }
 
-/** Dates whose posted spreads have tipped and still wait on a final. */
-export function pendingSpreadDates(days: Iterable<DailyLedgerDay>, now: Date): string[] {
+/** Dates whose posted spreads in the category have started and still wait on a final. */
+export function pendingSpreadDates(days: Iterable<DailyLedgerDay>, now: Date, category: 'spread' | 'nfl_spread' = 'spread'): string[] {
   const dates = new Set<string>();
   for (const day of days) {
-    for (const pick of day.picks) if (pick.category === 'spread' && !pick.result && Date.parse(pick.tip) < now.getTime()) dates.add(pick.date);
+    for (const pick of day.picks) if (pick.category === category && !pick.result && Date.parse(pick.tip) < now.getTime()) dates.add(pick.date);
   }
   return [...dates].sort();
 }
 
-async function fetchFinals(dates: readonly string[]): Promise<Map<string, DailyFinal>> {
+async function fetchFinals(dates: readonly string[], scoreboard = SCOREBOARD): Promise<Map<string, DailyFinal>> {
   const finals = new Map<string, DailyFinal>();
   for (const date of dates) {
     try {
-      const response = await fetch(`${SCOREBOARD}?dates=${date.replaceAll('-', '')}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      const response = await fetch(`${scoreboard}?dates=${date.replaceAll('-', '')}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       for (const [id, final] of finalsFromScoreboard(await response.json())) finals.set(id, final);
     } catch (error) {
@@ -124,6 +145,31 @@ async function fetchFinals(dates: readonly string[]): Promise<Map<string, DailyF
     }
   }
   return finals;
+}
+
+/** The NFL scoreboard's current spreads for the day's games still to kick off, stamped with the run's clock. */
+async function fetchNflQuotes(date: string, now: Date): Promise<Map<string, PregameQuotes>> {
+  try {
+    const response = await fetch(`${NFL_SCOREBOARD}?dates=${date.replaceAll('-', '')}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return pregameSpreadQuotes(await response.json(), stamp(now));
+  } catch (error) {
+    // Without prices no NFL spread is posted this run; the next run reads them again.
+    console.error(`NFL scoreboard ${date} failed: ${error instanceof Error ? error.message : String(error)}`);
+    return new Map();
+  }
+}
+
+/** The NFL slate's games, each once. A missing or invalid file posts no NFL spread. */
+export function nflGamesOf(text: string): FeedGame[] {
+  const slate = text ? parseFeedSlate(text, 'nfl') : null;
+  if (!slate) return [];
+  const seen = new Set<string>();
+  return [...slate.games, ...slate.later].filter((game) => {
+    if (seen.has(game.id)) return false;
+    seen.add(game.id);
+    return true;
+  });
 }
 
 export function readDays(dir: string): Map<string, DailyLedgerDay> {
@@ -166,7 +212,13 @@ async function main(): Promise<void> {
   const ledgerDir = join(root, 'data/daily-ledger');
   const days = readDays(ledgerDir);
   const finals = await fetchFinals(pendingSpreadDates(days.values(), now));
-  const result = buildDaily({ slate, card, picks, calibration, events, finals, days, now });
+  // ESPN event ids are unique across sports, so the NFL finals share the map.
+  for (const [id, final] of await fetchFinals(pendingSpreadDates(days.values(), now, 'nfl_spread'), NFL_SCOREBOARD)) finals.set(id, final);
+  const today = chicagoDate(now);
+  const nflGames = nflGamesOf(optional('public/data/nfl.json'));
+  const nflWanted = !openPick(days.get(today) ?? emptyDay(today), 'nfl_spread', now) && nflGames.some((game) => nflUpcomingToday(game, now));
+  const nfl = { games: nflGames, quotes: nflWanted ? await fetchNflQuotes(today, now) : new Map<string, PregameQuotes>() };
+  const result = buildDaily({ slate, card, picks, calibration, events, finals, days, now, nfl });
   mkdirSync(ledgerDir, { recursive: true });
   for (const date of result.changed) writeFileSync(join(ledgerDir, `${date}.json`), serializeDailyDay(days.get(date)!));
   const publishedPath = join(root, 'public/data/daily.json');

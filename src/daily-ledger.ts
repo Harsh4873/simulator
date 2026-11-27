@@ -1,17 +1,26 @@
 /**
- * NBA bets of the day, as posted. A category (player prop, game spread) holds one open pick at a time. The pick is fixed
+ * Bets of the day, as posted. A category (NBA player prop, NBA game spread, NFL game spread) holds one open pick at a time. The pick is fixed
  * at the line and price it was posted with, stays posted until its game tips, and is then followed by the best pick from
  * the games still to play. Every posted pick is kept, shown, and graded into the record.
  */
 import { chicagoDate, shiftChicagoDate } from './date.ts';
-import { compareOffers, isDailyOffer, propNote, spreadNote, upcomingToday, type DailyOffer, type DailyPicks, type DailySettle } from './daily-price.ts';
+import {
+  compareOffers, isDailyOffer, nflUpcomingToday, propNote, spreadNote, upcomingToday, type DailyOffer, type DailyPicks, type DailySettle,
+} from './daily-price.ts';
+import type { FeedGame } from './feed.ts';
 import type { CompletedEvent, ParsedPlayerGame } from './parse-summary.ts';
 import { boxValue } from './pick-ledger.ts';
 import { profitPerStake } from './props.ts';
 import type { Slate } from './types.ts';
 
-export type DailyCategory = 'prop' | 'spread';
-export const DAILY_CATEGORIES: readonly DailyCategory[] = ['spread', 'prop'];
+/** NBA player props, NBA game spreads (the team bets), and NFL game spreads. NFL player props are not posted. */
+export type DailyCategory = 'prop' | 'spread' | 'nfl_spread';
+export const DAILY_CATEGORIES: readonly DailyCategory[] = ['spread', 'prop', 'nfl_spread'];
+
+/** How a category's picks settle: on a player's box score, or on the final margin. */
+export function settleKind(category: DailyCategory): DailySettle['kind'] {
+  return category === 'prop' ? 'prop' : 'spread';
+}
 
 export type DailyOutcome = 'win' | 'loss' | 'push' | 'void';
 
@@ -58,6 +67,7 @@ export interface DailyRecord {
   all: DailyRecordLine;
   prop: DailyRecordLine;
   spread: DailyRecordLine;
+  nfl_spread: DailyRecordLine;
   /** First date with a posted pick. */
   from: string | null;
 }
@@ -103,13 +113,13 @@ function posted(offer: DailyOffer & { settle: DailySettle }, category: DailyCate
  * Posts the best candidate in each category that has no open pick. A game already posted in a category is not posted in
  * it again the same day. Returns what it posted.
  */
-export function postDailyPicks(day: DailyLedgerDay, candidates: Readonly<Record<DailyCategory, readonly DailyOffer[]>>, now: Date): PostedDailyPick[] {
+export function postDailyPicks(day: DailyLedgerDay, candidates: Readonly<Partial<Record<DailyCategory, readonly DailyOffer[]>>>, now: Date): PostedDailyPick[] {
   const added: PostedDailyPick[] = [];
   for (const category of DAILY_CATEGORIES) {
     if (openPick(day, category, now)) continue;
     const taken = new Set(day.picks.filter((pick) => pick.category === category).map((pick) => pick.eventId));
-    const best = candidates[category]
-      .filter((offer): offer is DailyOffer & { settle: DailySettle } => Boolean(offer.settle) && offer.settle!.kind === category &&
+    const best = (candidates[category] ?? [])
+      .filter((offer): offer is DailyOffer & { settle: DailySettle } => Boolean(offer.settle) && offer.settle!.kind === settleKind(category) &&
         !taken.has(offer.eventId) && Date.parse(offer.tip) > now.getTime())
       .sort(compareOffers)[0];
     if (!best) continue;
@@ -179,7 +189,7 @@ function emptyLine(): DailyRecordLine {
 }
 
 export function dailyRecord(days: Iterable<DailyLedgerDay>): DailyRecord {
-  const record: DailyRecord = { all: emptyLine(), prop: emptyLine(), spread: emptyLine(), from: null };
+  const record: DailyRecord = { all: emptyLine(), prop: emptyLine(), spread: emptyLine(), nfl_spread: emptyLine(), from: null };
   for (const day of days) {
     for (const pick of day.picks) {
       if (!record.from || pick.date < record.from) record.from = pick.date;
@@ -227,7 +237,7 @@ function isResult(value: unknown): value is DailyResult {
 export function isPostedPick(value: unknown): value is PostedDailyPick {
   if (!isDailyOffer(value)) return false;
   const pick = value as Partial<PostedDailyPick>;
-  return (pick.category === 'prop' || pick.category === 'spread') && pick.settle?.kind === pick.category &&
+  return DAILY_CATEGORIES.includes(pick.category as DailyCategory) && pick.settle?.kind === settleKind(pick.category as DailyCategory) &&
     typeof pick.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(pick.date) &&
     typeof pick.posted_at === 'string' && Number.isFinite(Date.parse(pick.posted_at)) &&
     (pick.result === undefined || isResult(pick.result));
@@ -246,8 +256,9 @@ export function parseDailyFile(text: string): DailyFile | null {
     if (!file || file.schema_version !== 1 || typeof file.built_at !== 'string' || !Array.isArray(file.picks)) return null;
     const record = file.record;
     if (!record || !isRecordLine(record.all) || !isRecordLine(record.prop) || !isRecordLine(record.spread) ||
-        !(record.from === null || typeof record.from === 'string')) return null;
-    return { schema_version: 1, built_at: file.built_at, picks: file.picks.filter(isPostedPick), record };
+        !(record.nfl_spread === undefined || isRecordLine(record.nfl_spread)) || !(record.from === null || typeof record.from === 'string')) return null;
+    // A file written before NFL spreads were posted has no line for them.
+    return { schema_version: 1, built_at: file.built_at, picks: file.picks.filter(isPostedPick), record: { ...record, nfl_spread: record.nfl_spread ?? emptyLine() } };
   } catch {
     return null;
   }
@@ -262,21 +273,21 @@ export function dailyFile(days: ReadonlyMap<string, DailyLedgerDay>, dates: read
 /** Where a posted pick stands for a viewer: still to tip, playing, waiting on its final, or graded. */
 export type DailyPickState = 'open' | 'live' | 'awaiting' | DailyOutcome;
 
-/** About how long an NBA game runs. After that an ungraded pick is waiting on its final, not in play. */
-const GAME_LENGTH_MS = 3 * 3600000;
+/** About how long a game runs. After that an ungraded pick is waiting on its final, not in play. */
+const GAME_LENGTH_MS: Readonly<Record<DailyCategory, number>> = { prop: 3 * 3600000, spread: 3 * 3600000, nfl_spread: 3.5 * 3600000 };
 
 export function pickState(pick: PostedDailyPick, now: Date): DailyPickState {
   if (pick.result) return pick.result.outcome;
   const tip = Date.parse(pick.tip);
   if (now.getTime() < tip) return 'open';
-  return now.getTime() < tip + GAME_LENGTH_MS ? 'live' : 'awaiting';
+  return now.getTime() < tip + GAME_LENGTH_MS[pick.category] ? 'live' : 'awaiting';
 }
 
 export interface DailyPanelPick extends PostedDailyPick {
   state: DailyPickState;
 }
 
-/** One tab's bets of the day: Games shows the game spreads, Projections the player props, each with its own record. */
+/** One panel's bets of the day, each category with its own record: NBA Games shows the game spreads, NBA Projections the player props, and NFL its game spreads. */
 export interface DailyPanelState {
   status: 'open' | 'unavailable';
   category: DailyCategory;
@@ -287,27 +298,58 @@ export interface DailyPanelState {
   notes: string[];
 }
 
-export function dailyPanelState(file: DailyFile | null, slate: Slate, picks: DailyPicks | null, now: Date, category: DailyCategory): DailyPanelState {
-  if (!file) return { status: 'unavailable', category, record: null, today: [], yesterday: [], notes: [] };
+function unavailable(category: DailyCategory): DailyPanelState {
+  return { status: 'unavailable', category, record: null, today: [], yesterday: [], notes: [] };
+}
+
+/** The category's picks for today and yesterday, by start time, each with where it stands. */
+function categoryPicks(file: DailyFile, category: DailyCategory, now: Date): { today: DailyPanelPick[]; yesterday: DailyPanelPick[] } {
   const today = chicagoDate(now);
   const yesterday = shiftChicagoDate(today, -1);
   const withState = (pick: PostedDailyPick): DailyPanelPick => ({ ...pick, state: pickState(pick, now) });
   const byTip = (a: PostedDailyPick, b: PostedDailyPick) => a.tip.localeCompare(b.tip) || a.posted_at.localeCompare(b.posted_at);
   const mine = file.picks.filter((pick) => pick.category === category);
-  const todays = mine.filter((pick) => pick.date === today).sort(byTip).map(withState);
+  return {
+    today: mine.filter((pick) => pick.date === today).sort(byTip).map(withState),
+    yesterday: mine.filter((pick) => pick.date === yesterday).sort(byTip).map(withState),
+  };
+}
+
+export function dailyPanelState(file: DailyFile | null, slate: Slate, picks: DailyPicks | null, now: Date, category: DailyCategory): DailyPanelState {
+  if (!file) return unavailable(category);
+  const { today, yesterday } = categoryPicks(file, category, now);
   const upcoming = slate.games.filter((game) => upcomingToday(game, now));
   const notes: string[] = [];
-  if (upcoming.length && !todays.some((pick) => pick.state === 'open')) {
+  if (upcoming.length && !today.some((pick) => pick.state === 'open')) {
     const label = category === 'prop' ? 'player prop' : 'spread';
-    if (todays.length) notes.push(`The next ${label} posts at the next update if a game still to tip clears the checks.`);
+    if (today.length) notes.push(`The next ${label} posts at the next update if a game still to tip clears the checks.`);
     else notes.push(category === 'prop' ? propNote(picks, upcoming, now) : spreadNote(upcoming, now));
   }
-  return {
-    status: 'open',
-    category,
-    record: file.record[category],
-    today: todays,
-    yesterday: mine.filter((pick) => pick.date === yesterday).sort(byTip).map(withState),
-    notes,
-  };
+  return { status: 'open', category, record: file.record[category], today, yesterday, notes };
+}
+
+function gameDay(iso: string): string {
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', weekday: 'long', month: 'short', day: 'numeric' }).format(new Date(iso));
+}
+
+/** The NFL team bets of the day. The NFL plays a few days a week, so a day without games names the next game day. */
+export function nflDailyPanelState(file: DailyFile | null, games: readonly FeedGame[], now: Date): DailyPanelState {
+  const category: DailyCategory = 'nfl_spread';
+  if (!file) return unavailable(category);
+  const { today, yesterday } = categoryPicks(file, category, now);
+  const notes: string[] = [];
+  if (!today.some((pick) => pick.state === 'open')) {
+    if (games.some((game) => nflUpcomingToday(game, now))) {
+      notes.push(today.length
+        ? 'The next NFL team bet posts at the next update if a game still to kick off has a current spread.'
+        : 'No NFL team bet has been posted yet today. One posts at the next update once a game still to kick off has a current spread.');
+    } else if (!today.length) {
+      const date = chicagoDate(now);
+      const next = games
+        .filter((game) => game.status === 'scheduled' && chicagoDate(new Date(game.start_time)) > date)
+        .sort((a, b) => a.start_time.localeCompare(b.start_time))[0];
+      notes.push(next ? `No NFL games left today. The next team bet posts on game day, ${gameDay(next.start_time)}.` : 'No NFL games left today.');
+    }
+  }
+  return { status: 'open', category, record: file.record[category], today, yesterday, notes };
 }

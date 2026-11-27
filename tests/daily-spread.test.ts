@@ -35,12 +35,24 @@ test('spread ranking compares the actual price, counts pushes as refunds, and us
   assert.equal(dailySpreadForGame(game, pregameCard, { ...sim, margins: Array(1000).fill(3) }, now), null);
 });
 
-test('a daily spread requires a pregame card, current offer and positive edge outside the noise', () => {
+test('a daily spread requires a pregame card and a current offer, and below the edge bar it is a thin edge or a top spread', () => {
   assert.equal(dailySpreadForGame({ ...game, status_state: 'in' }, pregameCard, sim, now), null);
   assert.equal(dailySpreadForGame(game, { ...pregameCard, generated_at: game.start_time }, sim, now), null);
   assert.equal(dailySpreadForGame({ ...game, date: '2026-11-01' }, pregameCard, sim, now), null);
   assert.equal(dailySpreadForGame({ ...game, spread_quotes: [] }, pregameCard, sim, now), null);
-  assert.equal(dailySpreadForGame(game, pregameCard, { ...sim, margins: [...Array(500).fill(1), ...Array(500).fill(7)] }, now), null);
+  assert.equal(dailySpreadForGame({ ...game, spread_quotes: [{ ...quote, captured_at: '2026-11-02T16:00:00Z' }] }, pregameCard, sim, now), null, 'a stale price posts nothing');
+  // A coin flip at -110 on both sides: nothing beats the break-even, so the side closest to it is the top spread.
+  const flip = dailySpreadForGame(game, pregameCard, { ...sim, margins: [...Array(500).fill(1), ...Array(500).fill(7)] }, now)!;
+  assert.equal(flip.grade, 'TOP');
+  assert.ok(flip.expectedReturn < 0);
+  assert.equal(flip.evidence, 'No edge at this price: the model’s cover chance of 50.0% is under the 52.4% break-even. It was the closest spread to an edge when posted, not a qualified pick.');
+  // 54% at -110 beats the break-even by 1.6 points, short of the 3-point lean bar.
+  const thin = dailySpreadForGame(game, pregameCard, { ...sim, margins: [...Array(540).fill(5), ...Array(460).fill(1)] }, now)!;
+  assert.equal(thin.grade, 'THIN');
+  assert.equal(thin.title, game.home.name + ' -3');
+  assert.equal(thin.evidence, 'Below the edge bar: the model’s cover chance of 54.0% clears the 52.4% break-even by 1.6 points, short of the 3.0 a lean needs.');
+  // A model 25 points or more off the market is more likely wrong than right, so neither side is posted.
+  assert.equal(dailySpreadForGame(game, pregameCard, { ...sim, margins: [...Array(800).fill(5), ...Array(200).fill(1)] }, now), null);
   // The prop feed is checked a few times a day, so a price stays current as long as a card does: six hours.
   assert.equal(currentDailyPrice('2026-11-02T16:30:00Z', game.start_time, now), true);
   assert.equal(currentDailyPrice('2026-11-02T16:29:59Z', game.start_time, now), false);

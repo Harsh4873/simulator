@@ -12,9 +12,20 @@ function timeTag(iso: string): string {
 const GRADE_LABEL: Readonly<Record<DailyGrade, string>> = {
   BET: 'Qualified bet', LEAN: 'Model lean', EDGE: 'Unproven edge', THIN: 'Thin edge', TOP: 'Top prop · no edge',
 };
-const CATEGORY_LABEL = { prop: 'Player prop', spread: 'Game spread' } as const;
 
-/** Games carries the team bets (game spreads); Projections carries the player props. */
+function gradeLabel(pick: DailyPanelPick): string {
+  return pick.grade === 'TOP' && pick.category !== 'prop' ? 'Top spread · no edge' : GRADE_LABEL[pick.grade];
+}
+
+const CATEGORY_LABEL: Readonly<Record<DailyCategory, string>> = { prop: 'Player prop', spread: 'Game spread', nfl_spread: 'NFL spread' };
+/** What a game does at its start: an NBA game tips, an NFL game kicks off. */
+const START_WORDS: Readonly<Record<DailyCategory, { open: string; started: string }>> = {
+  prop: { open: 'Tips', started: 'Tipped' },
+  spread: { open: 'Tips', started: 'Tipped' },
+  nfl_spread: { open: 'Kicks off', started: 'Kicked off' },
+};
+
+/** NBA Games carries the team bets (game spreads), NBA Projections the player props, and NFL its team bets. */
 const PANEL: Readonly<Record<DailyCategory, { title: string; first: string; intro: string; none: string; waiting: string }>> = {
   spread: {
     title: 'NBA team bets of the day',
@@ -29,6 +40,13 @@ const PANEL: Readonly<Record<DailyCategory, { title: string; first: string; intr
     intro: 'Each pick is the strongest player prop left on the slate, read from the same 10,000 simulations as the box scores at the best tracked price. When none clears the edge bar, the closest one is still posted and labelled thin edge or no edge. It is posted once, at the line and price shown, and stays up until its game tips; then the next game’s best prop is posted. Every posted pick counts in the record. Team bets are on Games.',
     none: 'No player props were posted today.',
     waiting: 'Today’s player props and their record are awaiting publication.',
+  },
+  nfl_spread: {
+    title: 'NFL team bets of the day',
+    first: 'The record starts with the first posted NFL team bet.',
+    intro: 'Each pick is the strongest point spread left on the day’s NFL games, read from the same 10,000 simulations as the box scores at the current scoreboard price. When none clears the edge bar, the closest one is still posted and labelled thin edge or no edge. It is posted once, at the line and price shown, and stays up until its game kicks off; then the next game’s best spread is posted. Every posted pick counts in the record. NFL player props are not posted.',
+    none: 'No NFL team bets were posted today.',
+    waiting: 'Today’s NFL team bets and their record are awaiting publication.',
   },
 };
 
@@ -54,7 +72,7 @@ function recordHtml(line: DailyRecordLine | null, category: DailyCategory): stri
     line.pending ? `${line.pending} pending` : '',
     line.from ? `since ${escapeHtml(monthDay(line.from))}` : '',
   ].filter(Boolean).join(' · ');
-  return `<div class="daily-record" aria-label="Record of every posted ${category === 'prop' ? 'player prop' : 'team bet'}">
+  return `<div class="daily-record" aria-label="Record of every posted ${category === 'prop' ? 'player prop' : category === 'nfl_spread' ? 'NFL team bet' : 'team bet'}">
     <p class="daily-record-main"><span class="daily-record-label">Record</span> <strong data-record-tally>${tally(line)}</strong> <span class="daily-record-units" data-units="${line.units > 0 ? 'up' : line.units < 0 ? 'down' : 'flat'}">${formatUnits(line.units)}</span></p>
     <p class="daily-record-sub">${extra}</p>
   </div>`;
@@ -88,14 +106,14 @@ function priceText(pick: DailyPanelPick): string {
 }
 
 function pickCard(pick: DailyPanelPick): string {
-  const head = `<header><h4>${CATEGORY_LABEL[pick.category]}</h4><span class="daily-grade" data-grade="${pick.grade}">${GRADE_LABEL[pick.grade]}</span><span class="daily-status" data-state="${pick.state}">${escapeHtml(statusText(pick))}</span></header>`;
+  const head = `<header><h4>${CATEGORY_LABEL[pick.category]}</h4><span class="daily-grade" data-grade="${pick.grade}">${gradeLabel(pick)}</span><span class="daily-status" data-state="${pick.state}">${escapeHtml(statusText(pick))}</span></header>`;
   const posted = `<p class="daily-stamp">Posted ${timeTag(pick.posted_at)} · price checked ${timeTag(pick.pricedAt)}</p>`;
   if (pick.state !== 'open') {
     return `<article class="daily-offer daily-offer-compact" data-grade="${pick.grade}" data-state="${pick.state}">
     ${head}
     <p class="daily-selection">${escapeHtml(pick.title)}</p>
     <p class="daily-price">${priceText(pick)}</p>
-    <p class="daily-match">${escapeHtml(pick.matchup)} · Tipped ${timeTag(pick.tip)}</p>
+    <p class="daily-match">${escapeHtml(pick.matchup)} · ${START_WORDS[pick.category].started} ${timeTag(pick.tip)}</p>
     ${resultDetail(pick)}
     ${posted}
   </article>`;
@@ -104,7 +122,7 @@ function pickCard(pick: DailyPanelPick): string {
     ${head}
     <p class="daily-selection">${escapeHtml(pick.title)}</p>
     <p class="daily-price">${priceText(pick)}</p>
-    <p class="daily-match">${escapeHtml(pick.matchup)} · Tips ${timeTag(pick.tip)}</p>
+    <p class="daily-match">${escapeHtml(pick.matchup)} · ${START_WORDS[pick.category].open} ${timeTag(pick.tip)}</p>
     <p class="daily-projection">${escapeHtml(pick.projectionLabel)}</p>
     <dl class="daily-metrics">
       <div><dt>Model win chance</dt><dd>${percent(pick.modelProbability)}</dd></div>
@@ -127,7 +145,9 @@ export function renderDailyPanel(state: DailyPanelState): string {
   const unproven = (shown.some((pick) => pick.grade === 'EDGE')
     ? ' An unproven edge clears the price, noise and data checks, but leans like it have not beaten the posted price in live grading.'
     : '') + (shown.some((pick) => pick.grade === 'THIN' || pick.grade === 'TOP')
-    ? ' A thin edge or top prop is posted only because nothing cleared the edge bar. Calibrated against settled results, the model’s prop chances sit close to the sportsbook’s, so at the posted price these are close to a coin flip with the vig against you.'
+    ? state.category === 'prop'
+      ? ' A thin edge or top prop is posted only because nothing cleared the edge bar. Calibrated against settled results, the model’s prop chances sit close to the sportsbook’s, so at the posted price these are close to a coin flip with the vig against you.'
+      : ' A thin edge or top spread is posted only because nothing cleared the edge bar. At the posted price it is close to a coin flip with the vig against you.'
     : '');
   const notes = state.notes.map((note) => `<p class="daily-empty">${escapeHtml(note)}</p>`).join('');
   const today = state.today.length ? `<div class="daily-offers">${state.today.map(pickCard).join('')}</div>` : '';

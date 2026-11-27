@@ -59,7 +59,7 @@ import {
   type SupportMode,
 } from './projections.ts';
 import { unpackPlayerGames, type DefenseSlot } from './projection-context.ts';
-import { dailyPanelState, parseDailyFile, type DailyFile } from './daily-ledger.ts';
+import { dailyPanelState, nflDailyPanelState, parseDailyFile, type DailyFile } from './daily-ledger.ts';
 import { renderDailyPanel } from './daily-panel.ts';
 import { fetchPublishedIndex, fetchPublishedSimulation, type PublishedExpectation } from './published-sim.ts';
 import { hydrateSimulationCache, persistSimulationEntry } from './simulation-cache.ts';
@@ -355,6 +355,17 @@ function paintDailyPanel(): void {
   // Games carries the team bets of the day; Projections carries the player props.
   const state = dailyPanelState(daily, slate, picks, now, desk?.dataset.mode === 'projections' ? 'prop' : 'spread');
   root.innerHTML = renderDailyPanel(state);
+}
+
+/** The NFL team bets of the day sit above the NFL games, inside the games frame, so the box score hides them. */
+function nflDailyMarkup(feed: FeedSlate, now: Date): string {
+  return renderDailyPanel(nflDailyPanelState(daily, [...feed.games, ...feed.later], now));
+}
+
+function paintNflDailyPanel(): void {
+  const root = document.getElementById('nfl-daily-panel');
+  if (!root || !nflSlate || currentSport() !== 'nfl') return;
+  root.innerHTML = nflDailyMarkup(nflSlate, new Date());
 }
 
 function markDeskTabs(): void {
@@ -1880,7 +1891,8 @@ async function showNfl(): Promise<void> {
   if (token === null) return;
   let text: string | null = null;
   try {
-    text = await getData('nfl.json');
+    // A page opened on NFL may not have read the bets of the day yet.
+    [text] = await Promise.all([getData('nfl.json'), daily ? null : loadDaily()]);
   } catch {
     text = null;
   }
@@ -1892,7 +1904,8 @@ async function showNfl(): Promise<void> {
     return;
   }
   nflSlate = parsed;
-  slateRoot.innerHTML = renderFeedSlate(parsed, new Date());
+  const now = new Date();
+  slateRoot.innerHTML = `<div id="nfl-daily-panel">${nflDailyMarkup(parsed, now)}</div>${renderFeedSlate(parsed, now)}`;
   if (desk) desk.dataset.mode = 'sport';
 }
 
@@ -2180,6 +2193,7 @@ void load();
 
 function recheckFreshness(): void {
   paintFreshness();
+  if (currentSport() === 'nfl') paintNflDailyPanel();
   if (currentSport() !== 'nba') return;
   if (slate && card && freshnessIssue(slate, card, new Date(), health)) showSlate();
   else paintDailyPanel();
