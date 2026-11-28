@@ -122,5 +122,5 @@ test('a thin edge and a top prop say what they are, and a negative return keeps 
   assert.deepEqual(cards.map((card) => card.getAttribute('data-grade')), ['THIN', 'TOP']);
   assert.deepEqual(cards.map((card) => card.querySelectorAll('dd')[2]?.textContent), ['+0.7%', '−0.6%']);
   assert.match(document.querySelector('.daily-note')?.textContent ?? '', /posted only because nothing cleared the edge bar.*close to a coin flip with the vig against you/);
-  assert.match(document.querySelector('.daily-intro')?.textContent ?? '', /When none clears the edge bar, the closest one is still posted and labelled thin edge or no edge/);
+  assert.match(document.querySelector('.daily-intro')?.textContent ?? '', /from −250 to \+200\. When none clears the edge bar, the prop the simulation favors most over the market is still posted and labelled thin edge or no edge/);
 });

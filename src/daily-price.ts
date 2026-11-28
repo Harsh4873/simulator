@@ -29,12 +29,13 @@ export function nflUpcomingToday(game: FeedGame, now: Date): boolean {
 /**
  * BET and LEAN clear every check, including (for a prop) a live record of leans like it beating the price. EDGE clears
  * the price, noise and data checks without that record. Below the edge bar a prop or spread is still posted when nothing
- * better is: THIN when its chance beats the break-even by less than the bar, TOP when it does not beat it at all.
- * Each ranks below every grade before it.
+ * better is: THIN when its chance beats the break-even by less than the bar, TOP when it does not beat it at all. Each
+ * of BET, LEAN and EDGE ranks below the grades before it. THIN and TOP rank together, by the offer's own rank: a prop's
+ * shown chance carries its map's pull toward 50%, which alone can lift a plus-money side over its break-even.
  */
 export type DailyGrade = 'BET' | 'LEAN' | 'EDGE' | 'THIN' | 'TOP';
 
-const GRADE_RANK: Readonly<Record<DailyGrade, number>> = { BET: 4, LEAN: 3, EDGE: 2, THIN: 1, TOP: 0 };
+const GRADE_RANK: Readonly<Record<DailyGrade, number>> = { BET: 4, LEAN: 3, EDGE: 2, THIN: 1, TOP: 1 };
 const DAILY_GRADES = Object.keys(GRADE_RANK) as DailyGrade[];
 
 export function gradeRank(grade: DailyGrade): number {
@@ -62,13 +63,15 @@ export interface DailyOffer {
   /** What the grade rests on, in words: the live record of leans like it, or that none exists yet. */
   evidence?: string;
   settle?: DailySettle;
+  /** Orders offers of the same grade, higher first; the expected return when absent. Not published. */
+  rank?: number;
 }
 
 /** What the panel reads from picks.json: its posted prices. */
 export type DailyPicks = Pick<PicksFile, 'lines'> & Partial<Pick<PicksFile, 'offers'>>;
 
 export function compareOffers(a: DailyOffer, b: DailyOffer): number {
-  return gradeRank(b.grade) - gradeRank(a.grade) || b.expectedReturn - a.expectedReturn ||
+  return gradeRank(b.grade) - gradeRank(a.grade) || (b.rank ?? b.expectedReturn) - (a.rank ?? a.expectedReturn) || b.expectedReturn - a.expectedReturn ||
     b.modelProbability - a.modelProbability || a.tip.localeCompare(b.tip) ||
     a.title.localeCompare(b.title) || a.book.localeCompare(b.book) || a.eventId.localeCompare(b.eventId);
 }

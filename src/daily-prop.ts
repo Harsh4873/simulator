@@ -6,7 +6,8 @@ import {
 } from './picks.ts';
 import { groupOf, mapIsCurrent, quoteCalibrationFor, type parsePublishedPropCalibration } from './prop-calibration.ts';
 import {
-  decideVerdict, profitPerStake, PROP_POLICY, propContextFromPlayer, propPolicyFromArtifacts, quoteProp, type PropMarket, type PropPolicy, type PropSide,
+  americanBreakEven, decideVerdict, noVigFromBreakEven, profitPerStake, PROP_POLICY, propContextFromPlayer, propPolicyFromArtifacts, quoteProp,
+  type PropMarket, type PropPolicy, type PropSide,
 } from './props.ts';
 import { marketLabel } from './projections.ts';
 import type { Simulation } from './simulate.ts';
@@ -32,7 +33,20 @@ export interface DailyPropPick {
   grade: DailyGrade;
   /** What the grade rests on: the live record of graded leans of this side and strength, or that there is none yet. */
   evidence: string;
+  /** The simulation's chance of the side minus the market's no-vig chance: what orders props of the same grade. */
+  rank: number;
 }
+
+/**
+ * A posted prop is priced from -250 to +200. Past that it is a long shot or a heavy favorite, where the calibration maps
+ * have little settled data and a small error in the chance is a large one in the return.
+ */
+export const DAILY_PROP_ODDS = { shortest: -250, longest: 200 } as const;
+
+export function withinDailyPropOdds(odds: number): boolean {
+  return Number.isFinite(odds) && odds >= DAILY_PROP_ODDS.shortest && odds <= DAILY_PROP_ODDS.longest;
+}
+
 
 function points(edge: number): string {
   return (Math.abs(edge) * 100).toFixed(1);
@@ -86,24 +100,43 @@ export function dailyPropForGame(
     }
   }
   const lines = new Map(offers.map((line, i) => [String(i), line]));
-  for (const lean of gameLeans(game, rate, simulation.playerDraws, lines, panel.table, card.model_version)) {
-    const group = groupOf(lean.market);
+  for (const found of gameLeans(game, rate, simulation.playerDraws, lines, panel.table, card.model_version)) {
+    const group = groupOf(found.market);
     const artifact = calibration.artifacts.find(a => a.group === group);
     if (!artifact || !mapIsCurrent(artifact, card.model_version, game.date) || !(artifact.validated_through < game.date) ||
-        !lean.calibrationMethod) continue;
-    // Every pick, qualified or not, needs a map that is not red on drift, a claim short of extreme, and a likely player.
-    if (lean.drift === 'red' || !(lean.claimed < EXTREME_CLAIM) || !(lean.play >= MIN_PLAY_SHARE)) continue;
-    const over = lean.side === 'over';
-    const odds = over ? lean.over_odds : lean.under_odds;
-    const key = JSON.stringify([lean.athlete_id, lean.market, lean.line, lean.side]);
+        !found.calibrationMethod || found.modelRaw === undefined) continue;
+    // Every pick, qualified or not, needs a map that is not red on drift and a likely player.
+    if (found.drift === 'red' || !(found.play >= MIN_PLAY_SHARE)) continue;
+    // The side is the one the simulation favors over the market. The shown chance is not used for that: each map pulls
+    // chances toward 50%, which alone lifts an underdog side's shown chance over its no-vig price, so the shown edge
+    // would favor plus-money sides, and the long odds on threes most of all.
+    const overNeed = americanBreakEven(found.over_odds);
+    const underNeed = americanBreakEven(found.under_odds);
+    const noVigOver = overNeed !== null && underNeed !== null ? noVigFromBreakEven(overNeed, underNeed) : null;
+    if (noVigOver === null || overNeed === null || underNeed === null) continue;
+    // A simulation this far from the market is usually missing news, like a claim this large: ranking by the gap would
+    // otherwise put the least reliable gaps first.
+    const gap = found.modelRaw - noVigOver;
+    if (!Number.isFinite(gap) || gap === 0 || !(Math.abs(gap) < EXTREME_CLAIM)) continue;
+    const side: PropSide = gap > 0 ? 'over' : 'under';
+    const over = side === 'over';
+    const odds = over ? found.over_odds : found.under_odds;
+    if (!withinDailyPropOdds(odds)) continue;
+    const shownOver = found.side === 'over' ? found.model : 1 - found.model;
+    const model = over ? shownOver : 1 - shownOver;
+    const need = over ? overNeed : underNeed;
+    const lean = { ...found, side, model, need, claimed: model - need };
+    // A claim this large is more often a broken input than an edge.
+    if (!(lean.claimed < EXTREME_CLAIM)) continue;
+    const key = JSON.stringify([lean.athlete_id, lean.market, lean.line, side]);
     if (profitPerStake(odds) !== bestPrices.get(key)) continue;
     const player = rate.players.find(p => p.athlete_id === lean.athlete_id);
     const sample = simulation.playerDraws.get(lean.athlete_id);
     if (!player || !sample) continue;
-    const map = quoteCalibrationFor(panel, lean.market, lean.side);
-    const quote = quoteProp(sample, lean.market, lean.side, lean.line, odds, over ? lean.under_odds : lean.over_odds, map);
+    const map = quoteCalibrationFor(panel, lean.market, side);
+    const quote = quoteProp(sample, lean.market, side, lean.line, odds, over ? lean.under_odds : lean.over_odds, map);
     if (!quote || quote.expectedReturn === null) continue;
-    const tier = liveTierFor(picks.record, lean.side, lean.claimed);
+    const tier = liveTierFor(picks.record, side, lean.claimed);
     const base = { ...propContextFromPlayer(player), propCalibration: map };
     let grade: DailyGrade | null = null;
     let evidence = '';
@@ -131,24 +164,27 @@ export function dailyPropForGame(
       if (!verdict || verdict.verdict === 'PASS') continue;
       const thin = lean.claimed > 0 && quote.expectedReturn > 0;
       grade = thin ? 'THIN' : 'TOP';
-      const gap = `the calibrated chance of ${percent(lean.model)} clears the ${percent(lean.need)} break-even by ${points(lean.claimed)} points`;
+      const read = `the simulation has it at ${percent(over ? found.modelRaw : 1 - found.modelRaw)} against the market’s ${percent(over ? noVigOver : 1 - noVigOver)}`;
+      const gap = `the chance of ${percent(lean.model)} clears the ${percent(lean.need)} break-even by ${points(lean.claimed)} points`;
       if (thin) {
-        evidence = `Below the edge bar: ${gap}${shortfall ? `. ${shortfall}` : `, short of the ${points(LEAN_BUCKETS[1])} a lean needs.`}`;
+        evidence = `Below the edge bar: ${read}, and calibrated against settled results ${gap}${shortfall ? `. ${shortfall}` : `, short of the ${points(LEAN_BUCKETS[1])} a lean needs.`}`;
       } else {
         const reason = lean.claimed > 0
           ? `${gap}, but pushes and sit-outs bring the expected return to ${quote.expectedReturn < 0 ? '−' : ''}${percent(Math.abs(quote.expectedReturn))}`
-          : `the calibrated chance of ${percent(lean.model)} is under the ${percent(lean.need)} break-even`;
-        evidence = `No edge at this price: ${reason}. It was the closest player prop to an edge when posted, not a qualified pick.`;
+          : `the chance of ${percent(lean.model)} is under the ${percent(lean.need)} break-even`;
+        evidence = `No edge at this price: ${read}, but calibrated against settled results ${reason}. It was the prop the simulation favored most over the market when posted, not a qualified pick.`;
       }
     }
     candidates.push({
       eventId: game.event_id, athleteId: lean.athlete_id, player: lean.name, matchup: lean.matchup,
-      market: lean.market, side: lean.side, line: lean.line, odds, book: lean.book, pricedAt: lean.priced_at,
+      market: lean.market, side, line: lean.line, odds, book: lean.book, pricedAt: lean.priced_at,
       tip: game.start_time, projection: lean.projection, modelProbability: lean.model, breakEven: lean.need,
-      expectedReturn: quote.expectedReturn, grade, evidence,
+      expectedReturn: quote.expectedReturn, grade, evidence, rank: Math.abs(gap),
     });
   }
-  return candidates.sort((a, b) => gradeRank(b.grade) - gradeRank(a.grade) || b.expectedReturn - a.expectedReturn ||
+  // Props of a grade rank by how far the simulation is from the market, the same scale for every stat, not by expected
+  // return, which grows with the price and would favor the longest odds.
+  return candidates.sort((a, b) => gradeRank(b.grade) - gradeRank(a.grade) || b.rank - a.rank || b.expectedReturn - a.expectedReturn ||
     b.modelProbability - a.modelProbability || a.athleteId.localeCompare(b.athleteId) || a.market.localeCompare(b.market) ||
     a.line - b.line || a.side.localeCompare(b.side) || a.book.localeCompare(b.book))[0] ?? null;
 }

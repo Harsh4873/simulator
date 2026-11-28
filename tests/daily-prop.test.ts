@@ -20,7 +20,7 @@ const card = { ...source, date: game.date, generated_at: at };
 const player = rate.players.find(p => p.evidence?.minutes.state === 'observed' && p.evidence?.shooting.state === 'observed' &&
   !p.evidence.role_changed && p.minutes_weight === 1 && !p.replacement_level && !p.thin_sample)!;
 const stats = (fn: (i: number) => number) => Uint16Array.from({ length: 10000 }, (_, i) => fn(i % 20));
-const sample = { min: stats(i => i < 18 ? 30 : 0), pts: stats(i => i < 12 ? 20 : i < 16 ? 10 : 15), reb: stats(() => 3), ast: stats(() => 1), tpm: stats(() => 2) };
+const sample = { min: stats(i => i < 18 ? 30 : 0), pts: stats(i => i < 11 ? 20 : i < 16 ? 10 : 15), reb: stats(() => 3), ast: stats(() => 1), tpm: stats(() => 2) };
 const simulation = { playerDraws: new Map([[player.athlete_id, sample]]) };
 const metrics = { n: 2000, clusters: 500, eceWidth10: .01, eceFreq10: .01, mce: .02, brier: .2, brierNovig: .22, logLoss: .61, logLossNovig: .64,
   slope: 1, intercept: 0, slopeLo: .95, slopeHi: 1.05, interceptLo: -.02, interceptHi: .02, reliability: 0, resolution: .02 };
@@ -47,10 +47,10 @@ test('daily player prop uses the best current comparable offer and accounts for 
     const top = dailyPropForGame(game, rate, simulation, picks, card, calibration, now)!;
     assert.deepEqual([top.grade, top.side, top.line, top.odds, top.book], ['LEAN', 'over', 15, 105, 'Book B']);
     assert.equal(top.evidence, 'Live-graded over leans this strong have beaten the posted price by 3.5 points across 450 leans.');
-    const win = .5 * .75 + .5 * ((100 / 205) / (100 / 205 + 110 / 210));
+    const win = .5 * (11 / 16) + .5 * ((100 / 205) / (100 / 205 + 110 / 210));
     assert.ok(Math.abs(top.modelProbability - win) < 1e-10);
     assert.ok(Math.abs(top.expectedReturn - .8 * (win * 1.05 - (1 - win))) < 1e-10);
-    assert.ok(Math.abs(top.projection - (12 * 20 + 4 * 10 + 2 * 15) / 18) < 1e-10);
+    assert.ok(Math.abs(top.projection - (11 * 20 + 5 * 10 + 2 * 15) / 18) < 1e-10);
   }
   const single = build([offer]);
   assert.equal(single.offers, undefined);
@@ -87,13 +87,14 @@ test('a daily player lean can become a bet only with released calibration', () =
   const released = { model_version: card.model_version!, input_hash: 'a'.repeat(64), training_cutoff: '2026-10-01', evaluated_through: '2026-10-30',
     games: 600, settled_markets: 2200, margin_bias: 0, total_bias: 0, coverage80: .8, coverage90: .9, ece: .01, baseline_improvement: true, market_noninferiority: true, markets: ['pts'], status: 'passed' as const };
   const rated = { ...rate, players: [{ ...player, as_of: at, model_version: card.model_version, calibration: released }] };
-  assert.equal(dailyPropForGame(game, rated, simulation, build([offer]), card, calibration, now)?.grade, 'BET');
+  // At even money the calibrated 58.3% clears the 50% break-even by the 8 points a bet needs.
+  assert.equal(dailyPropForGame(game, rated, simulation, build([{ ...offer, over_odds: 100, under_odds: -120 }]), card, calibration, now)?.grade, 'BET');
 });
 
 test('a prop pick reads as a book lists it, with yes/no wording for double- and triple-doubles', () => {
   const pick: DailyPropPick = {
     eventId: '1', athleteId: '2', player: 'Guard Name', matchup: 'AAA @ BBB', market: 'pts', side: 'over', line: 24.5, odds: -110, book: 'Book',
-    pricedAt: at, tip: game.start_time, projection: 26.34, modelProbability: 0.58, breakEven: 0.5238, expectedReturn: 0.1, grade: 'LEAN', evidence: 'Record.',
+    pricedAt: at, tip: game.start_time, projection: 26.34, modelProbability: 0.58, breakEven: 0.5238, expectedReturn: 0.1, grade: 'LEAN', evidence: 'Record.', rank: 0.04,
   };
   const points = dailyPropOffer(pick);
   assert.deepEqual([points.title, points.projectionLabel], ['Guard Name Over 24.5 points', 'Model projection 26.3 points']);
@@ -151,26 +152,29 @@ test('an unproven edge still needs every other check, never becomes a bet, and n
 
 test('below the edge bar the best prop is still posted, as a thin edge or a top prop, with the reason it falls short', () => {
   const at = (over: number, under: number, picks = build([{ ...offer, over_odds: over, under_odds: under }])) => dailyPropForGame(game, rate, simulation, picks, card, calibration, now);
-  // A 4-point claim inside the sampling noise, a 1.7-point claim, and a price the calibrated chance does not beat.
-  const noisy = at(-180, 150)!;
+  // A 3.1-point claim inside the sampling noise, a 1.5-point claim, and a price the calibrated chance does not beat.
+  const noisy = at(-150, 125)!;
   assert.equal(noisy.grade, 'THIN');
-  assert.equal(noisy.evidence, 'Below the edge bar: the calibrated chance of 68.3% clears the 64.3% break-even by 4.0 points. The gap is inside the sampling noise, so it is not an advantage yet.');
-  const thin = at(-220, 180)!;
+  assert.equal(noisy.evidence, 'Below the edge bar: the simulation has it at 68.8% against the market’s 57.4%, and calibrated against settled results the chance of 63.1% clears the 60.0% break-even by 3.1 points. The gap is inside the sampling noise, so it is not an advantage yet.');
+  const thin = at(-170, 140)!;
   assert.equal(thin.grade, 'THIN');
-  assert.equal(thin.evidence, 'Below the edge bar: the calibrated chance of 70.4% clears the 68.8% break-even by 1.7 points, short of the 3.0 a lean needs.');
+  assert.equal(thin.evidence, 'Below the edge bar: the simulation has it at 68.8% against the market’s 60.2%, and calibrated against settled results the chance of 64.5% clears the 63.0% break-even by 1.5 points, short of the 3.0 a lean needs.');
   assert.ok(thin.expectedReturn > 0);
-  const top = at(-300, 240)!;
+  const top = at(-220, 180)!;
   assert.deepEqual([top.grade, top.side, top.line], ['TOP', 'over', 15]);
   assert.ok(top.expectedReturn < 0 && top.modelProbability < top.breakEven);
-  assert.equal(top.evidence, 'No edge at this price: the calibrated chance of 73.4% is under the 75.0% break-even. It was the closest player prop to an edge when posted, not a qualified pick.');
+  assert.equal(top.evidence, 'No edge at this price: the simulation has it at 68.8% against the market’s 65.8%, but calibrated against settled results the chance of 67.3% is under the 68.8% break-even. It was the prop the simulation favored most over the market when posted, not a qualified pick.');
 
-  // Posting takes a qualified lean first, then a thin edge, and a top prop only when nothing else is there.
+  // Posting takes a qualified lean first. Below the bar a thin edge and a top prop compete on what the simulation adds
+  // over the market, since the pull toward 50% alone can lift a plus-money side over its break-even.
   const lean = dailyPropOffer(at(-110, -110)!);
   const [thinOffer, topOffer] = [dailyPropOffer(thin), dailyPropOffer(top)];
   assert.equal(lean.grade, 'LEAN');
   const post = (props: ReturnType<typeof dailyPropOffer>[]) => postDailyPicks(emptyDay(game.date), { prop: props, spread: [] }, now)[0]?.grade;
   assert.equal(post([topOffer, thinOffer, lean]), 'LEAN');
+  assert.ok(thinOffer.rank > topOffer.rank);
   assert.equal(post([topOffer, { ...thinOffer, expectedReturn: 0.001 }]), 'THIN');
+  assert.equal(post([{ ...topOffer, rank: thinOffer.rank + 0.01 }, thinOffer]), 'TOP');
   assert.equal(post([topOffer]), 'TOP');
   // Only a top prop may be published at or under its break-even.
   assert.ok(isDailyOffer(topOffer));
@@ -178,7 +182,7 @@ test('below the edge bar the best prop is still posted, as a thin edge or a top 
   assert.equal(isDailyOffer({ ...topOffer, expectedReturn: -1 }), false);
 
   // The data checks still turn a prop away below the bar.
-  const topPriced = build([{ ...offer, over_odds: -300, under_odds: 240 }]);
+  const topPriced = build([{ ...offer, over_odds: -220, under_odds: 180 }]);
   for (const changes of [{ drift: 'red' }, { validated_through: '2026-11-02' }, { fitted_through: '2026-10-01', validated_through: '2026-10-02' }]) {
     const invalid = parsePublishedPropCalibration(JSON.stringify({ schema_version: 1, groups: { points: { ...artifact, ...changes } } }))!;
     assert.equal(dailyPropForGame(game, rate, simulation, topPriced, card, invalid, now), null);
@@ -186,4 +190,29 @@ test('below the edge bar the best prop is still posted, as a thin edge or a top 
   assert.equal(dailyPropForGame(game, { ...rate, players: [{ ...player, evidence: { ...player.evidence!, role_changed: true } }] }, simulation, topPriced, card, calibration, now), null);
   assert.equal(dailyPropForGame(game, rate, { playerDraws: new Map([[player.athlete_id, { ...sample, min: stats(i => i < 9 ? 30 : 0) }]]) }, topPriced, card, calibration, now), null,
     'a player who sits most draws is not posted');
+});
+
+test('a prop is priced from -250 to +200 and always on the side the simulation favors over the market', () => {
+  const at = (over: number, under: number, maps = calibration) => dailyPropForGame(game, rate, simulation, build([{ ...offer, over_odds: over, under_odds: under }]), card, maps, now);
+  // A long shot and a heavy favorite are never posted, whatever their numbers; the band's own ends are.
+  assert.equal(at(700, -1120), null);
+  assert.equal(at(-400, 300), null);
+  assert.equal(at(-250, 200)?.odds, -250);
+  assert.equal(at(-255, 200), null);
+  assert.equal(at(200, 140)?.odds, 200);
+  assert.equal(at(205, 140), null);
+  // A map that pulls chances hard toward 50% (temperature 3) lifts the +200 under 4 points over its break-even although
+  // the simulation (31% under) is below the market (32%). The pick stays on the over the simulation favors, as a top prop.
+  const pulled = parsePublishedPropCalibration(JSON.stringify({ schema_version: 1, groups: { points: { ...artifact, params: { method: 'temperature', temperature: 3 } } } }))!;
+  const pick = at(-250, 200, pulled)!;
+  assert.deepEqual([pick.side, pick.odds, pick.grade], ['over', -250, 'TOP']);
+  assert.ok(pick.modelProbability < pick.breakEven);
+  // Ranked by the simulation's 68.75% against the market's no-vig 68.2%, the same scale for every stat.
+  assert.ok(Math.abs(pick.rank - (11 / 16 - (1 / 1.4) / (1 / 1.4 + 1 / 3))) < 1e-12);
+  // A simulation 25 points or more from the market is usually missing news, and is not posted.
+  assert.equal(at(150, -180), null);
+  // Of two props below the bar, the one the simulation favors more is posted, even at a lower expected return.
+  const strong = { ...dailyPropOffer(at(-110, -110)!), grade: 'TOP' as const, expectedReturn: -0.01, rank: 0.12 };
+  const longer = { ...strong, eventId: 'other', expectedReturn: 0.02, rank: 0.03 };
+  assert.equal(postDailyPicks(emptyDay(game.date), { prop: [longer, strong] }, now)[0].eventId, strong.eventId);
 });
