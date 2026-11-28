@@ -18,7 +18,7 @@
       "hi": 0.8656
     }
   },
-  "w": 0,
+  "w": 0.2,
   "metrics_fit": {
     "n": 3460,
     "clusters": 982,
@@ -79,7 +79,6 @@
     "resolution": 0.0011741257962584843
   },
   "notes": [
-    "The blend does not beat the no-vig price on Brier score.",
     "Mean-bias checks were not run. The ledger stores no projection, and the sims archive is not used."
   ],
   "drift": "green",
