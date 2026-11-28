@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-28T16:38:36Z",
+  "generated_at": "2026-11-28T18:00:54Z",
   "date": "2026-11-28",
   "timezone": "America/Chicago",
   "games": [
@@ -402,8 +402,8 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "DraftKings",
-          "captured_at": "2026-11-28T16:38:36Z",
+          "book": "Draft Kings",
+          "captured_at": "2026-11-28T18:00:54Z",
           "home_spread": 3.5,
           "home_odds": -105,
           "away_odds": -115
@@ -445,11 +445,11 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "DraftKings",
-          "captured_at": "2026-11-28T16:38:36Z",
+          "book": "Draft Kings",
+          "captured_at": "2026-11-28T18:00:54Z",
           "home_spread": -6.5,
-          "home_odds": -105,
-          "away_odds": -115
+          "home_odds": -108,
+          "away_odds": -111
         }
       ]
     },
@@ -488,11 +488,11 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "DraftKings",
-          "captured_at": "2026-11-28T16:38:36Z",
+          "book": "Draft Kings",
+          "captured_at": "2026-11-28T18:00:54Z",
           "home_spread": -2.5,
           "home_odds": -103,
-          "away_odds": -118
+          "away_odds": -117
         }
       ]
     },
@@ -531,8 +531,8 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "DraftKings",
-          "captured_at": "2026-11-28T16:38:36Z",
+          "book": "Draft Kings",
+          "captured_at": "2026-11-28T18:00:54Z",
           "home_spread": 12.5,
           "home_odds": -114,
           "away_odds": -106
@@ -570,17 +570,7 @@
         "longitude": null,
         "timezone": null
       },
-      "spread_caption": null,
-      "spread_quotes": [
-        {
-          "source": "ESPN scoreboard",
-          "book": "DraftKings",
-          "captured_at": "2026-11-28T16:38:36Z",
-          "home_spread": -13.5,
-          "home_odds": -104,
-          "away_odds": -116
-        }
-      ]
+      "spread_caption": null
     }
   ]
 }
