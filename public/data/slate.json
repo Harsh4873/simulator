@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-11-28T00:00:48Z",
+  "generated_at": "2026-11-28T00:30:49Z",
   "date": "2026-11-27",
   "timezone": "America/Chicago",
   "games": [
@@ -10,7 +10,7 @@
       "start_time": "2026-11-28T00:00:00Z",
       "season": 2027,
       "season_type": "regular",
-      "status_state": "pre",
+      "status_state": "in",
       "completed": false,
       "away": {
         "team_id": "14",
@@ -68,17 +68,7 @@
         "longitude": null,
         "timezone": null
       },
-      "spread_caption": null,
-      "spread_quotes": [
-        {
-          "source": "ESPN scoreboard",
-          "book": "Draft Kings",
-          "captured_at": "2026-11-28T00:00:48Z",
-          "home_spread": -9.5,
-          "home_odds": -117,
-          "away_odds": -104
-        }
-      ]
+      "spread_caption": null
     },
     {
       "event_id": "401909328",
@@ -111,17 +101,7 @@
         "longitude": null,
         "timezone": null
       },
-      "spread_caption": null,
-      "spread_quotes": [
-        {
-          "source": "ESPN scoreboard",
-          "book": "Draft Kings",
-          "captured_at": "2026-11-28T00:00:48Z",
-          "home_spread": 3.5,
-          "home_odds": -112,
-          "away_odds": -108
-        }
-      ]
+      "spread_caption": null
     },
     {
       "event_id": "401909329",
@@ -154,17 +134,7 @@
         "longitude": null,
         "timezone": null
       },
-      "spread_caption": null,
-      "spread_quotes": [
-        {
-          "source": "ESPN scoreboard",
-          "book": "Draft Kings",
-          "captured_at": "2026-11-28T00:00:48Z",
-          "home_spread": -9.5,
-          "home_odds": -108,
-          "away_odds": -112
-        }
-      ]
+      "spread_caption": null
     },
     {
       "event_id": "401909330",
@@ -201,8 +171,8 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "Draft Kings",
-          "captured_at": "2026-11-28T00:00:48Z",
+          "book": "DraftKings",
+          "captured_at": "2026-11-28T00:30:49Z",
           "home_spread": -9.5,
           "home_odds": -105,
           "away_odds": -115
@@ -244,8 +214,8 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "Draft Kings",
-          "captured_at": "2026-11-28T00:00:48Z",
+          "book": "DraftKings",
+          "captured_at": "2026-11-28T00:30:49Z",
           "home_spread": -2.5,
           "home_odds": -112,
           "away_odds": -108
@@ -287,11 +257,11 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "Draft Kings",
-          "captured_at": "2026-11-28T00:00:48Z",
-          "home_spread": -3.5,
-          "home_odds": -106,
-          "away_odds": -114
+          "book": "DraftKings",
+          "captured_at": "2026-11-28T00:30:49Z",
+          "home_spread": -4.5,
+          "home_odds": -104,
+          "away_odds": -116
         }
       ]
     },
@@ -330,8 +300,8 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "Draft Kings",
-          "captured_at": "2026-11-28T00:00:48Z",
+          "book": "DraftKings",
+          "captured_at": "2026-11-28T00:30:49Z",
           "home_spread": -6.5,
           "home_odds": -103,
           "away_odds": -118
@@ -373,8 +343,8 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "Draft Kings",
-          "captured_at": "2026-11-28T00:00:48Z",
+          "book": "DraftKings",
+          "captured_at": "2026-11-28T00:30:49Z",
           "home_spread": 9.5,
           "home_odds": -112,
           "away_odds": -108
@@ -416,8 +386,8 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "Draft Kings",
-          "captured_at": "2026-11-28T00:00:48Z",
+          "book": "DraftKings",
+          "captured_at": "2026-11-28T00:30:49Z",
           "home_spread": -2.5,
           "home_odds": -104,
           "away_odds": -116
@@ -459,11 +429,11 @@
       "spread_quotes": [
         {
           "source": "ESPN scoreboard",
-          "book": "Draft Kings",
-          "captured_at": "2026-11-28T00:00:48Z",
-          "home_spread": -7.5,
-          "home_odds": -116,
-          "away_odds": -104
+          "book": "DraftKings",
+          "captured_at": "2026-11-28T00:30:49Z",
+          "home_spread": -8.5,
+          "home_odds": -104,
+          "away_odds": -116
         }
       ]
     }
