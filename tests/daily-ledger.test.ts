@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  dailyFile, dailyPanelState, dailyRecord, emptyDay, openPick, parseDailyDay, parseDailyFile, pickState, postDailyPicks,
+  DAILY_SLOTS, dailyFile, dailyPanelState, dailyRecord, emptyDay, openPick, openSlots, parseDailyDay, parseDailyFile, pickState, postDailyPicks,
   serializeDailyDay, settleDailyPick, settleDailyPicks, type DailyLedgerDay, type PostedDailyPick,
 } from '../src/daily-ledger.ts';
 import type { DailyOffer } from '../src/daily-price.ts';
@@ -220,4 +220,29 @@ test('scoreboard finals come only from completed games, and a malformed ledger f
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('player props keep two picks up at a time, from different games, and refill a slot when its game tips', () => {
+  assert.deepEqual(DAILY_SLOTS, { spread: 1, prop: 2, nfl_spread: 1 });
+  const prop = (eventId: string, tip: string, expectedReturn: number, athlete = eventId): DailyOffer => offer(eventId, 'Guard Name', tip, expectedReturn, {
+    title: `Guard ${athlete} Over 20.5 points`, settle: { kind: 'prop', athlete_id: athlete, market: 'pts', side: 'over', line: 20.5 },
+  });
+  const early = prop('1', '2026-11-26T00:00:00Z', 0.03);
+  const sameGame = prop('1', '2026-11-26T00:00:00Z', 0.02, '1b');
+  const late = prop('2', '2026-11-26T03:00:00Z', 0.01);
+  const later = prop('3', '2026-11-26T02:00:00Z', 0.005);
+  const day = emptyDay(date);
+  const morning = new Date('2026-11-25T15:00:00Z');
+  assert.equal(openSlots(day, 'prop', morning), 2);
+  // The best two from different games; a second prop from the first game waits behind the other game.
+  assert.deepEqual(postDailyPicks(day, { prop: [sameGame, late, early, later] }, morning).map((pick) => pick.eventId), ['1', '2']);
+  assert.equal(openSlots(day, 'prop', morning), 0);
+  assert.deepEqual(postDailyPicks(day, { prop: [later] }, morning), []);
+  // The early game tips: its slot refills from the games still to play, never the same game again.
+  const tipped = new Date('2026-11-26T00:05:00Z');
+  assert.equal(openSlots(day, 'prop', tipped), 1);
+  assert.deepEqual(postDailyPicks(day, { prop: [sameGame, later] }, tipped).map((pick) => pick.eventId), ['3']);
+  assert.equal(dailyRecord([day]).prop.picks, 3);
+  // A one-game day has one prop: a second would come from the same game.
+  assert.deepEqual(postDailyPicks(emptyDay(date), { prop: [early, sameGame] }, morning).map((pick) => pick.eventId), ['1']);
 });

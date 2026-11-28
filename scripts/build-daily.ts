@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chicagoDate, shiftChicagoDate } from '../src/date.ts';
 import {
-  DAILY_CATEGORIES, dailyFile, emptyDay, openPick, parseDailyDay, postDailyPicks, serializeDailyDay, settleDailyPicks, stamp,
+  DAILY_CATEGORIES, dailyFile, emptyDay, openSlots, parseDailyDay, postDailyPicks, serializeDailyDay, settleDailyPicks, stamp,
   type DailyCategory, type DailyFile, type DailyFinal, type DailyLedgerDay, type PostedDailyPick,
 } from '../src/daily-ledger.ts';
 import { dailyNflSpreadForGame } from '../src/daily-nfl.ts';
@@ -54,7 +54,7 @@ export function buildDaily(input: DailyInput): { posted: PostedDailyPick[]; sett
   const today = chicagoDate(now);
   const before = new Map([...days].map(([date, day]) => [date, serializeDailyDay(day)]));
   const day = days.get(today) ?? emptyDay(today);
-  const needed = DAILY_CATEGORIES.filter((category) => !openPick(day, category, now));
+  const needed = DAILY_CATEGORIES.filter((category) => openSlots(day, category, now) > 0);
   const taken = (category: DailyCategory) => new Set(day.picks.filter((pick) => pick.category === category).map((pick) => pick.eventId));
   const candidates: Record<DailyCategory, DailyOffer[]> = { prop: [], spread: [], nfl_spread: [] };
   const nbaNeeded = needed.filter((category) => category !== 'nfl_spread');
@@ -216,7 +216,7 @@ async function main(): Promise<void> {
   for (const [id, final] of await fetchFinals(pendingSpreadDates(days.values(), now, 'nfl_spread'), NFL_SCOREBOARD)) finals.set(id, final);
   const today = chicagoDate(now);
   const nflGames = nflGamesOf(optional('public/data/nfl.json'));
-  const nflWanted = !openPick(days.get(today) ?? emptyDay(today), 'nfl_spread', now) && nflGames.some((game) => nflUpcomingToday(game, now));
+  const nflWanted = openSlots(days.get(today) ?? emptyDay(today), 'nfl_spread', now) > 0 && nflGames.some((game) => nflUpcomingToday(game, now));
   const nfl = { games: nflGames, quotes: nflWanted ? await fetchNflQuotes(today, now) : new Map<string, PregameQuotes>() };
   const result = buildDaily({ slate, card, picks, calibration, events, finals, days, now, nfl });
   mkdirSync(ledgerDir, { recursive: true });

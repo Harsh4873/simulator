@@ -1,7 +1,8 @@
 /**
- * Bets of the day, as posted. A category (NBA player prop, NBA game spread, NFL game spread) holds one open pick at a time. The pick is fixed
- * at the line and price it was posted with, stays posted until its game tips, and is then followed by the best pick from
- * the games still to play. Every posted pick is kept, shown, and graded into the record.
+ * Bets of the day, as posted. A category (NBA player prop, NBA game spread, NFL game spread) keeps a set number of picks
+ * open at a time: two player props, from different games, and one spread in each league. A pick is fixed at the line and
+ * price it was posted with, stays posted until its game tips, and is then followed by the best pick from the games still
+ * to play. Every posted pick is kept, shown, and graded into the record.
  */
 import { chicagoDate, shiftChicagoDate } from './date.ts';
 import {
@@ -96,9 +97,25 @@ export function emptyDay(date: string): DailyLedgerDay {
   return { schema_version: 1, date, picks: [] };
 }
 
-/** The category's pick whose game has not tipped yet, if one is posted. */
+/**
+ * How many picks a category keeps open at once. Player props keep two, from different games, so a day with two priced
+ * games always has at least two; each spread category keeps one.
+ */
+export const DAILY_SLOTS: Readonly<Record<DailyCategory, number>> = { spread: 1, prop: 2, nfl_spread: 1 };
+
+/** The category's picks whose games have not tipped yet. */
+export function openPicks(day: DailyLedgerDay, category: DailyCategory, now: Date): PostedDailyPick[] {
+  return day.picks.filter((pick) => pick.category === category && Date.parse(pick.tip) > now.getTime());
+}
+
+/** The category's first pick whose game has not tipped yet, if one is posted. */
 export function openPick(day: DailyLedgerDay, category: DailyCategory, now: Date): PostedDailyPick | null {
-  return day.picks.find((pick) => pick.category === category && Date.parse(pick.tip) > now.getTime()) ?? null;
+  return openPicks(day, category, now)[0] ?? null;
+}
+
+/** How many more picks the category can post now. */
+export function openSlots(day: DailyLedgerDay, category: DailyCategory, now: Date): number {
+  return Math.max(0, DAILY_SLOTS[category] - openPicks(day, category, now).length);
 }
 
 function posted(offer: DailyOffer & { settle: DailySettle }, category: DailyCategory, date: string, now: Date): PostedDailyPick {
@@ -110,22 +127,28 @@ function posted(offer: DailyOffer & { settle: DailySettle }, category: DailyCate
 }
 
 /**
- * Posts the best candidate in each category that has no open pick. A game already posted in a category is not posted in
- * it again the same day. Returns what it posted.
+ * Fills each category's open slots with its best candidates, one per game. A game already posted in a category is not
+ * posted in it again the same day. Returns what it posted.
  */
 export function postDailyPicks(day: DailyLedgerDay, candidates: Readonly<Partial<Record<DailyCategory, readonly DailyOffer[]>>>, now: Date): PostedDailyPick[] {
   const added: PostedDailyPick[] = [];
   for (const category of DAILY_CATEGORIES) {
-    if (openPick(day, category, now)) continue;
+    let slots = openSlots(day, category, now);
+    if (!slots) continue;
     const taken = new Set(day.picks.filter((pick) => pick.category === category).map((pick) => pick.eventId));
-    const best = (candidates[category] ?? [])
+    const ranked = (candidates[category] ?? [])
       .filter((offer): offer is DailyOffer & { settle: DailySettle } => Boolean(offer.settle) && offer.settle!.kind === settleKind(category) &&
         !taken.has(offer.eventId) && Date.parse(offer.tip) > now.getTime())
-      .sort(compareOffers)[0];
-    if (!best) continue;
-    const pick = posted(best, category, day.date, now);
-    day.picks.push(pick);
-    added.push(pick);
+      .sort(compareOffers);
+    for (const best of ranked) {
+      if (!slots) break;
+      if (taken.has(best.eventId)) continue;
+      const pick = posted(best, category, day.date, now);
+      day.picks.push(pick);
+      added.push(pick);
+      taken.add(best.eventId);
+      slots -= 1;
+    }
   }
   return added;
 }

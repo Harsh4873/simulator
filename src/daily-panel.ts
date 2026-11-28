@@ -37,7 +37,7 @@ const PANEL: Readonly<Record<DailyCategory, { title: string; first: string; intr
   prop: {
     title: 'NBA player prop bets of the day',
     first: 'The record starts with the first posted player prop.',
-    intro: 'Each pick is the strongest player prop left on the slate, read from the same 10,000 simulations as the box scores at the best tracked price from −250 to +200. When none clears the edge bar, the prop the simulation favors most over the market is still posted and labelled thin edge or no edge. It is posted once, at the line and price shown, and stays up until its game tips; then the next game’s best prop is posted. Every posted pick counts in the record. Team bets are on Games.',
+    intro: 'Each pick is the strongest player prop left on the slate, read from the same 10,000 simulations as the box scores at the best tracked price from −250 to +200. When none clears the edge bar, the prop the simulation favors most over the market is still posted and labelled thin edge or no edge. Two picks are up at a time, from different games. Each is posted once, at the line and price shown, and stays up until its game tips; then the best prop from the games still to play takes its place. Every posted pick counts in the record. Team bets are on Games.',
     none: 'No player props were posted today.',
     waiting: 'Today’s player props and their record are awaiting publication.',
   },

@@ -141,11 +141,12 @@ test('an unproven edge still needs every other check, never becomes a bet, and n
   const rated = { ...rate, players: [{ ...player, as_of: at, model_version: card.model_version, calibration: released }] };
   assert.equal(select(now, game, calibration, rated)?.grade, 'EDGE');
 
-  // When a pick is posted, any qualified pick, however small its return, comes before an unproven edge.
+  // Any qualified pick, however small its return, comes before an unproven edge. Props keep two picks up, one per game,
+  // so both are posted, the qualified one first.
   const edge = { ...dailyPropOffer(select()!), expectedReturn: 0.4 };
   const qualified = { ...dailyPropOffer(dailyPropForGame(game, rate, simulation, build([offer]), card, calibration, now)!), eventId: 'other', expectedReturn: 0.02 };
   assert.ok(compareOffers(qualified, edge) < 0);
-  assert.deepEqual(postDailyPicks(emptyDay(game.date), { prop: [edge, qualified], spread: [] }, now).map((pick) => pick.grade), ['LEAN']);
+  assert.deepEqual(postDailyPicks(emptyDay(game.date), { prop: [edge, qualified], spread: [] }, now).map((pick) => pick.grade), ['LEAN', 'EDGE']);
   assert.deepEqual(postDailyPicks(emptyDay(game.date), { prop: [edge], spread: [] }, now).map((pick) => [pick.grade, pick.settle]),
     [['EDGE', { kind: 'prop', athlete_id: player.athlete_id, market: 'pts', side: 'over', line: 15 }]]);
 });
